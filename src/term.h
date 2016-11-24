@@ -463,6 +463,8 @@ struct term {
   termresults results;
 
   termimgs imgs;
+
+  int even_line_highlight_delta;
 };
 
 extern struct term term;

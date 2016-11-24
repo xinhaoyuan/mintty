@@ -54,6 +54,7 @@ typedef struct {
   bool opaque_when_focused;
   char cursor_type;
   bool cursor_blinks;
+  int even_line_highlight_delta;
   // Text
   font_spec font;
   bool show_hidden_fonts;

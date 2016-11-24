@@ -896,6 +896,7 @@ termattrs_equal_fg(cattr * a, cattr * b)
 void
 win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, int lattr, bool has_rtl)
 {
+  bool even_line = y % 2;
   trace_line("win_text:", text, len);
   lattr &= LATTR_MODE;
   int char_width = cell_width * (1 + (lattr != LATTR_NORM));
@@ -994,6 +995,16 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, int la
 
   colour fg = fgi >= TRUE_COLOUR ? attr.truefg : colours[fgi];
   colour bg = bgi >= TRUE_COLOUR ? attr.truebg : colours[bgi];
+
+  if (even_line && term.even_line_highlight_delta > 0) {
+      int r = red(bg), g = green(bg), b = blue(bg);
+	  int delta = term.even_line_highlight_delta;
+      bg = make_colour(
+          r < 128 ? (r + delta) : (r - delta),
+          g < 128 ? (g + delta) : (g - delta),
+          b < 128 ? (b + delta) : (b - delta)
+      );
+  }
 
   if (attr.attr & ATTR_DIM) {
     fg = (fg & 0xFEFEFEFE) >> 1; // Halve the brightness.

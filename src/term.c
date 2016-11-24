@@ -173,6 +173,7 @@ term_reset(void)
   term.cursor_type = -1;
   term.cursor_blinks = -1;
   term.blink_is_real = cfg.allow_blinking;
+  term.even_line_highlight_delta = cfg.even_line_highlight_delta;
   term.erase_char = basic_erase_char;
   term.on_alt_screen = false;
   term_print_finish();
@@ -242,6 +243,7 @@ term_reconfig(void)
     term.delete_sends_del = new_cfg.delete_sends_del;
   if (strcmp(new_cfg.term, cfg.term))
     term.vt220_keys = vt220(new_cfg.term);
+  term.even_line_highlight_delta = new_cfg.even_line_highlight_delta;
 }
 
 bool in_result(pos abspos, result run) {

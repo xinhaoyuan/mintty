@@ -45,6 +45,7 @@ const config default_cfg = {
   .opaque_when_focused = false,
   .cursor_type = CUR_LINE,
   .cursor_blinks = true,
+  .even_line_highlight_delta = 7,
   // Text
   .font = {.name = W("Lucida Console"), .size = 9, .weight = 400, .isbold = false},
   .show_hidden_fonts = false,
@@ -191,6 +192,7 @@ options[] = {
   {"OpaqueWhenFocused", OPT_BOOL, offcfg(opaque_when_focused)},
   {"CursorType", OPT_CURSOR, offcfg(cursor_type)},
   {"CursorBlinks", OPT_BOOL, offcfg(cursor_blinks)},
+  {"EvenLineHighlightDelta", OPT_INT, offcfg(even_line_highlight_delta)},
 
   // Text
   {"Font", OPT_WSTRING, offcfg(font.name)},
@@ -1855,11 +1857,14 @@ setup_config_box(controlbox * b)
     s, _("&Theme"), 80, theme_handler, &new_cfg.theme_file
   );
   ctrl_columns(s, 1, 100);  // reset column stuff so we can rearrange them
-  ctrl_columns(s, 2, 80, 20);
-  ctrl_pushbutton(s, _("Color Scheme Designer"), url_opener, W("http://ciembor.github.io/4bit/"))
-    ->column = 0;
-  (store_button = ctrl_pushbutton(s, _("Store"), scheme_saver, 0))
+  ctrl_columns(s, 3, 40, 40, 20);
+  ctrl_editbox(
+    s, _("&Line Highlight"), 20, dlg_stdintbox_handler, &new_cfg.even_line_highlight_delta
+  )->column = 0;
+  ctrl_pushbutton(s, _("Scheme Designer"), url_opener, W("http://ciembor.github.io/4bit/"))
     ->column = 1;
+  (store_button = ctrl_pushbutton(s, _("Store"), scheme_saver, 0))
+    ->column = 2;
 
   s = ctrl_new_set(b, "Looks", null, _("Transparency"));
   bool with_glass = win_is_glass_available();
