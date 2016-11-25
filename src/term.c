@@ -243,7 +243,11 @@ term_reconfig(void)
     term.delete_sends_del = new_cfg.delete_sends_del;
   if (strcmp(new_cfg.term, cfg.term))
     term.vt220_keys = vt220(new_cfg.term);
-  term.even_line_highlight_delta = new_cfg.even_line_highlight_delta;
+  if (cfg.even_line_highlight_delta != new_cfg.even_line_highlight_delta) {
+	term.even_line_highlight_delta = new_cfg.even_line_highlight_delta;
+	term_invalidate(0, 0, term.cols - 1, term.rows - 1);
+	win_schedule_update();
+  }
 }
 
 bool in_result(pos abspos, result run) {
