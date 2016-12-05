@@ -11,17 +11,34 @@
 #include "res.h"
 #include "appinfo.h"
 
-#define Unicode_TreeView_does_not_work
-
 #include "charset.h"  // nonascii, cs__utftowcs
+extern void setup_config_box(controlbox *);
 
 #include <commctrl.h>
 
+# define debug_dialog_crash
 
-void setup_config_box(controlbox *);
+#ifdef debug_dialog_crash
+#include <signal.h>
+#endif
+
 
 /*
  * windlg.c - Dialogs, including the configuration dialog.
+
+   To make the TreeView widget work with Unicode support, 
+   it is particularly essential to use message TVM_INSERTITEMW 
+   to insert a TVINSERTSTRUCTW.
+
+   To document a minimum set of Unicode-enabled API usage as could be 
+   identified, some calls below are explicitly maintained in "ANSI" mode:
+     RegisterClassA	would work for the TreeView
+     RegisterClassW	needed if UNICODE defined for proper window title
+     CreateDialogW	must be "W" if UNICODE is defined
+     CreateWindowExA	works
+   The TreeView_ macros are implicitly mapped to either "A" or "W", 
+   so to use TreeView_InsertItem in either mode, it needs to be expanded 
+   to SendMessageA/SendMessageW.
  */
 
 /*
@@ -62,11 +79,6 @@ treeview_insert(treeview_faff * faff, int level, char *text, char *path)
   HTREEITEM newitem;
 
   if (nonascii(path)) {
-#ifdef Unicode_TreeView
-    // Using this variant for Unicode TreeView entries should enable 
-    // their proper display in the treeview, but it does not work,
-    // the label is handled as ANSI string anyway
-#endif
     wchar * utext = cs__utftowcs(text);
     TVINSERTSTRUCTW ins;
     ins.hParent = (level > 0 ? faff->lastat[level - 1] : TVI_ROOT);
@@ -75,19 +87,21 @@ treeview_insert(treeview_faff * faff, int level, char *text, char *path)
     ins.item.pszText = utext;
     //ins.item.cchTextMax = wcslen(utext) + 1;  // ignored when setting
     ins.item.lParam = (LPARAM) path;
-    newitem = (HTREEITEM)SendMessageW(faff->treeview, TVM_INSERTITEM, 0, (LPARAM)&ins);
+    // It is essential to also use TVM_INSERTITEMW here!
+    newitem = (HTREEITEM)SendMessageW(faff->treeview, TVM_INSERTITEMW, 0, (LPARAM)&ins);
     //TreeView_SetUnicodeFormat((HWND)newitem, TRUE);  // does not work
     free(utext);
   }
   else {
-    TVINSERTSTRUCT ins;
+    TVINSERTSTRUCTA ins;
     ins.hParent = (level > 0 ? faff->lastat[level - 1] : TVI_ROOT);
     ins.hInsertAfter = faff->lastat[level];
     ins.item.mask = TVIF_TEXT | TVIF_PARAM;
     ins.item.pszText = text;
     //ins.item.cchTextMax = strlen(text) + 1;  // ignored when setting
     ins.item.lParam = (LPARAM) path;
-    newitem = TreeView_InsertItem(faff->treeview, &ins);
+    //newitem = TreeView_InsertItem(faff->treeview, &ins);
+    newitem = (HTREEITEM)SendMessageA(faff->treeview, TVM_INSERTITEMA, 0, (LPARAM)&ins);
   }
 
   if (level > 0)
@@ -156,6 +170,46 @@ determine_geometry(HWND wnd)
 
 #define dont_debug_messages
 
+#ifdef debug_dialog_crash
+
+static char * debugopt = 0;
+static char * debugtag = "none";
+
+static void
+sigsegv(int sig)
+{
+  signal(sig, SIG_DFL);
+  printf("catch %d: %s\n", sig, debugtag);
+  fflush(stdout);
+  MessageBoxA(0, debugtag, "Critical Error", MB_ICONSTOP);
+}
+
+inline static void
+crashtest()
+{
+  char * x0 = 0;
+  *x0 = 'x';
+}
+
+static void
+debug(char *tag)
+{
+  if (!debugopt) {
+    debugopt = getenv("MINTTY_DEBUG");
+    if (!debugopt)
+      debugopt = "";
+  }
+
+  debugtag = tag;
+
+  if (debugopt && *debugopt)
+    printf("%s\n", tag);
+}
+
+#else
+# define debug(tag)	
+#endif
+
 /*
  * This function is the configuration box.
  * (Being a dialog procedure, in general it returns 0 if the default
@@ -171,13 +225,19 @@ static struct {
 } wm_names[] = {
 #include "_wm.t"
 };
-  char * wm_name = "WM_?";
-  for (uint i = 0; i < lengthof(wm_names); i++)
-    if (msg == wm_names[i].wm_) {
-      wm_name = wm_names[i].wm_name;
-      break;
-    }
-  printf("[%d] dialog_proc %04X %s (%04X %08X)\n", (int)time(0), msg, wm_name, (unsigned)wParam, (unsigned)lParam);
+  if (msg != WM_SETCURSOR && msg != WM_NCHITTEST && msg != WM_MOUSEFIRST
+      && msg != WM_ERASEBKGND && msg != WM_CTLCOLORDLG && msg != WM_PRINTCLIENT && msg != WM_CTLCOLORBTN
+
+      && (msg != WM_NOTIFY || (LOWORD(wParam) == IDCX_TREEVIEW && ((LPNMHDR) lParam)->code == TVN_SELCHANGED))
+     ) {
+    char * wm_name = "WM_?";
+    for (uint i = 0; i < lengthof(wm_names); i++)
+      if (msg == wm_names[i].wm_) {
+        wm_name = wm_names[i].wm_name;
+        break;
+      }
+    printf("[%d] dialog_proc %04X %s (%04X %08X)\n", (int)time(0), msg, wm_name, (unsigned)wParam, (unsigned)lParam);
+  }
 #endif
   switch (msg) {
     when WM_INITDIALOG: {
@@ -212,27 +272,17 @@ static struct {
       r.bottom = r.top + DIALOG_HEIGHT - 26;
       MapDialogRect(wnd, &r);
       HWND treeview =
-        CreateWindowEx(WS_EX_CLIENTEDGE, WC_TREEVIEW, "",
-#ifdef Unicode_TreeView
-                       // this doesn't have any effect
-                       SS_OWNERDRAW |
-#endif
+        CreateWindowExA(WS_EX_CLIENTEDGE, WC_TREEVIEWA, "",
                        WS_CHILD | WS_VISIBLE | WS_TABSTOP | TVS_HASLINES |
                        TVS_DISABLEDRAGDROP | TVS_HASBUTTONS | TVS_LINESATROOT
                        | TVS_SHOWSELALWAYS, r.left, r.top, r.right - r.left,
                        r.bottom - r.top, wnd, (HMENU) IDCX_TREEVIEW, inst,
                        null);
-#ifdef Unicode_TreeView
-      // the impact of this property is hardly described;
-      // it does not fix the treeview Unicode display failure
-      // but it prevents the panels from being selected
-      //TreeView_SetUnicodeFormat(treeview, TRUE);
-#endif
       WPARAM font = SendMessage(wnd, WM_GETFONT, 0, 0);
       SendMessage(treeview, WM_SETFONT, font, MAKELPARAM(true, 0));
       treeview_faff tvfaff;
       tvfaff.treeview = treeview;
-      memset(tvfaff.lastat, 0, sizeof (tvfaff.lastat));
+      memset(tvfaff.lastat, 0, sizeof(tvfaff.lastat));
 
      /*
       * Set up the tree view contents.
@@ -280,12 +330,6 @@ static struct {
         TreeView_SelectItem(treeview, hfirst);
       }
 
-#ifdef Unicode_TreeView
-      // with TreeView_SetUnicodeFormat(treeview, TRUE):
-      // the loop below is empty
-      // WM_NOTIFY is not triggered
-#endif
-
      /*
       * Set focus into the first available control.
       */
@@ -297,52 +341,21 @@ static struct {
       }
     }
 
+    when WM_CLOSE:
+      DestroyWindow(wnd);
+
     when WM_DESTROY:
       winctrl_cleanup(&ctrls_base);
       winctrl_cleanup(&ctrls_panel);
       ctrl_free_box(ctrlbox);
       config_wnd = 0;
 
-    when WM_NOTIFY: {
-      if (LOWORD(wParam) == IDCX_TREEVIEW &&
-          ((LPNMHDR) lParam)->code == TVN_SELCHANGED) {
-        HTREEITEM i = TreeView_GetSelection(((LPNMHDR) lParam)->hwndFrom);
-
-        TVITEM item;
-        char buffer[64];
-        item.hItem = i;
-        item.pszText = buffer;
-        item.cchTextMax = sizeof (buffer);
-        item.mask = TVIF_TEXT | TVIF_PARAM;
-        TreeView_GetItem(((LPNMHDR) lParam)->hwndFrom, &item);
-
-       /* Destroy all controls in the currently visible panel. */
-        for (winctrl *c = ctrls_panel.first; c; c = c->next) {
-          for (int k = 0; k < c->num_ids; k++) {
-            HWND item = GetDlgItem(wnd, c->base_id + k);
-            if (item)
-              DestroyWindow(item);
-          }
-        }
-        winctrl_cleanup(&ctrls_panel);
-
-        // here we need the correct DIALOG_HEIGHT already
-        create_controls(wnd, (char *) item.lParam);
-        dlg_refresh(null); /* set up control values */
-      }
-    }
-
-    when WM_CLOSE:
-      DestroyWindow(wnd);
-
-    when WM_COMMAND or WM_DRAWITEM: {
-      int ret = winctrl_handle_command(msg, wParam, lParam);
-      if (dlg.ended)
-        DestroyWindow(wnd);
-      return ret;
-    }
+#ifdef debug_dialog_crash
+      signal(SIGSEGV, SIG_DFL);
+#endif
 
     when WM_USER: {
+      debug("WM_USER");
       HWND target = (HWND)wParam;
       // could delegate this to winctrls.c, like winctrl_handle_command;
       // but then we'd have to fiddle with the location of dragndrop
@@ -364,12 +377,62 @@ static struct {
             }
         }
       }
+      debug("WM_USER: lookup");
       if (ctrl) {
         //dlg_editbox_set_w(ctrl, L"Test");  // may hit unrelated items...
         // drop the drag-and-drop contents here
         dragndrop = (wstring)lParam;
         ctrl->handler(ctrl, EVENT_DROP);
+        debug("WM_USER: handler");
       }
+      debug("WM_USER: end");
+    }
+
+    when WM_NOTIFY: {
+      if (LOWORD(wParam) == IDCX_TREEVIEW &&
+          ((LPNMHDR) lParam)->code == TVN_SELCHANGED) {
+        debug("WM_NOTIFY");
+        HTREEITEM i = TreeView_GetSelection(((LPNMHDR) lParam)->hwndFrom);
+        debug("WM_NOTIFY: GetSelection");
+
+        TVITEM item;
+        TCHAR buffer[64];
+        item.hItem = i;
+        item.pszText = buffer;
+        item.cchTextMax = lengthof(buffer);
+        item.mask = TVIF_TEXT | TVIF_PARAM;
+        TreeView_GetItem(((LPNMHDR) lParam)->hwndFrom, &item);
+
+       /* Destroy all controls in the currently visible panel. */
+        for (winctrl *c = ctrls_panel.first; c; c = c->next) {
+          for (int k = 0; k < c->num_ids; k++) {
+            HWND item = GetDlgItem(wnd, c->base_id + k);
+            if (item)
+              DestroyWindow(item);
+          }
+        }
+        debug("WM_NOTIFY: Destroy");
+        winctrl_cleanup(&ctrls_panel);
+        debug("WM_NOTIFY: cleanup");
+
+        // here we need the correct DIALOG_HEIGHT already
+        create_controls(wnd, (char *) item.lParam);
+        debug("WM_NOTIFY: create");
+        dlg_refresh(null); /* set up control values */
+        debug("WM_NOTIFY: refresh");
+      }
+    }
+
+    when WM_COMMAND or WM_DRAWITEM: {
+      debug("WM_COMMAND");
+      int ret = winctrl_handle_command(msg, wParam, lParam);
+      debug("WM_COMMAND: handle");
+      if (dlg.ended) {
+        DestroyWindow(wnd);
+        debug("WM_COMMAND: Destroy");
+      }
+      debug("WM_COMMAND: end");
+      return ret;
     }
   }
   return 0;
@@ -383,6 +446,10 @@ win_open_config(void)
   if (config_wnd)
     return;
 
+#ifdef debug_dialog_crash
+  signal(SIGSEGV, sigsegv);
+#endif
+
   set_dpi_auto_scaling(true);
 
   static bool initialised = false;
@@ -392,13 +459,13 @@ win_open_config(void)
       .style = CS_DBLCLKS,
       .lpfnWndProc = DefDlgProc,
       .cbClsExtra = 0,
-      .cbWndExtra = DLGWINDOWEXTRA + 2 * sizeof (LONG_PTR),
+      .cbWndExtra = DLGWINDOWEXTRA + 2 * sizeof(LONG_PTR),
       .hInstance = inst,
       .hIcon = null,
       .hCursor = LoadCursor(null, IDC_ARROW),
       .hbrBackground = (HBRUSH)(COLOR_BACKGROUND + 1),
       .lpszMenuName = null,
-      .lpszClassName = "ConfigBox"
+      .lpszClassName = S(DIALOG_CLASS)
     });
     initialised = true;
   }
@@ -420,6 +487,99 @@ win_open_config(void)
   set_dpi_auto_scaling(false);
 }
 
+/*
+   adapted from messageboxmanager.zip
+   @ https://www.codeproject.com/articles/18399/localizing-system-messagebox
+ */
+static wstring oklabel = null;
+static int oktype = MB_OK;
+
+static LRESULT CALLBACK
+set_labels(int nCode, WPARAM wParam, LPARAM lParam) {
+  (void)lParam;
+
+  void setlabel(int id, wstring label) {
+    HWND button = GetDlgItem((HWND)wParam, id);
+#ifdef debug_message_box
+    if (button) {
+      wchar buf [99];
+      GetWindowTextW(button, buf, 99);
+      printf("%d <%ls> -> <%ls>\n", id, buf, label);
+    }
+#endif
+    if (button)
+      SetWindowTextW(button, label);
+  }
+
+  if (nCode == HCBT_ACTIVATE) {
+    if ((oktype & MB_TYPEMASK) == MB_OK)
+      //__ take notice
+      setlabel(IDOK, _W("I see"));
+    else
+      //__ confirm action
+      setlabel(IDOK, _W("OK"));
+    setlabel(IDCANCEL, _W("Cancel"));
+#ifdef we_would_use_these_in_any_message_box
+#warning W -> _W to add the labels to the localization repository
+    setlabel(IDABORT, W("&Abort"));
+    setlabel(IDRETRY, W("&Retry"));
+    setlabel(IDIGNORE, W("&Ignore"));
+    setlabel(IDYES, W("&Yes"));
+    setlabel(IDNO, W("&No"));
+    //IDCLOSE has no label
+    setlabel(IDHELP, W("Help"));
+    setlabel(IDTRYAGAIN, W("&Try Again"));
+    setlabel(IDCONTINUE, W("&Continue"));
+#endif
+
+    if (oklabel) {
+      SetWindowTextW(GetDlgItem((HWND) wParam, IDOK), oklabel);
+      SetWindowTextW(GetDlgItem((HWND) wParam, IDYES), oklabel);
+    }
+  }
+  return 0;
+}
+
+int
+message_box(HWND parwnd, char * text, char * caption, int type, wstring ok)
+{
+  oklabel = ok;
+  oktype = type;
+//  HINSTANCE hinst = GetModuleHandle(NULL);
+//  HHOOK hook = SetWindowsHookEx(WH_CBT, set_labels, hinst, thrid);
+  DWORD thrid = GetCurrentThreadId();
+  HHOOK hook = SetWindowsHookEx(WH_CBT, set_labels, 0, thrid);
+  int ret;
+  if (nonascii(text) || nonascii(caption)) {
+    wchar * wtext = text ? cs__utftowcs(text) : 0;
+    wchar * wcapt = caption ? cs__utftowcs(caption) : 0;
+    ret = MessageBoxW(parwnd, wtext, wcapt, type);
+    if (wtext)
+      free(wtext);
+    if (wcapt)
+      free(wcapt);
+  }
+  else
+    ret = MessageBox(parwnd, text, caption, type);
+  UnhookWindowsHookEx(hook);
+  return ret;
+}
+
+int
+message_box_w(HWND parwnd, wchar * wtext, wchar * wcaption, int type, wstring ok)
+{
+  oklabel = ok;
+  oktype = type;
+//  HINSTANCE hinst = GetModuleHandle(NULL);
+//  HHOOK hook = SetWindowsHookEx(WH_CBT, set_labels, hinst, thrid);
+  DWORD thrid = GetCurrentThreadId();
+  HHOOK hook = SetWindowsHookEx(WH_CBT, set_labels, 0, thrid);
+  int ret;
+  ret = MessageBoxW(parwnd, wtext, wcaption, type);
+  UnhookWindowsHookEx(hook);
+  return ret;
+}
+
 void
 win_show_about(void)
 {
@@ -439,6 +599,9 @@ win_show_about(void)
   free(aboutfmt);
   wchar * wmsg = cs__utftowcs(abouttext);
   free(abouttext);
+  oklabel = null;
+  oktype = MB_OK;
+  HHOOK hook = SetWindowsHookEx(WH_CBT, set_labels, 0, GetCurrentThreadId());
   MessageBoxIndirectW(&(MSGBOXPARAMSW){
     .cbSize = sizeof(MSGBOXPARAMSW),
     .hwndOwner = config_wnd,
@@ -448,29 +611,19 @@ win_show_about(void)
     .lpszIcon = MAKEINTRESOURCEW(IDI_MAINICON),
     .lpszText = wmsg
   });
+  UnhookWindowsHookEx(hook);
   free(wmsg);
-}
-
-static void
-win_show_msg(char * msg, UINT type)
-{
-  if (nonascii(msg)) {
-    wchar * wmsg = cs__utftowcs(msg);
-    MessageBoxW(0, wmsg, 0, type);
-    free(wmsg);
-  }
-  else
-    MessageBox(0, msg, 0, type);
 }
 
 void
 win_show_error(char * msg)
 {
-  win_show_msg(msg, MB_ICONERROR);
+  message_box(0, msg, 0, MB_ICONERROR, 0);
 }
 
 void
 win_show_warning(char * msg)
 {
-  win_show_msg(msg, MB_ICONWARNING);
+  message_box(0, msg, 0, MB_ICONWARNING, 0);
 }
+

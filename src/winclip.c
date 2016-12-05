@@ -6,6 +6,7 @@
 #include "winpriv.h"
 #include "charset.h"
 #include "child.h"
+#include "res.h"  // DIALOG_CLASS
 
 #include <winnls.h>
 #include <richedit.h>
@@ -22,7 +23,7 @@ shell_exec_thread(void *data)
 
 #ifdef __CYGWIN__
   /* Need to sync the Windows environment */
-  cygwin_internal (CW_SYNC_WINENV);
+  cygwin_internal(CW_SYNC_WINENV);
 #endif
 
   if ((INT_PTR)ShellExecuteW(wnd, 0, wpath, 0, 0, SW_SHOWNORMAL) <= 32) {
@@ -33,7 +34,7 @@ shell_exec_thread(void *data)
         FORMAT_MESSAGE_FROM_SYSTEM | 64,
         0, error, 0, msg, lengthof(msg), 0
       );
-      MessageBoxW(0, msg, 0, MB_ICONERROR);
+      message_box_w(0, msg, 0, MB_ICONERROR, null);
     }
   }
   free(wpath);
@@ -51,19 +52,25 @@ win_open(wstring wpath)
 {
   wstring p = wpath;
   while (iswalpha(*p)) p++;
-
   if (*wpath == '\\' || *p == ':' || wcsncmp(W("www."), wpath, 4) == 0) {
     // Looks like it's a Windows path or URI
     shell_exec(wpath);
   }
   else {
     // Need to convert POSIX path to Windows first
+    if (support_wsl && wcsncmp(wpath, W("/mnt/"), 5) == 0) {
+      wchar * unwsl = newn(wchar, wcslen(wpath) + 6);
+      wcscpy(unwsl, W("/cygdrive"));
+      wcscat(unwsl, wpath + 4);
+      delete(wpath);
+      wpath = unwsl;
+    }
     wstring conv_wpath = child_conv_path(wpath);
     delete(wpath);
     if (conv_wpath)
       shell_exec(conv_wpath);
     else
-      MessageBox(0, strerror(errno), 0, MB_ICONERROR);
+      message_box(0, strerror(errno), 0, MB_ICONERROR, null);
   }
 }
 
@@ -77,7 +84,7 @@ win_copy(const wchar *data, uint *attrs, int len)
 
   len2 = WideCharToMultiByte(CP_ACP, 0, data, len, 0, 0, null, null);
 
-  clipdata = GlobalAlloc(GMEM_DDESHARE | GMEM_MOVEABLE, len * sizeof (wchar));
+  clipdata = GlobalAlloc(GMEM_DDESHARE | GMEM_MOVEABLE, len * sizeof(wchar));
   clipdata2 = GlobalAlloc(GMEM_DDESHARE | GMEM_MOVEABLE, len2);
 
   if (!clipdata || !clipdata2) {
@@ -92,7 +99,7 @@ win_copy(const wchar *data, uint *attrs, int len)
   if (!(lock2 = GlobalLock(clipdata2)))
     return;
 
-  memcpy(lock, data, len * sizeof (wchar));
+  memcpy(lock, data, len * sizeof(wchar));
   WideCharToMultiByte(CP_ACP, 0, data, len, lock2, len2, null, null);
 
   if (attrs && cfg.copy_as_rtf) {
@@ -142,7 +149,7 @@ win_copy(const wchar *data, uint *attrs, int len)
     * First - Determine all colours in use
     *    o  Foreground and background colours share the same palette
     */
-    memset(palette, 0, sizeof (palette));
+    memset(palette, 0, sizeof(palette));
     for (int i = 0; i < (len - 1); i++) {
       uint attr = attrs[i];
       fgcolour = (attr & ATTR_FGMASK) >> ATTR_FGSHIFT;
@@ -655,13 +662,13 @@ dt_drop(IDropTarget *this, IDataObject *obj,
     char cn[10];
     HWND widget = null;
     // find the SendMessage target window
-    while (h && (GetClassName(h, cn, sizeof cn), strcmp(cn, "ConfigBox") != 0)) {
+    while (h && (GetClassNameA(h, cn, sizeof(cn)), strcmp(cn, DIALOG_CLASS) != 0)) {
 #ifdef debug_dragndrop
       printf("%8p (%s) ", h, cn);
 #endif
       // pick up the actual drag-and-drop target widget
       if (strcmp(cn, "ComboBox") == 0 || strcmp(cn, "Button") == 0)
-        widget = h;  // or unconditionally use the last before ConfigBox?
+        widget = h;  // or unconditionally use the last before DIALOG_CLASS?
       h = GetParent(h);
     }
 #ifdef debug_dragndrop
@@ -682,7 +689,7 @@ dt_drop(IDropTarget *this, IDataObject *obj,
 
     wchar * drop = paste_dialog(data, dt_format.cfFormat);
     if (drop) {
-      // this will only work with the "ConfigBox" target
+      // this will only work with the DIALOG_CLASS target
       SendMessage(h, WM_USER, (WPARAM)widget, (LPARAM)drop);
       free(drop);
     }

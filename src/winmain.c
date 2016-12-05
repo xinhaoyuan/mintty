@@ -110,11 +110,11 @@ static HMODULE
 load_sys_library(string name)
 {
   char path[MAX_PATH];
-  uint len = GetSystemDirectory(path, MAX_PATH);
+  uint len = GetSystemDirectoryA(path, MAX_PATH);
   if (len && len + strlen(name) + 1 < MAX_PATH) {
     path[len] = '\\';
     strcpy(&path[len + 1], name);
-    return LoadLibrary(path);
+    return LoadLibraryA(path);
   }
   else
     return 0;
@@ -378,7 +378,7 @@ get_monitor_info(int moni, MONITORINFO *mip)
   mip->cbSize = sizeof(MONITORINFO);
 
   BOOL CALLBACK
-  monitor_enum (HMONITOR hMonitor, HDC hdcMonitor, LPRECT monp, LPARAM dwData)
+  monitor_enum(HMONITOR hMonitor, HDC hdcMonitor, LPRECT monp, LPARAM dwData)
   {
     (void)hdcMonitor, (void)monp, (void)dwData;
 
@@ -1247,9 +1247,10 @@ confirm_exit(void)
   wcscat(wmsg, msg_post);
   free(proclist);
 
-  int ret = MessageBoxW(
+  int ret = message_box_w(
               wnd, wmsg,
-              W(APPNAME), MB_ICONWARNING | MB_OKCANCEL | MB_DEFBUTTON2
+              W(APPNAME), MB_ICONWARNING | MB_OKCANCEL | MB_DEFBUTTON2,
+              null
             );
   free(wmsg);
 
@@ -1686,7 +1687,7 @@ show_message(char * msg, UINT type)
   char * outmsg = cs__utftombs(msg);
   if (fputs(outmsg, out) < 0 || fputs("\n", out) < 0 || fflush(out) < 0) {
     wchar * wmsg = cs__utftowcs(msg);
-    MessageBoxW(0, wmsg, W(APPNAME), type);
+    message_box_w(0, wmsg, W(APPNAME), type, null);
     delete(wmsg);
   }
   delete(outmsg);
@@ -2146,7 +2147,7 @@ main(int argc, char *argv[])
   {
     char timbuf [22];
     struct timeval now;
-    gettimeofday (& now, 0);
+    gettimeofday(& now, 0);
     strftime(timbuf, sizeof (timbuf), "%Y-%m-%d %H:%M:%S", localtime(& now.tv_sec));
     fprintf(mtlog, "[%s.%03d] %s\n", timbuf, (int)now.tv_usec / 1000, argv[0]);
     fflush(mtlog);

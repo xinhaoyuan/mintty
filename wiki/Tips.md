@@ -564,15 +564,22 @@ The localization language can be selected with the option `Language`,
 see manual page for details.
 
 Example:
-`Language=*`, environment variables `LANGUAGE=de_CH:fr:de` and 
-`LC_MESSAGES=en_GB.UTF-8`:
-mintty tries to find localization files for `de_CH`, `fr`, `de`, 
-`en_GB`, each in all resource configuration folders (subfolder `lang`).
+`Language=*`, environment variables `LANGUAGE=de_CH:français:de:fr_FR` and 
+`LC_MESSAGES=en_GB.UTF-8`, `LC_ALL` not set:
+mintty tries to find localization files (in this order) for 
+`de_CH`, `français`, `de`, `fr_FR`, `en_GB`, 
+then (as generic fallback) `fr` and `en`, 
+each in all resource configuration folders (subfolder `lang`).
 
 Localization files for various language or language/region codes 
 are looked up in the resource configuration folders, subfolder `lang`.
 Mintty uses a simplified `gettext` file format but not the `gettext` library;
 all messages must be encoded in UTF-8, the Content-Type charset is ignored.
+
+Note that Windows may already have localized the default entries of the 
+system menu, which makes the system menu language inconsistent because 
+mintty adds a few items here. Choose `Language=en` to 
+“reverse-localize” this.
 
 
 ## Running mintty stand-alone ##

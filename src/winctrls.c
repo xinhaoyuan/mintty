@@ -47,7 +47,7 @@
 
 void
 ctrlposinit(ctrlpos * cp, HWND wnd, int leftborder, int rightborder,
-           int topborder)
+            int topborder)
 {
   RECT r, r2;
   cp->wnd = wnd;
@@ -67,8 +67,8 @@ ctrlposinit(ctrlpos * cp, HWND wnd, int leftborder, int rightborder,
 static HWND
 doctl(control * ctrl, 
       ctrlpos * cp, RECT r, 
-      char * wclass, int wstyle, int exstyle, 
-      string wtext, int wid)
+      char * class, int wstyle, int exstyle, 
+      string text, int wid)
 {
   HWND ctl;
  /*
@@ -85,17 +85,27 @@ doctl(control * ctrl,
   * without creating any actual controls.
   */
   if (cp->wnd) {
-    ctl =
-      CreateWindowEx(exstyle, wclass, wtext, wstyle, r.left, r.top, r.right,
-                     r.bottom, cp->wnd, (HMENU)(INT_PTR)wid, inst, null);
-    if (nonascii(wtext)) {
+    // avoid changing text with SendMessageW(ctl, WM_SETTEXT, ...) 
+    // as this produces large text artefacts
+    if (nonascii(text)) {
       // transform label for proper Windows display
-      wchar * us = cs__utftowcs(wtext);
-      SendMessageW(ctl, WM_SETTEXT, 0, (LPARAM)us);
-      free(us);
+      wchar * wtext = text ? cs__utftowcs(text) : 0;
+      wchar * wclass = class ? cs__utftowcs(class) : 0;
+      ctl =
+        CreateWindowExW(exstyle, wclass, wtext, wstyle, r.left, r.top, r.right,
+                        r.bottom, cp->wnd, (HMENU)(INT_PTR)wid, inst, null);
+      if (wtext)
+        free(wtext);
+      if (wclass)
+        free(wclass);
+    }
+    else {
+      ctl =
+        CreateWindowExA(exstyle, class, text, wstyle, r.left, r.top, r.right,
+                        r.bottom, cp->wnd, (HMENU)(INT_PTR)wid, inst, null);
     }
 #ifdef debug_widgets
-    printf("%8p %s %d '%s'\n", ctl, wclass, exstyle, wtext);
+    printf("%8p %s %d '%s'\n", ctl, class, exstyle, text);
 #endif
     SendMessage(ctl, WM_SETFONT, cp->font, MAKELPARAM(true, 0));
     if (ctrl) {
@@ -116,7 +126,7 @@ doctl(control * ctrl,
     EnumChildWindows(ctl, enumwin, 0);
 #endif
 
-    if (!strcmp(wclass, "LISTBOX")) {
+    if (!strcmp(class, "LISTBOX")) {
      /*
       * Bizarre Windows bug: the list box calculates its
       * number of lines based on the font it has at creation
@@ -863,6 +873,57 @@ winctrl_set_focus(control *ctrl, int has_focus)
 #define trace_fontsel(params)	
 #endif
 
+static winctrl * font_ctrl;
+
+UINT_PTR CALLBACK fonthook(HWND hdlg, UINT uiMsg, WPARAM wParam, LPARAM lParam)
+{
+  (void)lParam;
+  //winctrl * c = (winctrl *)lParam;  // does not work
+  winctrl * c = font_ctrl;
+  if (uiMsg == WM_COMMAND && wParam == 1026) {  // Apply
+    LOGFONTW lfapply;
+    SendMessageW(hdlg, WM_CHOOSEFONT_GETLOGFONT, 0, (LPARAM)&lfapply);
+    font_spec * fsp = &new_cfg.font;
+    wstrset(&fsp->name, lfapply.lfFaceName);
+    HDC dc = GetDC(0);
+    fsp->size = -MulDiv(lfapply.lfHeight, 72, GetDeviceCaps(dc, LOGPIXELSY));
+    trace_fontsel(("Apply lfHeight %ld -> size %d <%ls>\n", (long int)lfapply.lfHeight, fsp->size, lfapply.lfFaceName));
+    ReleaseDC(0, dc);
+    fsp->weight = lfapply.lfWeight;
+    fsp->isbold = (lfapply.lfWeight >= FW_BOLD);
+    // apply font
+    apply_config(false);
+    // update font spec label
+    c->ctrl->handler(c->ctrl, EVENT_REFRESH);  // -> dlg_stdfontsel_handler
+    //or dlg_fontsel_set(c->ctrl, fsp);
+  }
+  else if (uiMsg == WM_COMMAND && wParam == 1) {  // OK
+#ifdef failed_workaround_for_no_font_issue
+    /*
+      Trying to work-around issue #507
+      "There is no font with that name."
+      "Choose a font from the list of fonts."
+      as it occurs with Meslo LG L DZ for Powerline
+    */
+    LOGFONTW lfapply;
+    SendMessageW(hdlg, WM_CHOOSEFONT_GETLOGFONT, 0, (LPARAM)&lfapply);
+    // lfapply.lfFaceName is "Meslo LG L DZ for Powerline"
+    HWND wnd = GetDlgItem(hdlg, c->base_id +99);
+    int size = GetWindowTextLengthW(wnd) + 1;
+    wchar * fn = newn(wchar, size);
+    GetWindowTextW(wnd, fn, size);
+    // fn is "Meslo LG L DZ for Powerline RegularForPowerline"
+    // trying to fix the inconsistency with
+    SetWindowTextW(wnd, lfapply.lfFaceName);
+    // does not help...
+    // what a crap!
+#endif
+  }
+  else if (uiMsg == WM_COMMAND && wParam == 2) {  // Cancel
+  }
+  return 0;  // default processing
+}
+
 static void
 select_font(winctrl *c)
 {
@@ -888,58 +949,13 @@ select_font(winctrl *c)
   else
     lf.lfFaceName[0] = 0;
 
-  UINT_PTR CALLBACK fonthook(HWND hdlg, UINT uiMsg, WPARAM wParam, LPARAM lParam)
-  {
-    (void)lParam;
-    if (uiMsg == WM_COMMAND && wParam == 1026) {  // Apply
-      LOGFONTW lfapply;
-      SendMessageW(hdlg, WM_CHOOSEFONT_GETLOGFONT, 0, (LPARAM)&lfapply);
-      font_spec * fsp = &new_cfg.font;
-      wstrset(&fsp->name, lfapply.lfFaceName);
-      HDC dc = GetDC(0);
-      fsp->size = -MulDiv(lfapply.lfHeight, 72, GetDeviceCaps(dc, LOGPIXELSY));
-      trace_fontsel(("Apply lfHeight %ld -> size %d <%ls>\n", (long int)lfapply.lfHeight, fsp->size, lfapply.lfFaceName));
-      ReleaseDC(0, dc);
-      fsp->weight = lfapply.lfWeight;
-      fsp->isbold = (lfapply.lfWeight >= FW_BOLD);
-      // apply font
-      apply_config(false);
-      // update font spec label
-      c->ctrl->handler(c->ctrl, EVENT_REFRESH);  // -> dlg_stdfontsel_handler
-      //or dlg_fontsel_set(c->ctrl, fsp);
-    }
-    else if (uiMsg == WM_COMMAND && wParam == 1) {  // OK
-#ifdef failed_workaround_for_no_font_issue
-      /*
-        Trying to work-around issue #507
-        "There is no font with that name."
-        "Choose a font from the list of fonts."
-        as it occurs with Meslo LG L DZ for Powerline
-      */
-      LOGFONTW lfapply;
-      SendMessageW(hdlg, WM_CHOOSEFONT_GETLOGFONT, 0, (LPARAM)&lfapply);
-      // lfapply.lfFaceName is "Meslo LG L DZ for Powerline"
-      HWND wnd = GetDlgItem(hdlg, c->base_id +99);
-      int size = GetWindowTextLengthW(wnd) + 1;
-      wchar * fn = newn(wchar, size);
-      GetWindowTextW(wnd, fn, size);
-      // fn is "Meslo LG L DZ for Powerline RegularForPowerline"
-      // trying to fix the inconsistency with
-      SetWindowTextW(wnd, lfapply.lfFaceName);
-      // does not help...
-      // what a crap!
-#endif
-    }
-    else if (uiMsg == WM_COMMAND && wParam == 2) {  // Cancel
-    }
-    return 0;  // default processing
-  }
-
   CHOOSEFONTW cf;
-  cf.lStructSize = sizeof (cf);
+  cf.lStructSize = sizeof(cf);
   cf.hwndOwner = dlg.wnd;
   cf.lpLogFont = &lf;
   cf.lpfnHook = fonthook;
+  cf.lCustData = (LPARAM)c;  // does not work
+  font_ctrl = c;
   cf.Flags =
     CF_INITTOLOGFONTSTRUCT | CF_FORCEFONTEXIST
     | CF_FIXEDPITCHONLY | CF_NOVERTFONTS
@@ -1007,7 +1023,7 @@ winctrl_handle_command(UINT msg, WPARAM wParam, LPARAM lParam)
 
     SetMapMode(dc, MM_TEXT);   /* ensure logical units == pixels */
 
-    GetTextExtentPoint32(dc, (char *) c->data, strlen((char *) c->data), &s);
+    GetTextExtentPoint32A(dc, (char *) c->data, strlen((char *) c->data), &s);
     DrawEdge(dc, &r, EDGE_ETCHED, BF_ADJUST | BF_RECT);
     string text = (string) c->data;
     if (nonascii(text)) {
@@ -1019,8 +1035,8 @@ winctrl_handle_command(UINT msg, WPARAM wParam, LPARAM lParam)
       free(us);
     }
     else
-      TextOut(dc, r.left + (r.right - r.left - s.cx) / 2,
-              r.top + (r.bottom - r.top - s.cy) / 2, text, strlen(text));
+      TextOutA(dc, r.left + (r.right - r.left - s.cx) / 2,
+               r.top + (r.bottom - r.top - s.cy) / 2, text, strlen(text));
 
     return true;
   }
@@ -1144,7 +1160,7 @@ winctrl_handle_command(UINT msg, WPARAM wParam, LPARAM lParam)
   if (dlg.coloursel_wanted) {
     static CHOOSECOLOR cc;
     static DWORD custom[16] = { 0 };    /* zero initialisers */
-    cc.lStructSize = sizeof (cc);
+    cc.lStructSize = sizeof(cc);
     cc.hwndOwner = dlg.wnd;
     cc.hInstance = (HWND) inst;
     cc.lpCustColors = custom;
@@ -1215,7 +1231,7 @@ dlg_editbox_set(control *ctrl, string text)
 
   winctrl *c = ctrl->plat_ctrl;
   assert(c && c->ctrl->type == CTRL_EDITBOX);
-  SetDlgItemText(dlg.wnd, c->base_id + 1, text);
+  SetDlgItemTextA(dlg.wnd, c->base_id + 1, text);
 }
 
 void
@@ -1260,7 +1276,7 @@ dlg_editbox_get(control *ctrl, string *text_p)
   int size = GetWindowTextLength(wnd) + 1;
   char *text = (char *)*text_p;
   text = renewn(text, size);
-  GetWindowText(wnd, text, size);
+  GetWindowTextA(wnd, text, size);
   *text_p = text;
 }
 
@@ -1410,7 +1426,7 @@ dlg_fontsel_set(control *ctrl, font_spec *fs)
              fs->size < 0 ? "px" : "pt")
     : asform("%s, %sdefault size", fn, boldstr);
   free(fn);
-  SetDlgItemText(dlg.wnd, c->base_id + 1, buf);
+  SetDlgItemTextA(dlg.wnd, c->base_id + 1, buf);
   free(buf);
 #endif
 }
