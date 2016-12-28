@@ -32,10 +32,11 @@ extern void setup_config_box(controlbox *);
 
    To document a minimum set of Unicode-enabled API usage as could be 
    identified, some calls below are explicitly maintained in "ANSI" mode:
-     RegisterClassA	would work for the TreeView
-     RegisterClassW	needed if UNICODE defined for proper window title
-     CreateDialogW	must be "W" if UNICODE is defined
-     CreateWindowExA	works
+     RegisterClassA			would work for the TreeView
+     RegisterClassW			needs "W" for title if UNICODE
+     RegisterClassW with DefDlgProcW	needed for proper window title
+     CreateDialogW			must be "W" if UNICODE is defined
+     CreateWindowExA			works
    The TreeView_ macros are implicitly mapped to either "A" or "W", 
    so to use TreeView_InsertItem in either mode, it needs to be expanded 
    to SendMessageA/SendMessageW.
@@ -168,8 +169,6 @@ determine_geometry(HWND wnd)
   dialog_height = 100 * (r.bottom - r.top) / normr.bottom;
 }
 
-#define dont_debug_messages
-
 #ifdef debug_dialog_crash
 
 static char * debugopt = 0;
@@ -210,6 +209,8 @@ debug(char *tag)
 # define debug(tag)	
 #endif
 
+#define dont_debug_messages
+
 /*
  * This function is the configuration box.
  * (Being a dialog procedure, in general it returns 0 if the default
@@ -219,18 +220,19 @@ static INT_PTR CALLBACK
 config_dialog_proc(HWND wnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 #ifdef debug_messages
-static struct {
+#include <time.h>
+  static struct {
   uint wm_;
   char * wm_name;
-} wm_names[] = {
-#include "_wm.t"
-};
-  if (msg != WM_SETCURSOR && msg != WM_NCHITTEST && msg != WM_MOUSEFIRST
-      && msg != WM_ERASEBKGND && msg != WM_CTLCOLORDLG && msg != WM_PRINTCLIENT && msg != WM_CTLCOLORBTN
-
-      && (msg != WM_NOTIFY || (LOWORD(wParam) == IDCX_TREEVIEW && ((LPNMHDR) lParam)->code == TVN_SELCHANGED))
-     ) {
-    char * wm_name = "WM_?";
+  } wm_names[] = {
+#  include "_wm.t"
+  };
+  char * wm_name = "WM_?";
+  if ((msg != WM_SETCURSOR && msg != WM_NCHITTEST && msg != WM_MOUSEFIRST
+       && msg != WM_ERASEBKGND && msg != WM_CTLCOLORDLG && msg != WM_PRINTCLIENT && msg != WM_CTLCOLORBTN
+       && msg != WM_ENTERIDLE
+       && (msg != WM_NOTIFY || (LOWORD(wParam) == IDCX_TREEVIEW && ((LPNMHDR) lParam)->code == TVN_SELCHANGED))
+     )) {
     for (uint i = 0; i < lengthof(wm_names); i++)
       if (msg == wm_names[i].wm_) {
         wm_name = wm_names[i].wm_name;
@@ -435,6 +437,10 @@ static struct {
       return ret;
     }
   }
+#ifdef debug_messages
+//  catch return above
+//  printf(" end dialog_proc %04X %s (%04X %08X)\n", msg, wm_name, (unsigned)wParam, (unsigned)lParam);
+#endif
   return 0;
 }
 
@@ -455,17 +461,17 @@ win_open_config(void)
   static bool initialised = false;
   if (!initialised) {
     InitCommonControls();
-    RegisterClass(&(WNDCLASS){
+    RegisterClassW(&(WNDCLASSW){
+      .lpszClassName = W(DIALOG_CLASS),
+      .lpfnWndProc = DefDlgProcW,
       .style = CS_DBLCLKS,
-      .lpfnWndProc = DefDlgProc,
       .cbClsExtra = 0,
       .cbWndExtra = DLGWINDOWEXTRA + 2 * sizeof(LONG_PTR),
       .hInstance = inst,
       .hIcon = null,
       .hCursor = LoadCursor(null, IDC_ARROW),
       .hbrBackground = (HBRUSH)(COLOR_BACKGROUND + 1),
-      .lpszMenuName = null,
-      .lpszClassName = S(DIALOG_CLASS)
+      .lpszMenuName = null
     });
     initialised = true;
   }
@@ -480,6 +486,7 @@ win_open_config(void)
   determine_geometry(config_wnd);  // dummy call
 
   // Set title of Options dialog explicitly to facilitate I18N
+  //__ Options: dialog title
   SendMessageW(config_wnd, WM_SETTEXT, 0, (LPARAM)_W("Options"));
 
   ShowWindow(config_wnd, SW_SHOW);
@@ -513,14 +520,13 @@ set_labels(int nCode, WPARAM wParam, LPARAM lParam) {
 
   if (nCode == HCBT_ACTIVATE) {
     if ((oktype & MB_TYPEMASK) == MB_OK)
-      //__ take notice
       setlabel(IDOK, _W("I see"));
     else
-      //__ confirm action
       setlabel(IDOK, _W("OK"));
     setlabel(IDCANCEL, _W("Cancel"));
 #ifdef we_would_use_these_in_any_message_box
 #warning W -> _W to add the labels to the localization repository
+#warning predefine button labels in config.c
     setlabel(IDABORT, W("&Abort"));
     setlabel(IDRETRY, W("&Retry"));
     setlabel(IDIGNORE, W("&Ignore"));
@@ -560,7 +566,7 @@ message_box(HWND parwnd, char * text, char * caption, int type, wstring ok)
       free(wcapt);
   }
   else
-    ret = MessageBox(parwnd, text, caption, type);
+    ret = MessageBoxA(parwnd, text, caption, type);
   UnhookWindowsHookEx(hook);
   return ret;
 }

@@ -691,9 +691,14 @@ win_paint(void)
   EndPaint(wnd, &p);
 }
 
+#define dont_debug_cursor 1
+
 static void
 do_update(void)
 {
+#if defined(debug_cursor) && debug_cursor > 1
+  printf("do_update cursor_on %d @%d,%d\n", term.cursor_on, term.curs.y, term.curs.x);
+#endif
   if (update_state == UPDATE_BLOCKED) {
     update_state = UPDATE_IDLE;
     return;
@@ -817,10 +822,8 @@ win_set_ime_open(bool open)
 
 #define dont_debug_win_text
 
-#ifdef debug_win_text
-
-void
-trace_line(char * tag, wchar * text, int len)
+static void
+_trace_line(char * tag, wchar * text, int len)
 {
   bool show = false;
   for (int i = 0; i < len; i++)
@@ -832,7 +835,13 @@ trace_line(char * tag, wchar * text, int len)
   }
 }
 
-#else
+inline static void
+trace_line(char * tag, wchar * text, int len)
+{
+  _trace_line(tag, text, len);
+}
+
+#ifndef debug_win_text
 #define trace_line(tag, text, len)	
 #endif
 
@@ -896,6 +905,16 @@ termattrs_equal_fg(cattr * a, cattr * b)
   if ((a->attr & ATTR_COLOUR_MASK) != (b->attr & ATTR_COLOUR_MASK))
     return false;
   return true;
+}
+
+
+static int
+char1ulen(wchar * text)
+{
+  if ((text[0] & 0xFC00) == 0xD800 && (text[1] & 0xFC00) == 0xDC00)
+    return 2;
+  else
+    return 1;
 }
 
 /*
@@ -1064,6 +1083,9 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, int la
       if (too_close && colour_dist(cursor_colour, fg) < mindist)
         fg = bg;
       bg = cursor_colour;
+#ifdef debug_cursor
+      printf("set cursor (colour %06X) @(row %d col %d) cursor_on %d\n", bg, (y - PADDING) / cell_height, (x - PADDING) / char_width, term.cursor_on);
+#endif
     }
   }
 
@@ -1146,7 +1168,13 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, int la
   for (int i = 0; i < len; i++)
     dxs[i] = dx;
 
-  int width = char_width * (combining ? 1 : len);
+  int ulen = 0;
+  for (int i = 0; i < len; i++) {
+    ulen++;
+    if (char1ulen(&text[i]) == 2)
+      i++;  // skip low surrogate;
+  }
+  int width = char_width * (combining ? 1 : ulen);
   RECT box = {
     .top = y, .bottom = y + cell_height,
     .left = x, .right = min(x + width, cell_width * term.cols + PADDING)
@@ -1242,14 +1270,16 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, int la
         SetTextColor(dc, fg);
 
       // base character
-      text_out(dc, xt + xoff, yt, eto_options | overwropt, &box, text, 1, dxs);
+      int ulen = char1ulen(text);
+      text_out(dc, xt + xoff, yt, eto_options | overwropt, &box, text, ulen, dxs);
+
       if (overwropt) {
         SetBkMode(dc, TRANSPARENT);
         overwropt = 0;
       }
       // combining characters
       textattr[0] = attr;
-      for (int i = 1; i < len; i++) {
+      for (int i = ulen; i < len; i += ulen) {
         // separate stacking of combining characters 
         // does not work with Uniscribe
         use_uniscribe = false;
@@ -1284,7 +1314,8 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, int la
 
           SetTextColor(dc, fg);
         }
-        text_out(dc, xx, yt, eto_options, &box2, &text[i], 1, &dxs[i]);
+        ulen = char1ulen(&text[i]);
+        text_out(dc, xx, yt, eto_options, &box2, &text[i], ulen, &dxs[i]);
       }
     }
     else {
@@ -1452,6 +1483,9 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, int la
   }
 
   if (has_cursor) {
+#if defined(debug_cursor) && debug_cursor > 1
+    printf("painting cursor_type '%c' cursor_on %d\n", "?b_l"[term_cursor_type()+1], term.cursor_on);
+#endif
     HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, 0, cursor_colour));
     switch (term_cursor_type()) {
       when CUR_BLOCK:
