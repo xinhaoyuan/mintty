@@ -169,12 +169,17 @@ static void
 write_backspace(void)
 {
   term_cursor *curs = &term.curs;
-  if (curs->x == 0 && (curs->y == 0 || !curs->autowrap))
+  int term_top = curs->origin ? term.marg_top : 0;
+  if (curs->x == 0 && (curs->y == term_top || !curs->autowrap
+                       || (!cfg.old_wrapmodes && !curs->rev_wrap)))
    /* do nothing */ ;
-  else if (curs->x == 0 && curs->y > 0)
+  else if (curs->x == 0 && curs->y > term_top)
     curs->x = term.cols - 1, curs->y--;
-  else if (curs->wrapnext)
+  else if (curs->wrapnext) {
     curs->wrapnext = false;
+    if (!curs->rev_wrap && !cfg.old_wrapmodes)
+      curs->x--;
+  }
   else
     curs->x--;
 }
@@ -243,6 +248,7 @@ write_char(wchar c, int width)
 
   term_cursor *curs = &term.curs;
   termline *line = term.lines[curs->y];
+
   void put_char(wchar c)
   {
     clear_cc(line, curs->x);
@@ -260,8 +266,10 @@ write_char(wchar c, int width)
     curs->wrapnext = false;
     line = term.lines[curs->y];
   }
+
   if (term.insert && width > 0)
     insert_char(width);
+
   switch (width) {
     when 1:  // Normal character.
       term_check_boundary(curs->x, curs->y);
@@ -333,10 +341,12 @@ write_char(wchar c, int width)
     otherwise:  // Anything else. Probably shouldn't get here.
       return;
   }
+
   curs->x++;
   if (curs->x == term.cols) {
     curs->x--;
-    curs->wrapnext = true;
+    if (curs->autowrap || cfg.old_wrapmodes)
+      curs->wrapnext = true;
   }
 }
 
@@ -610,6 +620,10 @@ set_modes(bool state)
           term.curs.origin = state;
         when 7:  /* DECAWM: auto wrap */
           term.curs.autowrap = state;
+          term.curs.wrapnext = false;
+        when 45:  /* xterm: reverse (auto) wraparound */
+          term.curs.rev_wrap = state;
+          term.curs.wrapnext = false;
         when 8:  /* DECARM: auto key repeat */
           // ignore
         when 9:  /* X10_MOUSE */
@@ -646,6 +660,10 @@ set_modes(bool state)
           term.mouse_enc = state ? ME_URXVT_CSI : 0;
         when 1037:
           term.delete_sends_del = state;
+        when 1042:
+          term.bell_taskbar = state;
+        when 1043:
+          term.bell_popup = state;
         when 1047:       /* alternate screen */
           term.selected = false;
           term_switch_screen(state, true);
@@ -1608,11 +1626,12 @@ term_write(const char *buf, uint len)
         }
         else if (c >= '0' && c <= '9') {
           uint i = term.csi_argc - 1;
-          if (i < lengthof(term.csi_argv))
+          if (i < lengthof(term.csi_argv)) {
             term.csi_argv[i] = 10 * term.csi_argv[i] + c - '0';
             if ((int)term.csi_argv[i] < 0)
               term.csi_argv[i] = INT_MAX;  // capture overflow
             term.csi_argv_defined[i] = 1;
+          }
         }
         else if (c < 0x40)
           term.esc_mod = term.esc_mod ? 0xFF : c;

@@ -57,6 +57,7 @@ typedef struct {
   int even_line_highlight_delta;
   // Text
   font_spec font;
+  wstring font_sample;
   bool show_hidden_fonts;
   char font_smoothing;
   char font_render;
@@ -106,13 +107,15 @@ typedef struct {
   // Terminal
   string term;
   wstring answerback;
+  bool old_wrapmodes;
   bool bell_sound;
   int bell_type;
   wstring bell_file;
   int bell_freq;
   int bell_len;
-  bool bell_flash;
-  bool bell_taskbar;
+  bool bell_flash;   // xterm: visualBell
+  bool bell_taskbar; // xterm: bellIsUrgent
+  bool bell_popup;   // xterm: popOnBell
   wstring printer;
   bool confirm_exit;
   bool allow_set_selection;
@@ -123,6 +126,7 @@ typedef struct {
   wstring exit_title;
   wstring icon;
   wstring log;
+  bool logging;
   wstring title;
   bool create_utmp;
   char window;
@@ -133,6 +137,7 @@ typedef struct {
   wstring app_id;
   wstring app_name;
   wstring app_launch_cmd;
+  wstring drop_commands;
   int col_spacing, row_spacing;
   int padding;
   bool handle_dpichanged;

@@ -1,3 +1,54 @@
+Font handling
+  * Changing default FontRender=uniscribe (#605, #573).
+
+Terminal
+  * Fixed Backspace upper limit in Origin mode.
+  * Added switching feature for Reverse Wraparound mode.
+  * Reverse Wraparound default if false (rather than fixed true before), to comply with xterm and terminfo.
+  * Tweaked Wraparound and Backspace behaviour to comply with xterm.
+  * Option OldWrapModes=true would restore previous wraparound behaviour.
+  * Drag-and-drop pasting applies configurable pattern (#440).
+
+Configuration
+  * Optional extended context menu (with Ctrl).
+  * Extended context menu functions Copy & Paste entry (#539), Clear Scrollback (#421).
+  * Option to specify logfile but disable initial logging (Logging=no).
+  * New drag-and-drop paste configuration DropCommands (#440).
+  * New option OldWrapModes to restore previous wraparound behaviour.
+
+Options dialog
+  * Extending font sample area to both sides, allowing longer font samples.
+  * Fixed mangled position of colour chooser item (#626).
+  * Unsqueezing colour chooser dialog to make more space for localized labels (#614, #611).
+
+Other:
+  * Ctrl+Shift hotkeys and functions to toggle/cycle transparency (t) (#625), cursor style (p), scrollbar (o).
+  * Feature to toggle logging from extended context menu.
+  * Character information mode, switchable from extended context menu.
+
+### 2.7.4 (29 Jan 2017) ###
+
+Localization details:
+  * Fixed localized Bell field contents.
+  * Adapting Bell list contents from system localization.
+  * Fixed unlocalized Colour chooser label "Basic colours:" and Font chooser initial font sample.
+  * Fixed localized Colour chooser label "Basic colours:".
+  * Fixed Colour chooser label "Custom colours:" (disappeared on refocussing).
+  * Added localization of "Error" popup title.
+  * Keeping button labels in reactivated message box.
+
+Configuration and Terminal settings:
+  * BellTaskbar setting is switchable by escape sequence CSI ?1042h (xterm).
+  * New BellPopup setting, switchable by escape sequence CSI ?1043h (xterm).
+  * Revised Bell section in Options menu.
+  * New option FontSample.
+  * Tweaking Font chooser dialog to widen font sample area.
+
+Other:
+  * Extended WSL link conversion (for link-click and link pasting) to non-/mnt paths (~#164, mintty/wsltty#19).
+  * Fixed window popup (on escape sequence CSI 5t).
+  * Allowed automatic font metrics adjustment to increase row padding.
+
 ### 2.7.3 (23 Dec 2016) ###
 
 Character display:

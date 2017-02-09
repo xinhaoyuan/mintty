@@ -106,6 +106,14 @@ given instead of a file name.
 If FILE contains \fB%d\fP it will be substituted with the process ID.
 See description of equivalent option "Log file" (Log=) below 
 for further formatting options and hints.
+Note that logging can be toggled from the extended context menu.
+
+.TP
+\fB--logfile\fP \fIFILE\fP|\fB-\fP
+Like \fB--log\fP but with logging initially disabled, so just 
+specifying a potential log file name in case logging is enabled from 
+the extended context menu.
+(Equivalent to combining \fB--log\fP with \fB-o Logging=no\fP.)
 
 .TP
 \fB-o\fP, \fB--option\fP \fINAME\fP=\fIVALUE\fP
@@ -225,9 +233,13 @@ Prevent pinning of the mintty window to the Windows taskbar.
 
 .TP
 \fB--wsl\fP
-Adjust to WSL (the Windows Subsystem for Linux, or Bash/Ubuntu on Windows);
-when dragging a Windows file or folder into mintty, it will be pasted 
+Adjust to WSL (the Windows Subsystem for Linux, or Bash/Ubuntu on Windows):
+.br
+\(en When dragging a Windows file or folder into mintty, it will be pasted 
 using the Linux path name.
+.br
+\(en When Ctrl+clicking a file name, it will be interpreted in the Linux 
+namespace and converted before opening in Windows.
 
 .TP
 \fB-H\fP, \fB--help\fP
@@ -249,6 +261,8 @@ see the \fBCONFIGURATION\fP section on how it can be customised.
 The context menu can be opened by right-clicking the mouse (with Shift 
 in case right-click has been redefined or redirected to the application) or by
 pressing the \fBMenu\fP key that is normally located next to the right Ctrl key.
+If invoked while the Ctrl key is held down, an extended context menu will 
+be opened, with some additional entries.
 
 Mintty also adds a couple of items to the window menu, which can be accessed 
 by clicking on the program icon or pressing \fBAlt+Space\fP.
@@ -415,8 +429,8 @@ application rather than being treated as window events.
 This is indicated by the mouse pointer changing from an \fBI\fP shape to an
 arrow.
 Holding down \fBShift\fP overrides mouse tracking mode and sends mouse
-events to the window instead, so that e.g. text can be selected and the context
-menu can be accessed.
+events to the window instead, so that e.g. text can be selected and the 
+context menu can be accessed.
 
 .SS Alt codes
 
@@ -431,11 +445,11 @@ If the first key is a zero, the code is interpreted as octal.
 If the first key is any other digit from 1 to 9, the code is interpreted as
 decimal.
 
-For UTF-8 and other Unicode encodings such as GB18030, the entered code is
+For UTF-8 and other Unicode encodings such as GB18030, the entered code is 
 interpreted as a Unicode codepoint and encoded accordingly before it is sent.
-For other encodings, the entered code is sent as is. If it doesn't fit into one
-byte, it is sent as multiple bytes, with the the most significant non-zero byte
-first.
+For other encodings, the entered code is sent as is. 
+If it doesn't fit into one byte, it is sent as multiple bytes, with 
+the the most significant non-zero byte first.
 
 .SS Shortcuts
 
@@ -556,6 +570,20 @@ Keys pane of the options dialog.
 \(en \fBCtrl+Shift+F\fP: Full screen (not zooming font despite Shift)
 .br
 \(en \fBCtrl+Shift+S\fP: Flip screen
+.br
+\(en \fBCtrl+Shift+O\fP: Toggle scrollbar
+.br
+\(en \fBCtrl+Shift+P\fP: Cycle pointer styles
+.br
+\(en \fBCtrl+Shift+T\fP: Cycle transparency levels
+
+Ctrl+Shift+T cycles through transparency levels in steps. 
+While Ctrl+Shift+T is held down, the navigation keys on the numeric keypad 
+can be used for further fine-tuning: Up/Dn to increase/decrease, 
+PgUp/PgDn for steps, Del/Ins for no/max transparency, End for highest 
+preconfigured transparency, Home for previous value, Clear ("5") for glass.
+Note that immediate feedback of these transparency changes is only 
+visible if setting OpaqueWhenFocused is disabled.
 
 .SS Embedding graphics in terminal output
 
@@ -567,6 +595,28 @@ An example of the benefit of this feature is the output of `gnuplot`
 with the command
 .br
 GNUTERM=sixel gnuplot -e "splot [x=-3:3] [y=-3:3] sin(x) * cos(y)"
+
+.SS Diagnostic support
+
+.TP
+\fBScreen logging\fP
+A couple of options are available to enable logging initially 
+(\fBLog=...\fP or \fB-l ...\fP on the command line), or to specify 
+a log file name for later logging (\fBLog=...\fP combined with \fBLogging=no\fP, 
+or \fB--logfile ...\fP on the command line).
+In either case, logging can be toggled from the extended context menu.
+
+.TP
+\fBCharacter information display\fP
+Diagnostic display of current character information can be toggled 
+from the extended context menu.
+.br
+\fIUnicode character codes\fP at the current cursor position will then be display in the window title bar. (Note that mintty may precompose a combining character sequence into a combined character which is then displayed.)
+.br
+\fIUnicode character names\fP will be included in the display if the \fBunicode-ucd\fP package is installed in \fI/usr/share\fP (or the file \fIcharnames.txt\fP generated by the mintty script \fIsrc/mknames\fP is installed in the mintty resource subfolder \fIinfo\fP).
+.br
+Note that the "normal" window title setting sequence 
+and the character information output simply overwrite each other.
 
 .SH CONFIGURATION
 
@@ -607,16 +657,18 @@ command-line.)
 .br
 Unicode-enabled settings: BellFile, ThemeFile, Title, ExitTitle, Icon, Log, 
 Language, Font, Printer, Answerback, SixelClipChars, 
-Class, AppID, AppName, AppLaunchCmd.
+Class, AppID, AppName, AppLaunchCmd, DropCommands.
 
 Be careful when running multiple instances of mintty. If options are saved 
 from different instances, or the config file is edited manually, 
 options can obviously be overwritten; if older mintty versions are run 
 (e.g. from cygwin and msys sharing the same home directory), options 
-may even get dropped from the configuration file.
+may even get dropped from the configuration file; mintty versions since 
+261 preserve unknown options and comment lines.
 
 Additional resource files are used for colour schemes (option ThemeFile, 
-subdirectory \fIthemes\fP) and wave files (option BellFile, subdirectory \fIsounds\fP) 
+subdirectory \fIthemes\fP), wave files (option BellFile, subdirectory \fIsounds\fP), 
+and localization translation files (option Language, subdirectory \fIlang\fP) 
 within the mintty resource directories \fI~/.mintty\fP, \fI~/.config/mintty\fP, 
 \fI$APPDATA/mintty\fP, \fI/usr/share/mintty\fP.
 
@@ -658,15 +710,8 @@ The option can also be set to a filename (like D:/.../solarized-light.minttyrc).
 The field can also be used as a drag-and-drop target for colour schemes 
 downloaded from the Color Scheme Configurator, or for theme files from the web 
 (note that the program \fBcurl\fP needs to be installed for the latter option).
-See the Tips wiki page \fIhttps://github.com/mintty/mintty/wiki/Tips\fP 
+See the Tips wiki page \fIhttps://github.com/mintty/mintty/wiki/Tips#using-colour-schemes-themes\fP 
 about this mechanism.
-
-.TP
-\fBText lines\fP (UnderlineManual=false)
-By setting this true, text attributes underline, doubly underline, strikeout and overline 
-are enforced to be drawn manually. 
-The default is to use Windows font variants for strikeout and for underline, 
-unless mintty detects that the underlined font would not display properly.
 
 .TP
 \fBTransparency\fP (Transparency=off)
@@ -732,7 +777,7 @@ In the config file, this corresponds to the following entries:
 .br
 The font selection dialog also offers an \fBApply\fP button for 
 convenient testing how the selected font looks. Its function is the same 
-as the \fBApply\fP button of the Options dialog.
+as the \fBApply\fP button of the options dialog.
 
 Further settings can be given in the config file:
 .br
@@ -746,10 +791,20 @@ If a font family has no bold weight but boldness was requested, mintty
 does not adhere to this scheme but enforces bold font selection; however, 
 in this case the bold attribute may not be effective.
 .br
+\(en \fBFont sample text\fP (FontSample=):
+This setting overrides the text for the "Sample" box in the Font chooser dialog.
+.br
 \(en \fBShow "hidden" fonts\fP (ShowHiddenFonts=no):
 This hidden setting enables display of monospace fonts in the font selection 
 menu even if they are marked to Hide in the Windows Font settings (from the 
 Control Panel \(em Fonts folder).
+
+.TP
+\fBText lines\fP (UnderlineManual=false)
+By setting this true, text attributes underline, doubly underline, strikeout and overline 
+are enforced to be drawn manually. 
+The default is to use Windows font variants for strikeout and for underline, 
+unless mintty detects that the underlined font would not display properly.
 
 .TP
 \fBShow bold as font\fP (BoldAsFont=no)
@@ -836,17 +891,17 @@ effect.
 Settings controlling keyboard behaviour.
 
 .TP
-\fBBackspace sends ^H\fP (BackspaceSendsBS=no)
+\fBBackarrow sends ^H\fP (BackspaceSendsBS=no)
 By default, mintty sends \fB^?\fP (ASCII DEL) as the keycode for the backspace key.
 If this option is enabled, \fB^H\fP is sent instead.
 This also changes the \fBCtrl+Backspace\fP code from \fB^_\fP to \fB^?\fP.
-(Corresponds to the xterm BackarrowKey resource.)
+(Corresponds to the xterm resource \fBbackarrowKey\fP.)
 
 .TP
-\fB\fP(DeleteSendsDEL=no)
+\fBDelete sends DEL\fP(DeleteSendsDEL=no)
 By default, mintty sends VT100 Remove as the keycode for the keypad Del key.
 If this option is enabled, \fB^?\fP (ASCII DEL) is sent instead.
-(Corresponds to the xterm DeleteIsDEL resource.)
+(Corresponds to the xterm resource \fBdeleteIsDEL\fP.)
 
 .TP
 \fBCtrl+LeftAlt is AltGr\fP (CtrlAltIsAltGr=no)
@@ -944,19 +999,7 @@ This works by sending the number of cursor keycodes needed to get to the
 destination.
 
 .TP
-\fB\fP(MiddleClickAction=paste)
-Action to take when the middle mouse button is pressed.
-.br
-\(en \fBPaste\fP: Paste the clipboard contents.
-.br
-\(en \fBExtend\fP: Extend the selected region.
-.br
-\(en \fBEnter\fP: Simulate \fBEnter\fP/\fBReturn\fP key.
-.br
-\(en \fBVoid\fP: Do nothing.
-
-.TP
-\fBRight click action\fP (RightClickAction=menu)
+\fBRight mouse button\fP (RightClickAction=menu)
 Action to take when the right mouse button is pressed.
 .br
 \(en \fBPaste\fP: Paste the clipboard contents.
@@ -971,6 +1014,18 @@ If this is set to \fBPaste\fP, the middle button extends the selected region
 instead of pasting the clipboard. If it is set to \fBExtend\fP, a left click
 with \fBShift\fP pressed pastes the clipboard instead of extending the
 selection.
+
+.TP
+\fBMiddle mouse button\fP(MiddleClickAction=paste)
+Action to take when the middle mouse button is pressed.
+.br
+\(en \fBPaste\fP: Paste the clipboard contents.
+.br
+\(en \fBExtend\fP: Extend the selected region.
+.br
+\(en \fBEnter\fP: Simulate \fBEnter\fP/\fBReturn\fP key.
+.br
+\(en \fBVoid\fP: Do nothing.
 
 .TP
 \fBDefault click target\fP (ClicksTargetApp=yes)
@@ -1017,11 +1072,16 @@ Default width of the window, in character cells.
 Default height of the window, in character cells.
 
 .TP
+\fBCurrent size\fP
+Pressing this button sets the default width and height to the window's
+current size.
+
+.TP
 \fB\fP(RowSpacing=0)
 Additional row padding.
 
 \fINote:\fP Mintty adjusts row spacing according to the font metrics, to 
-compensate for tight or tall spacing of some fonts (e.g. Consolas, FreeMono, Monaco).
+compensate for tight or tall spacing of some fonts (e.g. Courier, Consolas, FreeMono, Monaco).
 The RowSpacing value is added to that.
 
 .TP
@@ -1034,11 +1094,6 @@ Window padding; margin between text and window border. The effective value
 is limited by the character cell width (scaling with font zooming).
 A negative value indicates that always the character cell width shall be used,
 without fixed limit.
-
-.TP
-\fBCurrent size\fP
-Pressing this button sets the default width and height to the window's
-current size.
 
 .TP
 \fBScrollback lines\fP (ScrollbackLines=10000)
@@ -1082,7 +1137,7 @@ This option does not affect the arrow keys or Home/End keys.
 .TP
 \fBUI localization language\fP (Language=)
 This selects the language or language/region code to use for 
-localization of the mintty user interface, the Options dialog, 
+localization of the mintty user interface, the options dialog, 
 menus, message boxes, and terminal in-line error messages.
 .br
 \(en \fI(empty)\fP an empty entry disables localization
@@ -1095,7 +1150,7 @@ menus, message boxes, and terminal in-line error messages.
 .br
 \(en \fI(language[_region])\fP use the given language or language/region code
 
-See the Tips wiki page \fIhttps://github.com/mintty/mintty/wiki/Tips\fP 
+See the Tips wiki page \fIhttps://github.com/mintty/mintty/wiki/Tips#localization\fP 
 about how to configure localization.
 
 Note that Windows may already have localized the default entries of the 
@@ -1134,6 +1189,16 @@ The answerback string is sent in response to the \fB^E\fP (ENQ) character.
 By default, this is empty.
 
 .TP
+\fBApply old wraparound behaviour\fP (OldWrapModes=false)
+Setting this compatibility option disables some tweaks and fixes of 
+mintty 2.7.5:
+.RS
+\(en Backspace after pending Wraparound goes to previous column
+.br
+\(en Reverse Wraparound mode initially disabled (but switchable), complying with xterm default and terminfo
+.RE
+
+.TP
 \fBAllow control sequence to set selection\fP (AllowSetSelection=false)
 If enabled, the terminal control sequence OSC 52 is allowed to set the 
 clipboard selection for pasting (using base64-encoded contents, like xterm).
@@ -1170,10 +1235,16 @@ This setting overrides the Bell system sound except No Beep.
 The sound is also played when it is changed.
 .br
 \(en \fBFlash\fP (BellFlash=no): Briefly invert the foreground and background
-colours.
+colours. (Corresponds to the xterm resource \fBvisualBell\fP.)
 .br
 \(en \fBHighlight in taskbar\fP (BellTaskbar=yes): Change the colour of mintty's
 taskbar entry if the mintty window is not active.
+(Corresponds to the xterm resource \fBbellIsUrgent\fP, 
+switchable by an escape sequence.)
+.br
+\(en \fBPopup on bell\fP (BellPopup=no): Popup mintty to desktop foreground.
+(Corresponds to the xterm resource \fBpopOnBell\fP, 
+switchable by an escape sequence.)
 
 A simple \fBfrequency beep\fP can be configured in the configuration file 
 or on the command line:
@@ -1251,8 +1322,15 @@ pattern; note that this is likely to fail if a placeholder expands with
 Note: If the requested log file exists already, mintty does not overwrite it 
 but reports an error. To configure logging in the config file, use some 
 \fB%\fP placeholders to create distinct log files.
+Note that logging can be toggled from the extended context menu.
 
 See also the \fIscript\fP(1) utility for a more flexible logging solution.
+
+.TP
+\fBLogging initially enabled\fP (Logging=yes)
+Disabling this setting disables logging initially.
+If a log file name is specified with \fBLog=...\fP and \fBLogging=no\fP,
+logging can be enabled (and toggled) from the extended context menu.
 
 .TP
 \fBWindow title\fP (Title=)
@@ -1459,7 +1537,7 @@ a theme file on the web via drag-and-drop to the Options menu.
 After the colour scheme is stored to a colour scheme file, this setting 
 is not used anymore.
 
-See the Tips wiki page \fIhttps://github.com/mintty/mintty/wiki/Tips\fP 
+See the Tips wiki page \fIhttps://github.com/mintty/mintty/wiki/Tips#using-colour-schemes-themes\fP 
 about this mechanism.
 
 .TP
@@ -1536,6 +1614,34 @@ This option can be set to false to suppress DPI adjustments.
 Characters to copy to clipboard as a substitute for Sixel image graphics,
 to indicate their positions. With an empty value, U+FFFC will be used.
 Double-width characters should not be used here.
+
+.TP
+\fBDrag-and-drop application-targetted commands\fP (DropCommands=)
+With this setting, a set of string patterns can be configured for 
+paste insertion, in dependence of the program running in the terminal 
+foreground. The value is a series of semicolon-separated, colon-combined 
+pairs of program name and drop pattern; the pattern is pasted with the 
+actual clipboard contents replaced for a "%s".
+
+\fINote:\fP This is an experimental feature, with an experimental configuration format.
+
+\fINote:\fP This feature potentially makes mintty vulnerable against command injection.
+Be careful what commands you configure! It is advisable to embed the "%s" 
+parameter placeholder in single quotation marks explicitly, 
+both to avoid trouble with special characters, and to reduce the risk of 
+injecting commands via tricky filenames.
+
+Example:
+.br
+\(en \fBDropCommands=bash:cd '%s'^M;mined:^[fo^M%s^M;vim:^[:e %s^M\fP
+
+\fINote:\fP An "Enter" key has to be specified with the CR character code, 
+control characters need to be embedded verbatim 
+(indicated above as "^M" or "^["); there is no escape notation.
+
+\fINote:\fP If different actions for directories/folders or even different 
+command invocations depending on file name pattern are desired, this should 
+be handled by a suitable cooperating shell function.
 
 .SH LIMITATIONS
 

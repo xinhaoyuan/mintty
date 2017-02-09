@@ -113,6 +113,7 @@ term_cursor_reset(term_cursor *curs)
   curs->attr = CATTR_DEFAULT;
   curs->csets[0] = curs->csets[1] = CSET_ASCII;
   curs->autowrap = true;
+  curs->rev_wrap = cfg.old_wrapmodes;
 }
 
 void
@@ -144,6 +145,8 @@ term_reset(void)
   term.app_control = 0;
   term.vt220_keys = vt220(cfg.term);
   term.app_keypad = term.app_cursor_keys = term.app_wheel = false;
+  term.bell_taskbar = cfg.bell_taskbar;
+  term.bell_popup = cfg.bell_popup;
   term.mouse_mode = MM_NONE;
   term.mouse_enc = ME_X10;
   term.wheel_reporting = true;
@@ -241,6 +244,10 @@ term_reconfig(void)
     term.backspace_sends_bs = new_cfg.backspace_sends_bs;
   if (new_cfg.delete_sends_del != cfg.delete_sends_del)
     term.delete_sends_del = new_cfg.delete_sends_del;
+  if (new_cfg.bell_taskbar != cfg.bell_taskbar)
+    term.bell_taskbar = new_cfg.bell_taskbar;
+  if (new_cfg.bell_popup != cfg.bell_popup)
+    term.bell_popup = new_cfg.bell_popup;
   if (strcmp(new_cfg.term, cfg.term))
     term.vt220_keys = vt220(new_cfg.term);
   if (cfg.even_line_highlight_delta != new_cfg.even_line_highlight_delta) {
@@ -250,14 +257,17 @@ term_reconfig(void)
   }
 }
 
-bool in_result(pos abspos, result run) {
+static bool
+in_result(pos abspos, result run)
+{
   return
     (abspos.x + abspos.y * term.cols >= run.x + run.y * term.cols) &&
     (abspos.x + abspos.y * term.cols <  run.x + run.y * term.cols + run.len);
 }
 
-bool
-in_results_recurse(pos abspos, int lo, int hi) {
+static bool
+in_results_recurse(pos abspos, int lo, int hi)
+{
   if (hi - lo == 0) {
     return false;
   }
@@ -271,7 +281,7 @@ in_results_recurse(pos abspos, int lo, int hi) {
   return true;
 }
 
-int
+static int
 in_results(pos scrpos)
 {
   if (term.results.length == 0) {
@@ -288,7 +298,7 @@ in_results(pos scrpos)
   return match;
 }
 
-void
+static void
 results_add(result abspos)
 {
   assert(term.results.capacity > 0);
@@ -301,7 +311,7 @@ results_add(result abspos)
   ++term.results.length;
 }
 
-void
+static void
 results_partial_clear(int pos)
 {
   int i = term.results.length;
@@ -321,7 +331,7 @@ term_set_search(wchar * needle)
   term.results.query_length = wcslen(needle);
 }
 
-void
+static void
 circbuf_init(circbuf * cb, int sz)
 {
   cb->capacity = sz;
@@ -330,7 +340,7 @@ circbuf_init(circbuf * cb, int sz)
   cb->buf = newn(termline*, sz);
 }
 
-void
+static void
 circbuf_destroy(circbuf * cb)
 {
   cb->capacity = 0;
@@ -347,7 +357,7 @@ circbuf_destroy(circbuf * cb)
   cb->buf = NULL;
 }
 
-void
+static void
 circbuf_push(circbuf * cb, termline * tl)
 {
   int pos = (cb->start + cb->length) % cb->capacity;
@@ -361,7 +371,7 @@ circbuf_push(circbuf * cb, termline * tl)
   cb->buf[pos] = tl;
 }
 
-termline *
+static termline *
 circbuf_get(circbuf * cb, int i)
 {
   assert(i < cb->length);

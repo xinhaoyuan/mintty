@@ -336,7 +336,8 @@ win_restore_title(void)
 static HWND first_wnd, last_wnd;
 
 static BOOL CALLBACK
-wnd_enum_proc(HWND curr_wnd, LPARAM unused(lp)) {
+wnd_enum_proc(HWND curr_wnd, LPARAM unused(lp))
+{
   if (curr_wnd != wnd && !IsIconic(curr_wnd)) {
     WINDOWINFO curr_wnd_info;
     curr_wnd_info.cbSize = sizeof(WINDOWINFO);
@@ -559,7 +560,11 @@ win_set_pos(int x, int y)
 void
 win_set_zorder(bool top)
 {
-  SetWindowPos(wnd, top ? HWND_TOP : HWND_BOTTOM, 0, 0, 0, 0,
+  // ensure window to pop up:
+  SetWindowPos(wnd, top ? HWND_TOPMOST : HWND_BOTTOM, 0, 0, 0, 0,
+               SWP_NOMOVE | SWP_NOSIZE);
+  // but do not stick it to the top:
+  SetWindowPos(wnd, top ? HWND_NOTOPMOST : HWND_BOTTOM, 0, 0, 0, 0,
                SWP_NOMOVE | SWP_NOSIZE);
 }
 
@@ -855,8 +860,10 @@ win_bell(config * conf)
       free(bell_name);
   }
 
-  if (conf->bell_taskbar && !term.has_focus)
+  if (term.bell_taskbar && !term.has_focus)
     flash_taskbar(true);
+  if (term.bell_popup)
+    win_set_zorder(true);
 }
 
 void
@@ -1077,7 +1084,7 @@ default_size(void)
   win_set_chars(cfg.rows, cfg.cols);
 }
 
-static void
+void
 update_transparency(void)
 {
   int trans = cfg.transparency;
@@ -1342,6 +1349,10 @@ static struct {
       switch (wp & ~0xF) {  /* low 4 bits reserved to Windows */
         when IDM_OPEN: term_open();
         when IDM_COPY: term_copy();
+        when IDM_COPASTE: term_copy(); win_paste();
+        when IDM_CLRSCRLBCK: term_clear_scrollback(); term.disptop = 0;
+        when IDM_TOGLOG: toggle_logging();
+        when IDM_TOGCHARINFO: toggle_charinfo();
         when IDM_PASTE: win_paste();
         when IDM_SELALL: term_select_all(); win_update();
         when IDM_RESET: winimgs_clear(); term_reset(); win_update();
@@ -1499,6 +1510,10 @@ static struct {
       win_update();
 
     when WM_INITMENU:
+      // win_update_menus is already called before calling TrackPopupMenu
+      // which is supposed to initiate this message;
+      // however, if we skip the call here, the "New" item will 
+      // not be initialised !?!
       win_update_menus();
       return 0;
 
@@ -2079,7 +2094,7 @@ static char help[] =
   "If a dash is given instead of a program, invoke the shell as a login shell.\n"
   "\n"
   "Options:\n"
-///12345678901234567890123456789012345678901234567890123456789012345678901234567890
+// 12345678901234567890123456789012345678901234567890123456789012345678901234567890
   "  -c, --config FILE     Load specified config file (cf. -C or -o ThemeFile)\n"
   "  -e, --exec ...        Treat remaining arguments as the command to execute\n"
   "  -h, --hold never|start|error|always  Keep window open after command finishes\n"
@@ -2113,6 +2128,7 @@ opts[] = {
   {"hold",       required_argument, 0, 'h'},
   {"icon",       required_argument, 0, 'i'},
   {"log",        required_argument, 0, 'l'},
+  {"logfile",    required_argument, 0, ''},
   {"utmp",       no_argument,       0, 'u'},
   {"option",     required_argument, 0, 'o'},
   {"position",   required_argument, 0, 'p'},
@@ -2232,6 +2248,7 @@ main(int argc, char *argv[])
       when 'h': set_arg_option("Hold", optarg);
       when 'i': set_arg_option("Icon", optarg);
       when 'l': set_arg_option("Log", optarg);
+      when '': set_arg_option("Log", optarg); set_arg_option("Logging", "0");
       when 'o': parse_arg_option(optarg);
       when 'p':
         if (strcmp(optarg, "center") == 0 || strcmp(optarg, "centre") == 0)
