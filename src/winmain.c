@@ -5,8 +5,10 @@
 
 #define dont_debuglog
 #ifdef debuglog
-  FILE * mtlog = 0;
+FILE * mtlog = 0;
 #endif
+
+char * mintty_debug;
 
 #define dont_debug_resize
 
@@ -779,11 +781,14 @@ win_fix_position(void)
   MONITORINFO mi;
   get_my_monitor_info(&mi);
   RECT ar = mi.rcWork;
+  WINDOWINFO winfo;
+  winfo.cbSize = sizeof(WINDOWINFO);
+  GetWindowInfo(wnd, &winfo);
 
   // Correct edges. Top and left win if the window is too big.
   wr.left -= max(0, wr.right - ar.right);
   wr.top -= max(0, wr.bottom - ar.bottom);
-  wr.left = max(wr.left, ar.left);
+  wr.left = max(wr.left, (int)(ar.left - winfo.cxWindowBorders));
   wr.top = max(wr.top, ar.top);
 
   SetWindowPos(wnd, 0, wr.left, wr.top, 0, 0,
@@ -2187,6 +2192,7 @@ main(int argc, char *argv[])
 {
   main_argv = argv;
   main_argc = argc;
+  mintty_debug = getenv("MINTTY_DEBUG") ?: "";
 #ifdef debuglog
   mtlog = fopen("/tmp/mtlog", "a");
   {
@@ -2315,10 +2321,13 @@ main(int argc, char *argv[])
         border_style = strdup(optarg);
       when 'R':
         switch (*optarg) {
-          when 'm':
-            report_moni = true;
           when 's' or 'o':
             report_geom = strdup(optarg);
+          when 'm':
+            report_moni = true;
+          when 'f':
+            list_fonts(true);
+            exit(0);
         }
       when 'u': cfg.create_utmp = true;
       when '':

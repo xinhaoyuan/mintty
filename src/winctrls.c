@@ -304,6 +304,24 @@ paneltitle(ctrlpos * cp, int id)
 }
 
 /*
+ * A plain text.
+ */
+static void
+statictext(ctrlpos * cp, char * stext, int sid)
+{
+  RECT r;
+
+  cp->ypos -= GAPBETWEEN;
+
+  r.left = GAPBETWEEN;
+  r.top = cp->ypos;
+  r.right = cp->width;
+  r.bottom = STATICHEIGHT;
+  cp->ypos += r.bottom + GAPBETWEEN;
+  doctl(null, cp, r, "STATIC", WS_CHILD | WS_VISIBLE, 0, stext, sid);
+}
+
+/*
  * A button on the right hand side, with a static to its left.
  */
 static void
@@ -793,6 +811,18 @@ winctrl_layout(winctrls *wc, ctrlpos *cp, controlset *s, int *id)
         //__ Options - Text: font chooser activation button
         staticbtn(&pos, "", base_id + 1, _("&Select..."), base_id + 2);
         data = new(font_spec);
+
+        num_ids++;
+        char * fontinfopat = "Leading: %d, Bold: %s, Underline: %s";
+        char * fontinfo_font = "font";
+        char * fontinfo_manual = "manual";
+        int taglen = max(strlen(fontinfo_font), strlen(fontinfo_manual));
+        char * fontinfo = newn(char, strlen(fontinfopat) + 23 + 2 * taglen);
+        sprintf(fontinfo, fontinfopat, row_spacing, 
+                bold_mode ? fontinfo_font : fontinfo_manual,
+                und_mode ? fontinfo_font : fontinfo_manual);
+        statictext(&pos, fontinfo, base_id + 3);
+        free(fontinfo);
       }
       otherwise:
         assert(!"Can't happen");
@@ -873,7 +903,8 @@ static HWND font_sample = 0;
 
 #define dont_debug_dialog_hook 1
 
-static bool do_next_hook = true;
+//static bool do_next_hook = true;
+static bool do_next_hook = false;  // ignore other hooks
 
 #ifdef debug_dialog_hook
 static FILE * dout = 0;
@@ -975,7 +1006,7 @@ set_labels(bool font_chooser, int nCode, WPARAM wParam, LPARAM lParam)
     // dialog item geometry calculations and adjustments
     CREATESTRUCTW * cs = ((CBT_CREATEWNDW *)lParam)->lpcs;
 
-    if (font_chooser && !new_cfg.old_fontmenu) {
+    if (font_chooser && (new_cfg.fontmenu & 4)) {
       static int fc_item_grp = 0;
       static int fc_item_idx = 0;
       static int fc_item_gap = 7;
@@ -1074,6 +1105,7 @@ set_labels(bool font_chooser, int nCode, WPARAM wParam, LPARAM lParam)
 
       if (!(cs->style & WS_CHILD)) {
         // colour chooser popup dialog
+        cc_item_grp = 0;
         cc_height = cs->cy;
         cc_width = cs->cx;
         cc_vert = cc_width / 2;
@@ -1084,15 +1116,23 @@ set_labels(bool font_chooser, int nCode, WPARAM wParam, LPARAM lParam)
           // Hue etc
           if (!(cs->style & WS_TABSTOP)) {
             // labels
+            float zoomx = (cc_item_grp < 18) ? zoom * 1.05 : zoom;
             int cc_hue_right = cs->x + cs->cx;
-            cs->x = cc_vert + (cs->x - cc_vert) * zoom;
+            cs->x = cc_vert + (cs->x - cc_vert) * zoomx;
+#if defined(debug_dialog_hook) && debug_dialog_hook > 1
+            printf("%d %f %f x %d->%d |%d\n", cc_item_grp, zoom, zoomx, cc_hue_right - cs->cx, cs->x, cc_hue_right);
+#endif
             cs->cx *= zoom;
             cs->cx += 2 * cc_item_left;
-            cc_hue_shift = cs->x + cs->cx - cc_hue_right;
+            if (cc_item_grp % 6 == 0)
+              cc_hue_shift = cs->x + cs->cx - cc_hue_right;
           }
           else {
             // value fields
             cs->x += cc_hue_shift;
+#if defined(debug_dialog_hook) && debug_dialog_hook > 1
+            printf("%d x %d->%d\n", cc_item_grp, cs->x - cc_hue_shift, cs->x);
+#endif
           }
         }
         else if (!(cs->style & WS_TABSTOP)) {
@@ -1129,7 +1169,7 @@ set_labels(bool font_chooser, int nCode, WPARAM wParam, LPARAM lParam)
     // e.g. "Cwm fjord bank glyphs vext quiz"
 
     HWND away = 0;
-    if (!new_cfg.old_fontmenu) {
+    if (new_cfg.fontmenu & 8) {
       // Font chooser: remove "Script:" junk:
       away = GetDlgItem((HWND)wParam, 1094);
       if (away)
@@ -1139,9 +1179,9 @@ set_labels(bool font_chooser, int nCode, WPARAM wParam, LPARAM lParam)
         DestroyWindow(away);
     }
     else {
-      //__ Font chooser: this field is only shown with OldFontMenu=true
+      //__ Font chooser: this field is only shown with FontMenu=1
       setlabel(1094, _W("Sc&ript:"));
-      //__ Font chooser: this field is only shown with OldFontMenu=true
+      //__ Font chooser: this field is only shown with FontMenu=1
       setlabel(1592, _W("<A>Show more fonts</A>"));
     }
 
@@ -1228,7 +1268,7 @@ set_labels(bool font_chooser, int nCode, WPARAM wParam, LPARAM lParam)
 
 #ifdef post_adjust_sample
     // resize frame around sample, try to resize text sample (failed)
-    if (font_chooser && adjust_sample && !new_cfg.old_fontmenu) {
+    if (font_chooser && adjust_sample && (new_cfg.fontmenu & 8)) {
       HWND sample = GetDlgItem((HWND)wParam, 1073);  // "Sample" frame
       if ((adjust_sample & 1) && sample) {
         // adjust frame and label "Sample"
@@ -1264,7 +1304,7 @@ set_labels(bool font_chooser, int nCode, WPARAM wParam, LPARAM lParam)
 #endif
 
     // crop dialog size after removing useless stuff
-    if (font_chooser && !new_cfg.old_fontmenu && away) {
+    if (font_chooser && (new_cfg.fontmenu & 8) && away) {
       // used to be if (... && GetDlgItem((HWND)wParam, 1092))
       RECT wr;
       GetWindowRect((HWND)wParam, &wr);
@@ -1369,8 +1409,19 @@ fonthook(HWND hdlg, UINT msg, WPARAM wParam, LPARAM lParam)
   if (msg == WM_COMMAND && wParam == 1026) {  // Apply
     LOGFONTW lfapply;
     SendMessageW(hdlg, WM_CHOOSEFONT_GETLOGFONT, 0, (LPARAM)&lfapply);
+
     font_spec * fsp = &new_cfg.font;
-    wstrset(&fsp->name, lfapply.lfFaceName);
+    // we must not realloc a copied string pointer,
+    // -- wstrset(&fsp->name, lfapply.lfFaceName); --
+    // let's rather dup the string;
+    // if we just try to resync the copies 
+    // -- ((font_spec *) c->data)->name = fsp->name; --
+    // that would heal the case "Apply", then "Cancel", 
+    // but not the case "Apply", then "OK",
+    // so let's rather accept a negligable memory leak here
+    // (few bytes per "Apply" click)
+    fsp->name = wcsdup(lfapply.lfFaceName);
+
     HDC dc = GetDC(0);
     fsp->size = -MulDiv(lfapply.lfHeight, 72, GetDeviceCaps(dc, LOGPIXELSY));
     trace_fontsel(("Apply lfHeight %ld -> size %d <%ls>\n", (long int)lfapply.lfHeight, fsp->size, lfapply.lfFaceName));
@@ -1454,17 +1505,21 @@ select_font(winctrl *c)
     cf.Flags |= CF_INACTIVEFONTS;
   else
     cf.Flags |= CF_SCRIPTSONLY; // exclude fonts with OEM or SYMBOL charset
-  if (new_cfg.old_fontmenu)
+  if (new_cfg.fontmenu == 1)  // previously OldFontMenu
     cf.Flags =
       CF_FIXEDPITCHONLY | CF_FORCEFONTEXIST | CF_INITTOLOGFONTSTRUCT |
       CF_SCREENFONTS | CF_NOSCRIPTSEL;
 
   // open font selection menu
-  if (!new_cfg.old_fontmenu)
+  if (new_cfg.fontmenu & 2)
     hook_windows(set_labels_fc);
   bool ok = ChooseFontW(&cf);
-  if (!new_cfg.old_fontmenu)
+  if (new_cfg.fontmenu & 2)
     unhook_windows();
+#ifdef debug_fonthook
+  font_spec * fsp = (font_spec *) c->data;
+  printf("ok %d c->data %p <%ls> copy %p <%ls> -> <%ls>\n", ok, fsp->name, fsp->name, fs.name, fs.name, lf.lfFaceName);
+#endif
   if (ok) {
     // font selection menu closed with OK
     wstrset(&fs.name, lf.lfFaceName);
@@ -1477,6 +1532,41 @@ select_font(winctrl *c)
     dlg_fontsel_set(c->ctrl, &fs);
     //call dlg_stdfontsel_handler
     c->ctrl->handler(c->ctrl, EVENT_VALCHANGE);
+  }
+}
+
+void
+dlg_text_paint(control *ctrl)
+{
+  winctrl *c = ctrl->plat_ctrl;
+
+  static HFONT fnt = 0;
+  if (fnt)
+    DeleteObject(fnt);
+
+  int font_height;
+  int size = new_cfg.font.size;
+  // dup'ed from win_init_fonts()
+  HDC dc = GetDC(wnd);
+  if (cfg.handle_dpichanged && per_monitor_dpi_aware)
+    font_height =
+      size > 0 ? -MulDiv(size, dpi, 72) : -size;
+      // dpi is determined initially and via WM_WINDOWPOSCHANGED;
+      // if WM_DPICHANGED were used, this would need to be modified
+  else
+    font_height =
+      size > 0 ? -MulDiv(size, GetDeviceCaps(dc, LOGPIXELSY), 72) : -size;
+  ReleaseDC(wnd, dc);
+
+  fnt = CreateFontW(font_height, 0, 0, 0, new_cfg.font.weight, 
+                    false, false, false,
+                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                    DEFAULT_QUALITY, FIXED_PITCH | FF_DONTCARE,
+                    new_cfg.font.name);
+  if (ctrl->type == CTRL_BUTTON) {
+    HWND wnd = GetDlgItem(dlg.wnd, c->base_id);
+    SendMessage(wnd, WM_SETFONT, (WPARAM)fnt, MAKELPARAM(false, 0));
+    SetWindowTextW(wnd, *new_cfg.font_sample ? new_cfg.font_sample : _W("Ferqœm’4€"));
   }
 }
 
@@ -1582,6 +1672,8 @@ winctrl_handle_command(UINT msg, WPARAM wParam, LPARAM lParam)
             winctrl_set_focus(ctrl, note == BN_SETFOCUS);
           when BN_CLICKED or BN_DOUBLECLICKED:
             ctrl->handler(ctrl, EVENT_ACTION);
+          when BN_PAINT:  // unused
+            dlg_text_paint(ctrl);
         }
       when CTRL_FONTSELECT:
         if (id == 2) {
@@ -1882,7 +1974,6 @@ dlg_fontsel_set(control *ctrl, font_spec *fs)
   trace_fontsel(("fontsel_set <%ls>\n", fs->name));
   *(font_spec *) c->data = *fs;   /* structure copy */
 
-  int boldness = (fs->weight - 1) / 111;
   static char * boldnesses[] = {
     "Thin, ",
     "Extralight, ",
@@ -1894,10 +1985,14 @@ dlg_fontsel_set(control *ctrl, font_spec *fs)
     "Extrabold, ",
     "Heavy, "
   };
+
+  //int boldness = (fs->weight - 1) / 111;
+  int boldness = (fs->weight - 50) / 100;
   if (boldness < 0)
     boldness = 0;
   else if (boldness >= (int)lengthof(boldnesses))
     boldness = lengthof(boldnesses) - 1;
+
   //char * boldstr = fs->isbold ? "bold, " : "";
   char * boldstr = boldnesses[boldness];
 #if CYGWIN_VERSION_API_MINOR >= 201

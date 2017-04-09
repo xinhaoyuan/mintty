@@ -1,6 +1,20 @@
-Font handling
+  * Supporting cell overhang of italics (#418, #152, #638).
+  * Fixed occasional hangup on Apply in font chooser (~#533, ?mintty/wsltty#27).
+  * Workaround for broken Windows 10 window position reference (#629).
+  * Fixed re-initialisation of colour chooser adjustment (#642).
+  * Manual underline adds less thickness in bold mode (#641).
+  * Fixed Alt+F2 size cloning inconsistencies (#633).
+  * Optional built-in inline font chooser, option FontMenu for font chooser configuration (?#533, ?mintty/wsltty#27).
+  * Command line option -Rf to list installed fonts as used by mintty.
+  * Colour scheme download drops dependency on `curl` tool (#193).
+
+### 2.7.5 (11 Mar 2017) ###
+
+Font handling / Text rendering
   * Changing default FontRender=uniscribe (#605, #573).
   * Zoom box drawing and some other characters to complete cell size so they can connect to each other (#628).
+  * Restricted glyph width scaling to support overhanging wide icons (#638).
+  * Tweaked italic overhang clipping (#638).
 
 Terminal
   * Fixed Backspace upper limit in Origin mode.
@@ -8,10 +22,11 @@ Terminal
   * Reverse Wraparound is false by default (rather than fixed true before), to comply with xterm and terminfo.
   * Tweaked Wraparound and Backspace behaviour to comply with xterm and pass vttest 1.
   * Option OldWrapModes=true would restore previous wraparound behaviour.
+  * Supporting OSC sequences 110/111/112 to reset foreground/background/cursor colour.
 
 Search
   * Enabled matching of non-BMP characters (#85).
-  * Enabled case-insensitive matching (#636), together with unicode-ucd package.
+  * Case-insensitive matching (#636).
 
 Tty and character set
   * Keeping termios flag IUTF8 in sync with locale/charset to support proper backspace behaviour of programs not using readline.
@@ -23,7 +38,7 @@ Menu and hotkey functions
   * Scroll markers (#569), facilitating quick scroll to previous/next command prompt.
   * Optional extended context menu (with Ctrl).
   * Extended context menu functions Copy & Paste (#539), Clear Scrollback (#421).
-  * Logging can be toggled from extended context menu.
+  * Logging can be toggled from extended context menu (#342, ~#546, ~#279).
   * Character information mode, switchable from extended context menu.
   * User-defined commands in extended context menu (#100, #475).
   * Ctrl+Shift+T hotkey cycles transparency (#625).
@@ -36,7 +51,7 @@ Configuration
   * New drag-and-drop paste configuration DropCommands (#440).
   * New user commands configuration UserCommands (#100, #475).
   * New option OldWrapModes to restore previous wraparound behaviour.
-  * Checking availability of mintty version update in Options dialog; disable with CheckVersionUpdate=0 (mintty/wsltty#20).
+  * Checking availability of mintty version update in Options dialog; adjust or disable with option CheckVersionUpdate (mintty/wsltty#20).
   * Options dialog can be scaled via special pseudo-localization text (#637).
   * Fixed localization of command-line messages (#637).
 

@@ -222,6 +222,9 @@ With value "m", mintty reports the system's monitor configuration
 (listing all connected monitors and their geometry and position in 
 Windows' virtual monitor coordinate system), and exits.
 
+With value "f", mintty reports the monospace fonts installed on the system 
+as determined by mintty, and exits.
+
 .TP
 \fB--store-taskbar-properties\fP
 Enable persistent storage of Windows taskbar properties together with 
@@ -395,8 +398,7 @@ position of the match and scrolls the scrollback buffer accordingly.
 The appearance of the search bar and the matching highlight colours can be 
 customized.
 .br
-Matching ignores combining characters.
-Matching is case-insensitive if the \fBunicode-ucd\fP package is installed in \fI/usr/share\fP.
+Matching is case-insensitive and ignores combining characters.
 
 Shift+cursor-left/right offers another scrolling feature. If prompt lines 
 are marked with scroll markers they navigate to the previous/next prompt, to 
@@ -784,7 +786,7 @@ Clicking on the \fBSelect\fP button opens a dialog where the font and its
 properties can be chosen.  Font styles other than \fBBold\fP are ignored.
 In the config file, this corresponds to the following entries:
 .br
-\(en \fBFont\fP (Font=Lucida Console)
+\(en \fBFont\fP (Font=Lucida Console); only monospace fonts are listed
 .br
 \(en \fBFont style\fP (FontWeight=400, FontIsBold=no)
 .br
@@ -813,6 +815,16 @@ This setting overrides the text for the "Sample" box in the Font chooser dialog.
 This hidden setting enables display of monospace fonts in the font selection 
 menu even if they are marked to Hide in the Windows Font settings (from the 
 Control Panel \(em Fonts folder).
+.br
+\(en \fBConfigure font chooser\fP (FontMenu=-1):
+This hidden setting selects and tunes the font chooser dialog element.
+Value 1 selects the Windows system font chooser unmodified;
+value 2 enables font chooser localization,
+adding value 4 (to 6 or 14) enables horizontal item scaling 
+(making space for localized labels),
+adding value 8 (to 10 or 14) enables item and size adjustments,
+value -1 enables all tuning;
+value 0 selects a built-in inline font chooser.
 
 .TP
 \fBText lines\fP (UnderlineManual=false)
@@ -820,6 +832,7 @@ By setting this true, text attributes underline, doubly underline, strikeout and
 are enforced to be drawn manually. 
 The default is to use Windows font variants for strikeout and for underline, 
 unless mintty detects that the underlined font would not display properly.
+Note that font smoothing may be affected by Windows-generated underline modes.
 
 .TP
 \fBShow bold as font\fP (BoldAsFont=no)
@@ -851,7 +864,7 @@ displayed as a bold background colour instead.
 
 .TP
 \fBFont smoothing\fP (FontSmoothing=default)
-Select the amount of font smoothing from the following choices:
+Select the amount of font smoothing in font rendering from the following choices:
 .br
 \(en \fBDefault\fP: Use Windows setting.
 .br
@@ -860,6 +873,9 @@ Select the amount of font smoothing from the following choices:
 \(en \fBPartial\fP: Greyscale anti-aliasing.
 .br
 \(en \fBFull\fP: Subpixel anti-aliasing ("ClearType").
+
+Note that font smoothing may be affected by some Windows-generated 
+font attributes; see UnderlineManual.
 
 .TP
 \fBFont rendering\fP (FontRender=textout)
@@ -1136,8 +1152,8 @@ By default, it is shown on the right-hand side.
 
 .TP
 \fBModifier for scrolling\fP (ScrollMod=shift)
-The modifier key that needs to be pressed together with the arrow up/down,
-PgUp/PgDn, or Home/End keys to access the scrollback buffer.
+The modifier key that needs to be pressed together with the arrow-up/down,
+PgUp/PgDn, Home/End, or arrow-left/right keys to access the scrollback buffer.
 .br
 The default is \fBShift\fP.
 The \fBOff\fP setting disables scrolling with keyboard shortcuts.
@@ -1634,9 +1650,10 @@ considered to compensate by appropriate scaling.
 This option can be set to false to suppress DPI adjustments.
 
 .TP
-\fBCheck availability of mintty version update\fP (CheckVersionUpdate=1)
+\fBCheck availability of mintty version update\fP (CheckVersionUpdate=900)
 If non-zero, mintty checks whether there is a version update available 
-whenever the Options dialog is opened.
+whenever the Options dialog is opened and this was not checked within 
+the last given number of seconds.
 
 .TP
 \fBSixel image clipboard substitution\fP (SixelClipChars=\fIspace\fP)
@@ -1720,12 +1737,12 @@ have terminated. Be careful not to configure commands that can stall or block!
 
 \fINote:\fP This feature potentially makes mintty vulnerable against command injection.
 Be careful what commands you configure! Especially do not embed 
-environment variable parameters unquoted (like \fBecho $MINTTY_SELECTION\fP), 
+environment variable parameters unquoted (like \fBecho $MINTTY_SELECT\fP), 
 in order to avoid the risk of injecting commands via tricky selected text.
 
 Examples:
 .br
-\(en \fBUserCommands=Paste capital:echo -n "$MINTTY_SELECTION" | tr 'a-z' 'A-Z';Paste small:echo -n "$MINTTY_SELECTION" | tr 'A-Z' 'a-z'\fP
+\(en \fBUserCommands=Paste capital:echo -n "$MINTTY_SELECT" | tr 'a-z' 'A-Z';Paste small:echo -n "$MINTTY_SELECT" | tr 'A-Z' 'a-z'\fP
 
 \fINote:\fP Control characters need to be embedded verbatim; there is no escape notation.
 
@@ -1733,8 +1750,8 @@ Examples:
 
 .SS Console issue
 
-Mintty is not a full replacement for the Windows console window that Cygwin
-uses by default.
+Mintty is not a full replacement for Cygwin Console (i.e. cygwin running 
+in a Windows console window).
 Like xterm and rxvt, mintty communicates with the child process through a
 pseudo terminal device, which Cygwin emulates using Windows pipes.
 This means that native Windows command line programs started in mintty see

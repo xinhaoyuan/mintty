@@ -66,7 +66,7 @@ typedef struct {
   bool allow_blinking;
   string locale;
   string charset;
-  bool old_fontmenu;
+  int fontmenu;
   // Keys
   bool backspace_sends_bs;
   bool delete_sends_del;
@@ -142,7 +142,7 @@ typedef struct {
   int col_spacing, row_spacing;
   int padding;
   bool handle_dpichanged;
-  bool check_version_update;
+  int check_version_update;
   string word_chars;
   string word_chars_excl;
   colour ime_cursor_colour;
@@ -155,6 +155,7 @@ typedef struct {
 extern config cfg, new_cfg, file_cfg;
 
 extern void init_config(void);
+extern void list_fonts(bool report);
 extern void load_config(string filename, bool to_save);
 extern void load_theme(wstring theme);
 extern char * get_resource_file(wstring sub, wstring res, bool towrite);
