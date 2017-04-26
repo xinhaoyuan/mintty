@@ -81,7 +81,6 @@ static bool maxwidth = false;
 static bool maxheight = false;
 static bool store_taskbar_properties = false;
 static bool prevent_pinning = false;
-bool disable_bidi = false;
 bool support_wsl = false;
 
 
@@ -1412,7 +1411,12 @@ static struct {
         when IDM_SEARCH: win_open_search();
         when IDM_FLIPSCREEN: term_flip_screen();
         when IDM_OPTIONS: win_open_config();
-        when IDM_NEW: child_fork(main_argc, main_argv, 0);
+        when IDM_NEW: {
+          HMONITOR mon = MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST);
+          int x, y;
+          int moni = search_monitors(&x, &y, mon, true, 0);
+          child_fork(main_argc, main_argv, moni);
+        }
         when IDM_NEW_MONI: child_fork(main_argc, main_argv, (int)lp - ' ');
         when IDM_COPYTITLE: win_copy_title();
       }
@@ -2336,7 +2340,7 @@ main(int argc, char *argv[])
       when '': store_taskbar_properties = true;
       when 'w': set_arg_option("Window", optarg);
       when '': set_arg_option("Class", optarg);
-      when '': disable_bidi = true;
+      when '': cfg.bidi = 0;
       when '': support_wsl = true;
       when '':
         if (chdir(optarg) < 0) {
