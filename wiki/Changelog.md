@@ -1,8 +1,29 @@
+### 2.7.7 (20 May 2017) ###
+
 Font rendering and display handling
   * Automatically disabling Uniscribe for ASCII-only chunks (mintty/wsltty#36).
-  * Fixed delayed scroll marker highlighting (#569).
-  * Fixed cleanup of environment variables after user command (#654).
   * Fixed bidi display while showing other screen with Bidi=1 (#592, ~#392, ~#605).
+
+Window handling
+  * Avoid being pushed behind other windows on Ctrl+TAB (#652).
+  * Tweaks to stabilize initial window geometry (#629, #649).
+  * Fixed broken size parameters maxwidth/maxheight.
+
+Terminal handling
+  * Option NoAltScreen disables the alternate screen (~#652).
+  * Fixed delayed scroll marker highlighting (#569).
+  * Manual: link to Wiki about console issues / winpty wrapper (#650).
+
+Configuration
+  * New option --configdir for config file and resource folders (mintty/winpty#30, mintty/winpty#40, mintty/winpty#38).
+  * Always save to config file specified with -c/--config or --configdir (mintty/winpty#30, ~mintty/winpty#40).
+  * Options: offer resources from subdirectories of all config directories (#639, #30, ~#38).
+  * Configuration resource subdirectories are created as needed (#30, #38, ~#639).
+
+Other
+  * Fixed cleanup of environment variables after user command (#654).
+  * Fixed usage of /tmp or (if read-only) alternatives (mintty/wsltty#30).
+  * Wiki: removed link to buggy themes (#647).
 
 ### 2.7.6 (14 Apr 2017) ###
 
@@ -35,7 +56,7 @@ Configuration
 
 Font handling / Text rendering
   * Changing default FontRender=uniscribe (#605, #573).
-  * Zoom box drawing and some other characters to complete cell size so they can connect to each other (#628).
+  * Zoom box drawing and some other characters to full cell size so they can connect to each other (#628).
   * Restricted glyph width scaling to support overhanging wide icons (#638).
   * Tweaked italic overhang clipping (#638).
 

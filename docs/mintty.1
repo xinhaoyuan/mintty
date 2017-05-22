@@ -45,8 +45,7 @@ introducing short options and double dashes introducing long options.
 \fB-c\fP, \fB--config\fP \fIFILENAME\fP
 Read settings from the specified configuration file, in addition to
 the default config files.
-Configuration changes are saved to the last file thus specified and not 
-read-only at the time of loading.
+Configuration changes are saved to the last file thus specified.
 
 .TP
 \fB-C\fP, \fB--loadconfig\fP \fIFILENAME\fP
@@ -55,6 +54,13 @@ the default config files.
 The file is not taken into account for saving configuration changes.
 This is useful to mix-in partial configuration variants, particularly 
 colour schemes. However, \fB-o ThemeFile=\fIFILENAME\fP may be preferable.
+
+.TP
+\fB--configdir\fP \fIDIRNAME\fP
+Use the given directory to check for resource subdirectories 
+(\fIthemes\fP, \fIsounds\fP, \fIlang\fP);
+also read settings from the configuration file \fIDIRNAME\fP/\fBconfig\fP, 
+in addition to the default config files, and save configuration changes here.
 
 .TP
 \fB--dir\fP \fIdirectory\fP
@@ -663,8 +669,9 @@ Additional configuration files can be specified using the
 These are read in order after the default config files, 
 with settings in later files overriding those in earlier ones.
 Configuration changes are saved to the last writable file 
-read by default or specified with \fB-c\fP/\fB--config\fP, 
-or \fI~/.minttyrc\fP if none is given.
+read by default or \fI~/.minttyrc\fP if none is given, 
+or (with precedence) to a configuration file specified with 
+\fB-c\fP/\fB--config\fP or \fB--configdir\fP.
 Individual settings can also be specified on the command line using the 
 \fB-o\fP/\fB--option\fP.
 
@@ -691,8 +698,9 @@ may even get dropped from the configuration file; mintty versions since
 Additional resource files are used for colour schemes (option ThemeFile, 
 subdirectory \fIthemes\fP), wave files (option BellFile, subdirectory \fIsounds\fP), 
 and localization translation files (option Language, subdirectory \fIlang\fP) 
-within the mintty resource directories \fI~/.mintty\fP, \fI~/.config/mintty\fP, 
-\fI$APPDATA/mintty\fP, \fI/usr/share/mintty\fP.
+within the mintty resource directories \fI/usr/share/mintty\fP, 
+\fI$APPDATA/mintty\fP, \fI~/.config/mintty\fP, \fI~/.mintty\fP, 
+or as specified with command line option \fB--configdir\fP.
 
 The following sections explain the settings on each pane of the options
 dialog, followed by settings that do not appear in the dialog.
@@ -849,8 +857,8 @@ bolding is simulated by rendering the text twice with a one-pixel offset.
 .TP
 \fBShow bold as colour\fP (BoldAsColour=yes)
 By default, text with the ANSI bold attribute set is displayed with a
-different colour, usually with increased brightness.  This can be disabled
-here.
+different colour, usually with increased brightness (mapping ANSI colours 
+0..7 to their bright variants 8..15). This can be disabled here.
 
 Note that when \fBBoldAsFont\fP is enabled, only bold text in one of the eight
 ANSI colours has its colour changed, i.e. bold text without an explicitly
@@ -1231,6 +1239,10 @@ is the default.
 \fBAnswerback\fP (Answerback=)
 The answerback string is sent in response to the \fB^E\fP (ENQ) character.
 By default, this is empty.
+
+.TP
+\fBAlternate screen\fP (NoAltScreen=false)
+With this setting, the alternate screen can be disabled.
 
 .TP
 \fBApply old wraparound behaviour\fP (OldWrapModes=false)
@@ -1774,6 +1786,9 @@ a pipe rather than a console device.
 As a consequence, such programs often disable interactive input. Also,
 direct calls to low-level Win32 console functions will fail.
 Programs that access the console as a file should be fine though.
+
+See \fIhttps://github.com/mintty/mintty/wiki/Tips#inputoutput-interaction-with-alien-programs\fP 
+for further hints, especially on the \fIwinpty\fP wrapper.
 
 .SS Termcap/terminfo
 

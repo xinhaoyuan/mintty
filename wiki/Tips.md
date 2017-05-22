@@ -62,9 +62,9 @@ Install [wsltty](https://github.com/mintty/wsltty).
 Or, to help reproduce the installation manually, for users of cygwin or msys2:
 * From https://github.com/rprichard/wslbridge/releases, download the `wslbridge` archive corresponding to your system (cygwin/msys2 32/64 bit)
 * Install `wslbridge.exe` and `wslbridge-backend` into your cygwin or msys2 `/bin` directory
-* Make a desktop shortcut (Desktop right-click – New ▸ Shortcut) with 
- * Target: `X:\cygwin64\bin\mintty.exe /bin/wslbridge.exe -t /bin/bash -l`
- * Icon location (Change Icon…): `%LOCALAPPDATA%\lxss\bash.ico`
+* Make a desktop shortcut (Desktop right-click – New ▸ Shortcut) with
+  * Target: `X:\cygwin64\bin\mintty.exe /bin/wslbridge.exe -t /bin/bash -l`
+  * Icon location (Change Icon…): `%LOCALAPPDATA%\lxss\bash.ico`
 
 Replace ```X:\cygwin64``` with your cygwin or msys2 root directory path.
 The “Start in:” directory does not normally matter if you include the bash “login” option 
@@ -386,7 +386,6 @@ A number of colour schemes have been published for mintty, e.g.
 * https://github.com/oumu/mintty-color-schemes
 * https://github.com/mavnn/mintty-colors-solarized
 * https://github.com/PhilipDaniels/mintty/tree/master/themes
-* https://github.com/iamthad/base16-mintty/tree/master/mintty
 
 
 ## Providing and selecting fonts ##

@@ -24,6 +24,7 @@
 #define dont_support_blurred
 
 
+string config_dir = 0;
 static wstring rc_filename = 0;
 static char linebuf[444];
 
@@ -127,6 +128,7 @@ const config default_cfg = {
   .daemonize_always = false,
   // "Hidden"
   .bidi = 2,
+  .disable_alternate_screen = false,
   .app_id = W(""),
   .app_name = W(""),
   .app_launch_cmd = W(""),
@@ -299,6 +301,7 @@ options[] = {
 
   // "Hidden"
   {"Bidi", OPT_INT, offcfg(bidi)},
+  {"NoAltScreen", OPT_BOOL, offcfg(disable_alternate_screen)},
   {"AppID", OPT_WSTRING, offcfg(app_id)},
   {"AppName", OPT_WSTRING, offcfg(app_name)},
   {"AppLaunchCmd", OPT_WSTRING, offcfg(app_launch_cmd)},
@@ -695,7 +698,7 @@ parse_arg_option(string option)
 
 #include "winpriv.h"  // home
 
-static char * * config_dirs = 0;
+static string * config_dirs = 0;
 static int last_config_dir = -1;
 
 static void
@@ -704,25 +707,30 @@ init_config_dirs(void)
   if (config_dirs)
     return;
 
+  int ncd = 3;
   char * appdata = getenv("APPDATA");
-  if (appdata) {
-    config_dirs = newn(char *, 4);
-    appdata = newn(char, strlen(appdata) + 8);
-    sprintf(appdata, "%s/mintty", getenv("APPDATA"));
-  }
-  else
-    config_dirs = newn(char *, 3);
+  if (appdata)
+    ncd++;
+  if (config_dir)
+    ncd++;
+  config_dirs = newn(string, ncd);
 
   // /usr/share/mintty , $APPDATA/mintty , ~/.config/mintty , ~/.mintty
   config_dirs[++last_config_dir] = "/usr/share/mintty";
-  if (appdata)
+  if (appdata) {
+    appdata = newn(char, strlen(appdata) + 8);
+    sprintf(appdata, "%s/mintty", getenv("APPDATA"));
     config_dirs[++last_config_dir] = appdata;
+  }
   char * xdgconf = newn(char, strlen(home) + 16);
   sprintf(xdgconf, "%s/.config/mintty", home);
   config_dirs[++last_config_dir] = xdgconf;
   char * homeconf = newn(char, strlen(home) + 9);
   sprintf(homeconf, "%s/.mintty", home);
   config_dirs[++last_config_dir] = homeconf;
+  if (config_dir) {
+    config_dirs[++last_config_dir] = config_dir;
+  }
 }
 
 #include <fcntl.h>
@@ -745,6 +753,20 @@ get_resource_file(wstring sub, wstring res, bool towrite)
     char * resfn = path_win_w_to_posix(rf);
     free(rf);
     fd = open(resfn, towrite ? O_CREAT | O_EXCL | O_WRONLY | O_BINARY : O_RDONLY | O_BINARY, 0644);
+#if CYGWIN_VERSION_API_MINOR >= 74
+    if (towrite && fd < 0 && errno == ENOENT) {
+      // try to create resource subdirectories
+      int dd = open(config_dirs[i], O_RDONLY | O_DIRECTORY);
+      if (dd) {
+        mkdirat(dd, "themes", 0755);
+        mkdirat(dd, "sounds", 0755);
+        mkdirat(dd, "lang", 0755);
+        close(dd);
+      }
+      // retry
+      fd = open(resfn, O_CREAT | O_EXCL | O_WRONLY | O_BINARY, 0644);
+    }
+#endif
     if (fd >= 0) {
       close(fd);
       return resfn;
@@ -1064,8 +1086,13 @@ load_scheme(string cs)
   free(scheme);
 }
 
+// to_save:
+// 0 read config from filename
+// 1 use filename for saving if file exists and is writable
+// 2 use filename for saving if none was previously determined
+// 3 use filename for saving (override)
 void
-load_config(string filename, bool to_save)
+load_config(string filename, int to_save)
 {
   trace_theme(("load_config <%s> %d\n", filename, to_save));
   if (!to_save) {
@@ -1079,7 +1106,7 @@ load_config(string filename, bool to_save)
   FILE * file = fopen(filename, "r");
 
   if (to_save) {
-    if (file || (!rc_filename && strstr(filename, "/.minttyrc"))) {
+    if (file || (!rc_filename && to_save == 2) || to_save == 3) {
       clear_opts();
 
       delete(rc_filename);
@@ -1213,6 +1240,10 @@ save_config(void)
   FILE *file = fopen(filename, "w");
 
   if (!file) {
+    // Should we report the failed Windows or POSIX path? (see mintty/wsltty#42)
+    // In either case, we must transform to Unicode.
+    // For WSL, it's probably not a good idea to report a POSIX path 
+    // because it would be mistaken for a WSL path.
     char *msg;
     char * up = cs__wcstoutf(rc_filename);
     //__ %1$s: config file name, %2$s: error message
@@ -1480,30 +1511,33 @@ add_file_resources(control *ctrl, wstring pattern)
     hFind = FindFirstFileW(rcpat, &ffd);
     ok = hFind != INVALID_HANDLE_VALUE;
     free(rcpat);
-    if (ok)
-      break;
-    if (GetLastError() == ERROR_FILE_NOT_FOUND)  // empty valid dir
-      break;
-  }
+    if (ok) {
+      while (ok) {
+        if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+          // skip
+        }
+        else {
+          //LARGE_INTEGER filesize = {.LowPart = ffd.nFileSizeLow, .HighPart = ffd.nFileSizeHigh};
+          //long s = filesize.QuadPart;
 
-  while (ok) {
-    if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-      // skip
-    }
-    else {
-      //LARGE_INTEGER filesize = {.LowPart = ffd.nFileSizeLow, .HighPart = ffd.nFileSizeHigh};
-      //long s = filesize.QuadPart;
-
-      // strip suffix
-      int len = wcslen(ffd.cFileName);
-      if (ffd.cFileName[0] != '.' && ffd.cFileName[len - 1] != '~') {
-        ffd.cFileName[len - sufl] = 0;
-        dlg_listbox_add_w(ctrl, ffd.cFileName);
+          // strip suffix
+          int len = wcslen(ffd.cFileName);
+          if (ffd.cFileName[0] != '.' && ffd.cFileName[len - 1] != '~') {
+            ffd.cFileName[len - sufl] = 0;
+            dlg_listbox_add_w(ctrl, ffd.cFileName);
+          }
+        }
+        ok = FindNextFileW(hFind, &ffd);
       }
+      FindClose(hFind);
+
+      //break;
     }
-    ok = FindNextFileW(hFind, &ffd);
+    if (GetLastError() == ERROR_FILE_NOT_FOUND) {
+      // empty valid dir
+      //break;
+    }
   }
-  FindClose(hFind);
 }
 
 
@@ -1804,8 +1838,7 @@ download_scheme(char * url)
   HRESULT (WINAPI * pURLDownloadToFile)(void *, LPCSTR, LPCSTR, DWORD, void *) = 0;
   pURLDownloadToFile = load_library_func("urlmon.dll", "URLDownloadToFileA");
   bool ok = false;
-  char sfn[44];
-  sprintf(sfn, "/tmp/.mintty-scheme.%d", getpid());
+  char * sfn = asform("%s/.mintty-scheme.%d", tmpdir(), getpid());
   if (pURLDownloadToFile) {
 #ifdef __CYGWIN__
     /* Need to sync the Windows environment */
@@ -1870,6 +1903,7 @@ download_scheme(char * url)
   fclose(sf);
   remove(sfn);
 #endif
+  free(sfn);
 
   return sch;
 }

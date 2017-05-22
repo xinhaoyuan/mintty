@@ -1,5 +1,5 @@
-// win.c (part of mintty)
-// Copyright 2008-13 Andy Koppe
+// winmain.c (part of mintty)
+// Copyright 2008-13 Andy Koppe, 2015-2017 Thomas Wolff
 // Based on code from PuTTY-0.60 by Simon Tatham and team.
 // Licensed under the terms of the GNU General Public License v3 or later.
 
@@ -63,6 +63,7 @@ static int extra_width, extra_height, norm_extra_width, norm_extra_height;
 bool win_is_fullscreen;
 static bool go_fullscr_on_max;
 static bool resizing;
+static bool disable_poschange = true;
 static int zoom_token = 0;  // for heuristic handling of Shift zoom (#467, #476)
 static bool default_size_token = false;
 
@@ -101,9 +102,26 @@ typedef struct {
 
 #endif
 
+
+#ifdef debug_resize
+#define SetWindowPos(wnd, after, x, y, cx, cy, flags)	{printf("SWP[%s] %ld %ld\n", __FUNCTION__, (long int)cx, (long int)cy); Set##WindowPos(wnd, after, x, y, cx, cy, flags);}
+static void
+trace_winsize(char * tag)
+{
+  RECT cr, wr;
+  GetClientRect(wnd, &cr);
+  GetWindowRect(wnd, &wr);
+  printf("winsize[%s] @%d/%d %d %d cl %d %d + %d/%d\n", tag, (int)wr.left, (int)wr.top, (int)(wr.right - wr.left), (int)(wr.bottom - wr.top), (int)(cr.right - cr.left), (int)(cr.bottom - cr.top), extra_width, norm_extra_width);
+}
+#else
+#define trace_winsize(tag)	
+#endif
+
+
 static HRESULT (WINAPI * pDwmIsCompositionEnabled)(BOOL *) = 0;
 static HRESULT (WINAPI * pDwmExtendFrameIntoClientArea)(HWND, const MARGINS *) = 0;
 static HRESULT (WINAPI * pDwmEnableBlurBehindWindow)(HWND, void *) = 0;
+static HRESULT (WINAPI * pSetWindowCompositionAttribute)(HWND, void *) = 0;
 
 // Helper for loading a system library. Using LoadLibrary() directly is insecure
 // because Windows might be searching the current working directory first.
@@ -125,6 +143,7 @@ static void
 load_dwm_funcs(void)
 {
   HMODULE dwm = load_sys_library("dwmapi.dll");
+  HMODULE user32 = load_sys_library("user32.dll");
   if (dwm) {
     pDwmIsCompositionEnabled =
       (void *)GetProcAddress(dwm, "DwmIsCompositionEnabled");
@@ -132,6 +151,10 @@ load_dwm_funcs(void)
       (void *)GetProcAddress(dwm, "DwmExtendFrameIntoClientArea");
     pDwmEnableBlurBehindWindow =
       (void *)GetProcAddress(dwm, "DwmEnableBlurBehindWindow");
+  }
+  if (user32) {
+    pSetWindowCompositionAttribute =
+      (void *)GetProcAddress(user32, "SetWindowCompositionAttribute");
   }
 }
 
@@ -374,6 +397,9 @@ wnd_enum_proc(HWND curr_wnd, LPARAM unused(lp))
 void
 win_switch(bool back, bool alternate)
 {
+  // avoid being pushed behind other windows (#652)
+  SetWindowPos(wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+
   first_wnd = 0, last_wnd = 0;
   EnumWindows(wnd_enum_proc, 0);
   if (first_wnd) {
@@ -629,6 +655,10 @@ void
 win_set_pixels(int height, int width)
 {
   trace_resize(("--- win_set_pixels %d %d\n", height, width));
+  // avoid resizing if no geometry yet available (#649?)
+  if (!height || !width)  // early invocation
+    return;
+
   int sy = win_search_visible() ? SEARCHBAR_HEIGHT : 0;
   SetWindowPos(wnd, null, 0, 0,
                width + extra_width + 2 * PADDING,
@@ -680,11 +710,53 @@ win_update_blur(bool opaque)
 static void
 win_update_glass(bool opaque)
 {
+  bool enabled =
+    cfg.transparency == TR_GLASS && !win_is_fullscreen &&
+    !(opaque && term.has_focus);
+
   if (pDwmExtendFrameIntoClientArea) {
-    bool enabled =
-      cfg.transparency == TR_GLASS && !win_is_fullscreen &&
-      !(opaque && term.has_focus);
     pDwmExtendFrameIntoClientArea(wnd, &(MARGINS){enabled ? -1 : 0, 0, 0, 0});
+  }
+
+  if (pSetWindowCompositionAttribute) {
+    enum AccentState
+    {
+        ACCENT_DISABLED = 0,
+        ACCENT_ENABLE_GRADIENT = 1,
+        ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
+        ACCENT_ENABLE_BLURBEHIND = 3,
+        ACCENT_INVALID_STATE = 4
+    };
+    enum WindowCompositionAttribute
+    {
+        WCA_ACCENT_POLICY = 19
+    };
+    struct ACCENTPOLICY
+    {
+      enum AccentState nAccentState;
+      int nFlags;
+      int nColor;
+      int nAnimationId;
+    };
+    struct WINCOMPATTRDATA
+    {
+      enum WindowCompositionAttribute nAttribute;
+      PVOID pData;
+      ULONG ulDataSize;
+    };
+    struct ACCENTPOLICY policy = {
+      enabled ? ACCENT_ENABLE_BLURBEHIND : ACCENT_DISABLED,
+      0,
+      0,
+      0
+    };
+    struct WINCOMPATTRDATA data = {
+      WCA_ACCENT_POLICY,
+      (PVOID)&policy,
+      sizeof(policy)
+    };
+
+    pSetWindowCompositionAttribute(wnd, &data);
   }
 }
 
@@ -785,10 +857,12 @@ win_fix_position(void)
   GetWindowInfo(wnd, &winfo);
 
   // Correct edges. Top and left win if the window is too big.
-  wr.left -= max(0, wr.right - ar.right);
   wr.top -= max(0, wr.bottom - ar.bottom);
-  wr.left = max(wr.left, (int)(ar.left - winfo.cxWindowBorders));
   wr.top = max(wr.top, ar.top);
+  wr.left -= max(0, wr.right - ar.right);
+  wr.left = max(wr.left, ar.left);
+  // attempt to workaround left gap (#629); does not seem to work anymore
+  //wr.left = max(wr.left, (int)(ar.left - winfo.cxWindowBorders));
 
   SetWindowPos(wnd, 0, wr.left, wr.top, 0, 0,
                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -798,8 +872,12 @@ void
 win_set_chars(int rows, int cols)
 {
   trace_resize(("--- win_set_chars %d×%d\n", rows, cols));
-  win_set_pixels(rows * cell_height, cols * cell_width);
+  // prevent resizing to same logical size
+  // which would remove bottom padding and spoil some Windows magic (#629)
+  if (rows != term.rows || cols != term.cols)
+    win_set_pixels(rows * cell_height, cols * cell_width);
   win_fix_position();
+  trace_winsize("win_set_chars > win_fix_position");
 }
 
 
@@ -959,6 +1037,9 @@ win_adjust_borders(int t_width, int t_height)
 
   width = wr.right - wr.left;
   height = wr.bottom - wr.top;
+#ifdef debug_resize
+  printf("win_adjust_borders w/h %d %d\n", width, height);
+#endif
 
   if (cfg.scrollbar)
     width += GetSystemMetrics(SM_CXVSCROLL);
@@ -1001,8 +1082,11 @@ win_adapt_term_size(bool sync_size_with_font, bool scale_font_with_size)
 #endif
 
   if (sync_size_with_font && !win_is_fullscreen) {
-    win_set_chars(term.rows, term.cols);
-    //win_fix_position();
+    // enforced win_set_chars(term.rows, term.cols):
+    win_set_pixels(term.rows * cell_height, term.cols * cell_width);
+    win_fix_position();
+    trace_winsize("win_adapt_term_size > win_fix_position");
+
     win_invalidate_all();
     return;
   }
@@ -1647,6 +1731,10 @@ static struct {
     }
 
     when WM_WINDOWPOSCHANGED: {
+      if (disable_poschange)
+        // avoid premature Window size adaptation (#649?)
+        break;
+
 #     define WP ((WINDOWPOS *) lp)
       trace_resize(("# WM_WINDOWPOSCHANGED (resizing %d) %d %d @ %d %d\n", resizing, WP->cy, WP->cx, WP->y, WP->x));
       bool dpi_changed = true;
@@ -1724,6 +1812,7 @@ static struct {
 #endif
     }
   }
+
  /*
   * Any messages we don't process completely above are passed through to
   * DefWindowProc() for default processing.
@@ -2162,6 +2251,7 @@ static const struct option
 opts[] = {
   {"config",     required_argument, 0, 'c'},
   {"loadconfig", required_argument, 0, 'C'},
+  {"configdir",  required_argument, 0, ''},
   {"exec",       no_argument,       0, 'e'},
   {"hold",       required_argument, 0, 'h'},
   {"icon",       required_argument, 0, 'i'},
@@ -2253,7 +2343,7 @@ main(int argc, char *argv[])
   delete(rc_file);
   // try home config file
   rc_file = asform("%s/.minttyrc", home);
-  load_config(rc_file, true);
+  load_config(rc_file, 2);
   delete(rc_file);
 
   if (getenv("MINTTY_ICON")) {
@@ -2282,8 +2372,17 @@ main(int argc, char *argv[])
       break;
     char *longopt = argv[optind - 1], *shortopt = (char[]){'-', optopt, 0};
     switch (opt) {
-      when 'c': load_config(optarg, true);
+      when 'c': load_config(optarg, 3);
       when 'C': load_config(optarg, false);
+      when '':
+        if (config_dir)
+          option_error(__("Duplicate option 'configdir'"), "");
+        else {
+          config_dir = strdup(optarg);
+          string rc_file = asform("%s/config", config_dir);
+          load_config(rc_file, 2);
+          delete(rc_file);
+        }
       when 'h': set_arg_option("Hold", optarg);
       when 'i': set_arg_option("Icon", optarg);
       when 'l': set_arg_option("Log", optarg);
@@ -2620,6 +2719,7 @@ main(int argc, char *argv[])
                         window_style | (cfg.scrollbar ? WS_VSCROLL : 0),
                         x, y, width, height,
                         null, null, inst, null);
+  trace_winsize("createwindow");
   // Workaround for failing title parameter:
   if (pEnableNonClientDpiScaling)
     SetWindowTextW(wnd, wtitle);
@@ -2688,10 +2788,15 @@ main(int argc, char *argv[])
       y = ar.top;
       height = ar.bottom - ar.top;
     }
+#ifdef debug_resize
+    if (maxwidth || maxheight)
+      printf("max w/h %d %d\n", width, height);
+#endif
     printpos("fin", x, y, ar);
 
     SetWindowPos(wnd, NULL, x, y, width, height,
       SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+    trace_winsize("-p");
   }
 
   if (per_monitor_dpi_aware) {
@@ -2717,12 +2822,27 @@ main(int argc, char *argv[])
       print_system_metrics(dpi, "initial");
 #endif
       // recalculate effective font size and adjust window
+      /* Note: it would avoid some problems to consider the DPI 
+         earlier and create the window at its proper size right away
+         but there are some cyclic dependencies among CreateWindow, 
+         monitor selection and the respective DPI to be considered,
+         so we have to adjust here.
+      */
       if (dpi != 96) {
         font_cs_reconfig(true);
-        win_set_chars(cfg.rows, cfg.cols);
+        trace_winsize("dpi > font_cs_reconfig");
+        if (maxwidth || maxheight) {
+          // changed terminal size not yet recorded, 
+          // but window size hopefully adjusted already
+        }
+        else {
+          win_set_chars(cfg.rows, cfg.cols);
+          trace_winsize("dpi > win_set_chars");
+        }
       }
     }
   }
+  disable_poschange = false;
 
   if (border_style) {
     LONG style = GetWindowLong(wnd, GWL_STYLE);
@@ -2735,6 +2855,7 @@ main(int argc, char *argv[])
     SetWindowLong(wnd, GWL_STYLE, style);
     SetWindowPos(wnd, null, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    trace_winsize("border_style");
   }
 
   configure_taskbar();
@@ -2746,6 +2867,7 @@ main(int argc, char *argv[])
   // taskbar when the window size approaches the work area size.
   if (cfg.x == (int)CW_USEDEFAULT) {
     win_fix_position();
+    trace_winsize("fix_pos");
   }
 
   // Initialise the terminal.
