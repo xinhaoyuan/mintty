@@ -431,6 +431,13 @@ the reason may be that specifically designed characters are being addressed
 that are provided in the Unicode Private Use range of dedicated fonts;
 a collection of such fonts can be found at [Nerd Fonts](http://nerdfonts.com/).
 
+### Alternative fonts ###
+
+Mintty supports up to 9 alternative fonts that can be selected as 
+character attributes (see Text attributes below). They are configured 
+in the config file (see manual page).
+<img align=top src=https://github.com/mintty/mintty/wiki/mintty-alternative-fonts.png>
+
 
 ## Ambiguous width setting ##
 
@@ -493,9 +500,14 @@ Mintty supports a maximum of usual and unusual text attributes:
 | 3                      | 23                | italic                        |
 | 4                      | 24                | underline                     |
 | 5                      | 25                | blinking                      |
+| 6                      | 25                | rapidly blinking              |
 | 7                      | 27                | inverse                       |
 | 8                      | 28                | invisible                     |
 | 9                      | 29                | strikeout                     |
+| 11                     | 10                | alternative font 1 (*)        |
+| 12                     | 10                | alternative font 2            |
+| ...                    | 10                | alternative fonts 3...8       |
+| 19                     | 10                | alternative font 9            |
 | 21                     | 24                | doubly underline              |
 | 53                     | 55                | overline                      |
 | 30...37                | 39                | foreground ANSI colour        |
@@ -508,13 +520,18 @@ Mintty supports a maximum of usual and unusual text attributes:
 | 48;2;R;G;B             | 49                | background true colour        |
 | _any_                  | 0                 |                               |
 
+Note: The control sequence for alternative font 1 overrides the identical 
+control sequence to select the VGA character set. Configuring alternative 
+font 1 is therefore discouraged. See the mintty manual page about how 
+to configure alternative fonts.
+
 As a fancy add-on feature for text attributes, mintty supports distinct 
 colour attributes for combining characters, so a combined character 
 can be displayed in multiple colours. Attributes considered for this 
 purpose are default and ANSI foreground colours, palette and true-colour 
 foreground colours, dim mode and manual bold mode (BoldAsFont=false); 
 background colours and inverse mode are ignored.
-<img src=https://github.com/mintty/mintty/wiki/mintty-coloured-combinings.png>
+<img align=top src=https://github.com/mintty/mintty/wiki/mintty-coloured-combinings.png>
 
 
 ## Passing arguments from an environment with different character set ##

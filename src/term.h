@@ -89,37 +89,44 @@ enum {
   ATTR_INVALID    = 0x0003FFFFu,
   ATTR_BOLD       = 0x00040000u,
   ATTR_DIM        = 0x00080000u,
-  ATTR_ITALIC     = 0x00100000u,
+  ATTR_REVERSE    = 0x00100000u,
   ATTR_UNDER      = 0x00200000u,
-  ATTR_REVERSE    = 0x00400000u,
-  ATTR_STRIKEOUT  = 0x40000000u,
-  ATTR_INVISIBLE  = 0x00800000u,
-  ATTR_BLINK      = 0x01000000u,
-  ATTR_DOUBLYUND  = 0x20000000u,
+  ATTR_BLINK      = 0x00400000u,
+
+  ATTR_ITALIC     = 0x00800000u,
+  ATTR_INVISIBLE  = 0x01000000u,
+  ATTR_BLINK2     = 0x02000000u,
+  ATTR_STRIKEOUT  = 0x04000000u,
+  ATTR_DOUBLYUND  = 0x08000000u,
   ATTR_OVERL      = 0x10000000u,
-  ATTR_PROTECTED  = 0x02000000u,
-  ATTR_WIDE       = 0x04000000u,
 
-  ATTR_NARROW     = 0x08000000u,
-  ATTR_EXPAND     = 0x80000000u,
+  ATTR_PROTECTED  = 0x20000000u,
+  ATTR_WIDE       = 0x40000000u,
+  ATTR_NARROW     = 0x80000000u,
+  ATTR_EXPAND     = 0x0000000100000000u,
 
-  GRAPH_MASK      = 0x00FF00000000u,
-  ATTR_GRAPH_SHIFT = 32,
+  GRAPH_MASK      = 0x0000FF0000000000u,
+  ATTR_GRAPH_SHIFT = 40,
 
-  TATTR_RIGHTCURS = 0x010000000000u, /* cursor-on-RHS */
-  TATTR_PASCURS   = 0x020000000000u, /* passive cursor (box) */
-  TATTR_ACTCURS   = 0x040000000000u, /* active cursor (block) */
-  TATTR_COMBINING = 0x080000000000u, /* combining characters */
-  TATTR_COMBDOUBL = 0x800000000000u, /* combining double characters */
-  TATTR_ZOOMFULL  = 0x400000000000u, /* to be zoomed to full cell size */
+  FONTFAM_MASK    = 0x000F000000000000u,
+  ATTR_FONTFAM_SHIFT = 48,
 
-  TATTR_RESULT    = 0x00100000000000u, /* search result */
-  TATTR_CURRESULT = 0x00200000000000u, /* current search result */
-  TATTR_MARKED    = 0x01000000000000u, /* scroll marker */
-  TATTR_CURMARKED = 0x02000000000000u, /* current scroll marker */
+  TATTR_COMBINING = 0x0000000200000000u, /* combining characters */
+  TATTR_COMBDOUBL = 0x0000000400000000u, /* combining double characters */
+  TATTR_ZOOMFULL  = 0x0000001000000000u, /* to be zoomed to full cell size */
 
-  DATTR_STARTRUN  = 0x080000000000u, /* start of redraw run */
-  DATTR_MASK      = 0x0F0000000000u,
+  TATTR_RIGHTCURS = 0x0000002000000000u, /* cursor-on-RHS */
+  TATTR_PASCURS   = 0x0000004000000000u, /* passive cursor (box) */
+  TATTR_ACTCURS   = 0x0000008000000000u, /* active cursor (block) */
+
+  TATTR_RESULT    = 0x0100000000000000u, /* search result */
+  TATTR_CURRESULT = 0x0200000000000000u, /* current search result */
+  TATTR_MARKED    = 0x0400000000000000u, /* scroll marker */
+  TATTR_CURMARKED = 0x0800000000000000u, /* current scroll marker */
+
+  DATTR_STARTRUN  = 0x8000000000000000u, /* start of redraw run */
+  DATTR_MASK      = TATTR_RIGHTCURS | TATTR_PASCURS | TATTR_ACTCURS
+                    | DATTR_STARTRUN
 };
 
 /* Line attributes.
@@ -226,6 +233,7 @@ typedef enum {
   CSET_ASCII = 'B',   /* Normal ASCII charset */
   CSET_GBCHR = 'A',   /* UK variant */
   CSET_LINEDRW = '0', /* Line drawing charset */
+  CSET_TECH = '>',    /* DEC Technical */
   CSET_OEM = 'U'      /* OEM Codepage 437 */
 } term_cset;
 
@@ -274,10 +282,11 @@ typedef struct {
   bool autowrap;  // switchable (xterm Wraparound Mode (DECAWM Auto Wrap))
   bool wrapnext;
   bool rev_wrap;  // switchable (xterm Reverse-wraparound Mode)
-  bool utf;
-  bool g1;
-  term_cset csets[2];
+  short g0123;
+  term_cset csets[4];
+  term_cset cset_single;
   uchar oem_acs;
+  bool utf;
 } term_cursor;
 
 typedef struct {
@@ -344,6 +353,7 @@ struct term {
   bool reset_132;         /* Flag ESC c resets to 80 cols */
   bool cblinker;          /* When blinking is the cursor on ? */
   bool tblinker;          /* When the blinking text is on */
+  bool tblinker2;         /* When fast blinking is on */
   bool blink_is_real;     /* Actually blink blinking text */
   bool echoing;           /* Does terminal want local echo? */
   bool insert;            /* Insert mode */

@@ -39,6 +39,9 @@ vt220(string term)
  * Call when the terminal's blinking-text settings change, or when
  * a text blink has just occurred.
  */
+static void term_schedule_tblink(void);
+static void term_schedule_tblink2(void);
+
 static void
 tblink_cb(void)
 {
@@ -47,13 +50,30 @@ tblink_cb(void)
   win_update();
 }
 
-void
+static void
 term_schedule_tblink(void)
 {
   if (term.blink_is_real)
     win_set_timer(tblink_cb, 500);
   else
     term.tblinker = 1;  /* reset when not in use */
+}
+
+static void
+tblink2_cb(void)
+{
+  term.tblinker2 = !term.tblinker2;
+  term_schedule_tblink2();
+  win_update();
+}
+
+static void
+term_schedule_tblink2(void)
+{
+  if (term.blink_is_real)
+    win_set_timer(tblink2_cb, 300);
+  else
+    term.tblinker2 = 1;  /* reset when not in use */
 }
 
 /*
@@ -87,7 +107,7 @@ void
 term_schedule_vbell(int already_started, int startpoint)
 {
   int ticks_gone = already_started ? get_tick_count() - startpoint : 0;
-  int ticks = 100 - ticks_gone;
+  int ticks = 141 - ticks_gone;
   if ((term.in_vbell = ticks > 0))
     win_set_timer(vbell_cb, ticks);
 }
@@ -114,7 +134,13 @@ static void
 term_cursor_reset(term_cursor *curs)
 {
   curs->attr = CATTR_DEFAULT;
-  curs->csets[0] = curs->csets[1] = CSET_ASCII;
+  curs->g0123 = 0;
+  curs->oem_acs = 0;
+  curs->utf = false;
+  for (uint i = 0; i < lengthof(curs->csets); i++)
+    curs->csets[i] = CSET_ASCII;
+  curs->cset_single = CSET_ASCII;
+
   curs->autowrap = true;
   curs->rev_wrap = cfg.old_wrapmodes;
 }
@@ -132,6 +158,7 @@ term_reset(void)
   term_cursor_reset(&term.curs);
   term_cursor_reset(&term.saved_cursors[0]);
   term_cursor_reset(&term.saved_cursors[1]);
+  term_update_cs();
 
   term.backspace_sends_bs = cfg.backspace_sends_bs;
   term.delete_sends_del = cfg.delete_sends_del;
@@ -197,6 +224,7 @@ term_reset(void)
   }
   term.selected = false;
   term_schedule_tblink();
+  term_schedule_tblink2();
   term_schedule_cblink();
   term_clear_scrollback();
 
@@ -243,6 +271,7 @@ term_reconfig(void)
     term.blink_is_real = new_cfg.allow_blinking;
   cfg.cursor_blinks = new_cfg.cursor_blinks;
   term_schedule_tblink();
+  term_schedule_tblink2();
   term_schedule_cblink();
   if (new_cfg.backspace_sends_bs != cfg.backspace_sends_bs)
     term.backspace_sends_bs = new_cfg.backspace_sends_bs;
@@ -1100,8 +1129,55 @@ term_paint(void)
           ? posPle(term.sel_start, scrpos) && posPlt(scrpos, term.sel_end)
           : posle(term.sel_start, scrpos) && poslt(scrpos, term.sel_end)
         );
-      if (term.in_vbell || selected)
+
+      if (selected)
         tattr.attr ^= ATTR_REVERSE;
+
+      bool flashchar = term.in_vbell &&
+                       ((cfg.bell_flash_style & FLASH_FULL)
+                        ||
+                        ((cfg.bell_flash_style & FLASH_BORDER)
+                         && (i == 0 || j == 0 ||
+                             i == term.rows - 1 || j == term.cols - 1
+                            )
+                        )
+                       );
+
+      if (flashchar) {
+        if (cfg.bell_flash_style & FLASH_REVERSE)
+          tattr.attr ^= ATTR_REVERSE;
+        else {
+          colour_i bgi = (tattr.attr & ATTR_BGMASK) >> ATTR_BGSHIFT;
+          if (term.rvideo) {
+            if (bgi >= 256)
+              bgi ^= 2;
+          }
+          colour bg = bgi >= TRUE_COLOUR ? tattr.truebg : colours[bgi];
+
+          colour_i fgi = (tattr.attr & ATTR_FGMASK) >> ATTR_FGSHIFT;
+          if (term.rvideo) {
+            if (fgi >= 256)
+              fgi ^= 2;
+          }
+          if (tattr.attr & ATTR_BOLD && cfg.bold_as_colour) {
+            if (fgi < 8) {
+              fgi |= 8;
+            }
+            else if (fgi >= 256 && fgi != TRUE_COLOUR && !cfg.bold_as_font) {
+              fgi |= 1;
+            }
+          }
+          colour fg = fgi >= TRUE_COLOUR ? tattr.truefg : colours[fgi];
+          if (tattr.attr & ATTR_DIM) {
+            fg = (fg & 0xFEFEFEFE) >> 1;
+            if (!cfg.bold_as_colour || fgi >= 256)
+              fg += (bg & 0xFEFEFEFE) >> 1;
+          }
+
+          tattr.truebg = brighten(bg, fg);
+          tattr.attr = (tattr.attr & ~ATTR_BGMASK) | (TRUE_COLOUR << ATTR_BGSHIFT);
+        }
+      }
 
       int match = in_results(scrpos);
       if (match > 0) {
@@ -1125,6 +1201,11 @@ term_paint(void)
         if (term.has_focus && term.tblinker)
           tchar = ' ';
         tattr.attr &= ~ATTR_BLINK;
+      }
+      if (term.blink_is_real && (tattr.attr & ATTR_BLINK2)) {
+        if (term.has_focus && term.tblinker2)
+          tchar = ' ';
+        tattr.attr &= ~ATTR_BLINK2;
       }
 
      /* Mark box drawing, block and some other characters 
@@ -1282,8 +1363,6 @@ term_paint(void)
     int textlen = 0;
     bool has_rtl = false;
     uchar bc = 0;
-    bool combdouble_pending = false;
-    bool was_combdouble_pending = false;
     bool dirty_run = (line->lattr != displine->lattr);
     bool dirty_line = dirty_run;
     cattr attr = CATTR_DEFAULT;
@@ -1357,10 +1436,6 @@ term_paint(void)
       */
       if (d->cc_next || (j > 0 && d[-1].cc_next))
         trace_run("cc"), break_run = true;
-      if (was_combdouble_pending) {
-        trace_run("cd"), break_run = true;
-        was_combdouble_pending = false;
-      }
 
       if (!dirty_line) {
         if (dispchars[j].chr == tchar &&
@@ -1400,7 +1475,7 @@ term_paint(void)
         }
 #endif
         if (dirty_run && textlen) {
-          if (attr.attr & ATTR_ITALIC)
+          if (attr.attr & (ATTR_ITALIC | TATTR_COMBDOUBL))
             push_text(start, text, textlen, attr, textattr, has_rtl);
           else
             win_text(start, i, text, textlen, attr, textattr, line->lattr, has_rtl);
@@ -1431,6 +1506,7 @@ term_paint(void)
       }
       else
         text[textlen] = tchar;
+      ///textattr[textlen] = tattr;
       textlen++;
 
       if (!has_rtl)
@@ -1438,23 +1514,6 @@ term_paint(void)
 
 #define dont_debug_surrogates
 
-      if (combdouble_pending) {
-        // Rearrange combining double characters of previous position 
-        // to be displayed at this position.
-        // We could append them after any "normal" combinings (below) 
-        // to enable win_text to render those unseparated ...
-        termchar *dp = &d[-1];
-        while (dp->cc_next && textlen < maxtextlen) {
-          dp += dp->cc_next;
-          if (combiningdouble(dp->chr)) {
-            textattr[textlen] = dp->attr;
-            text[textlen++] = dp->chr;
-            attr.attr |= TATTR_COMBDOUBL;
-          }
-        }
-        was_combdouble_pending = true;  // break_run after this position
-        combdouble_pending = false;
-      }
       if (d->cc_next) {
         termchar *dd = d;
         while (dd->cc_next && textlen < maxtextlen) {
@@ -1462,29 +1521,24 @@ term_paint(void)
           wchar prev = dd->chr;
 #endif
           dd += dd->cc_next;
-          if (combiningdouble(dd->chr)) {
-            // Postpone combining double characters of this position
-            // to be displayed with next position (second character).
-            combdouble_pending = true;
-          }
-          else {
-            textattr[textlen] = dd->attr;
-            // hide bidi isolate mark glyphs (if handled zero-width)
-            if (dd->chr >= 0x2066 && dd->chr <= 0x2069)
-              text[textlen++] = 0x200B;  // zero width space
-            else
-              text[textlen++] = dd->chr;
-            // mark combining unless pseudo-combining surrogates
-            if ((dd->chr & 0xFC00) != 0xDC00)
-              attr.attr |= TATTR_COMBINING;
+          if (combiningdouble(dd->chr))
+            attr.attr |= TATTR_COMBDOUBL;
+          textattr[textlen] = dd->attr;
+          // hide bidi isolate mark glyphs (if handled zero-width)
+          if (dd->chr >= 0x2066 && dd->chr <= 0x2069)
+            text[textlen++] = 0x200B;  // zero width space
+          else
+            text[textlen++] = dd->chr;
+          // mark combining unless pseudo-combining surrogates
+          if ((dd->chr & 0xFC00) != 0xDC00)
+            attr.attr |= TATTR_COMBINING;
 #ifdef debug_surrogates
-            ucschar comb = 0xFFFFF;
-            if ((prev & 0xFC00) == 0xD800 && (dd->chr & 0xFC00) == 0xDC00)
-              comb = ((ucschar) (prev - 0xD7C0) << 10) | (dd->chr & 0x03FF);
-            printf("comb (%04X) %04X %04X (%05X) %11llX\n", 
-                   d->chr, prev, dd->chr, comb, attr.attr);
+          ucschar comb = 0xFFFFF;
+          if ((prev & 0xFC00) == 0xD800 && (dd->chr & 0xFC00) == 0xDC00)
+            comb = ((ucschar) (prev - 0xD7C0) << 10) | (dd->chr & 0x03FF);
+          printf("comb (%04X) %04X %04X (%05X) %11llX\n", 
+                 d->chr, prev, dd->chr, comb, attr.attr);
 #endif
-          }
         }
       }
 
@@ -1640,7 +1694,7 @@ term_update_cs(void)
   cs_set_mode(
     curs->oem_acs ? CSM_OEM :
     curs->utf ? CSM_UTF8 :
-    curs->csets[curs->g1] == CSET_OEM ? CSM_OEM : CSM_DEFAULT
+    curs->csets[curs->g0123] == CSET_OEM ? CSM_OEM : CSM_DEFAULT
   );
 }
 

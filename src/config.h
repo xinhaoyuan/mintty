@@ -12,6 +12,7 @@ enum { FR_TEXTOUT, FR_UNISCRIBE };
 enum { MC_VOID, MC_PASTE, MC_EXTEND, MC_ENTER };
 enum { RC_MENU, RC_PASTE, RC_EXTEND, RC_ENTER };
 enum { TR_OFF = 0, TR_LOW = 16, TR_MEDIUM = 32, TR_HIGH = 48, TR_GLASS = -1 };
+enum { FLASH_FRAME = 1, FLASH_BORDER = 2, FLASH_FULL = 4, FLASH_REVERSE = 8 };
 
 
 // Colour values.
@@ -57,6 +58,7 @@ typedef struct {
   int even_line_highlight_delta;
   // Text
   font_spec font;
+  font_spec fontfams[10];
   wstring font_sample;
   bool show_hidden_fonts;
   char font_smoothing;
@@ -79,6 +81,7 @@ typedef struct {
   bool alt_fn_shortcuts;
   bool ctrl_shift_shortcuts;
   bool ctrl_exchange_shift;
+  bool ctrl_controls;
   char compose_key;
   string key_prtscreen;	// VK_SNAPSHOT
   string key_pause;	// VK_PAUSE
@@ -114,6 +117,7 @@ typedef struct {
   int bell_freq;
   int bell_len;
   bool bell_flash;   // xterm: visualBell
+  int bell_flash_style;
   bool bell_taskbar; // xterm: bellIsUrgent
   bool bell_popup;   // xterm: popOnBell
   wstring printer;

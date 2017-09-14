@@ -251,6 +251,11 @@ using the Linux path name.
 namespace and converted before opening in Windows.
 
 .TP
+\fB--rootfs\fP \fIROOTFOLDER\fP
+Provide the root filesystem folder to adjust path conversion properly 
+for the respective WSL installation.
+
+.TP
 \fB-H\fP, \fB--help\fP
 Display a brief help message and exit.
 
@@ -738,8 +743,7 @@ The popup offers theme files as stored in a resource subdirectory
 The option can also be set to a filename (like D:/.../solarized-light.minttyrc).
 
 The field can also be used as a drag-and-drop target for colour schemes 
-downloaded from the Color Scheme Configurator, or for theme files from the web 
-(note that the program \fBcurl\fP needs to be installed for the latter option).
+downloaded from the Color Scheme Configurator, or for theme files from the web.
 See the Tips wiki page \fIhttps://github.com/mintty/mintty/wiki/Tips#using-colour-schemes-themes\fP 
 about this mechanism.
 
@@ -820,6 +824,14 @@ or FontIsBold=yes) but if a font family has a different scheme or more than
 If a font family has no bold weight but boldness was requested, mintty 
 does not adhere to this scheme but enforces bold font selection; however, 
 in this case the bold attribute may not be effective.
+.br
+\(en \fBAlternative fonts\fP (Font1= ... Font9= , Font1Weight= ... Font9Weight=):
+With these settings, up to 9 alternative fonts (and optionally weights) 
+can be configured which would then be selectable via ECMA-48 SGR character attributes 
+(see Tips wiki page \fIhttps://github.com/mintty/mintty/wiki/Tips#text-attributes-and-rendering\fP).
+\fINote:\fP The control sequence for alternative font 1 overrides the identical 
+control sequence to select the VGA character set, which would thus be disabled. 
+Configuring alternative font 1 is therefore discouraged.
 .br
 \(en \fBFont sample text\fP (FontSample=):
 This setting overrides the text for the "Sample" box in the Font chooser dialog.
@@ -1284,15 +1296,31 @@ Mintty can also play wave sounds or frequency beeps.
 \(en \fBWave\fP (BellFile=): 
 The popup offers wave files as stored in a resource subdirectory 
 \fIsounds\fP for selection. The option can also be set 
-to a filename (like D:/.../soundfile.wav).
+to a filename (like D:/.../soundfile.wav); this can be achieved also 
+by drag-and-drop from a local file.
 This setting overrides the Bell system sound except No Beep.
 .br
 \(en \fBPlay\fP: The button plays the selected sound for testing.
 The sound is also played when it is changed.
 .br
-\(en \fBFlash\fP (BellFlash=no): Briefly invert the foreground and background
-colours. (Corresponds to the xterm resource \fBvisualBell\fP.)
+\(en \fBFlash\fP (BellFlash=no): Briefly flash the terminal or window.
+(Corresponds to the xterm resource \fBvisualBell\fP.)
 .br
+\(en \fBFlash style\fP (BellFlashStyle=4): Tune the style to flash the 
+terminal or window; this is a bitmask composed of the following values:
+.RS
+\fB1\fP : Flash the window frame (using Windows)
+.br
+\fB2\fP : Flash the outer character cells; not recommended;
+  will look ragged with double-width characters
+.br
+\fB4\fP : Flash the whole terminal pane (all character cells)
+.br
+\fB8\fP : cell flash briefly inverts foreground and background;
+  default is to moderately brighten the background colour
+.br
+\fB12\fP : (combining 4 and 8) classic bright full flash
+.RE
 \(en \fBHighlight in taskbar\fP (BellTaskbar=yes): Change the colour of mintty's
 taskbar entry if the mintty window is not active.
 (Corresponds to the xterm resource \fBbellIsUrgent\fP, 

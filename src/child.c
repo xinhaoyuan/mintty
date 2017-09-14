@@ -386,9 +386,9 @@ child_proc(void)
           }
           else {
             const int error_sigs =
-              1<<SIGILL | 1<<SIGTRAP | 1<<SIGABRT | 1<<SIGFPE |
-              1<<SIGBUS | 1<<SIGSEGV | 1<<SIGPIPE | 1<<SIGSYS;
-            if (!(error_sigs & 1<<WTERMSIG(status)))
+              1 << SIGILL | 1 << SIGTRAP | 1 << SIGABRT | 1 << SIGFPE |
+              1 << SIGBUS | 1 << SIGSEGV | 1 << SIGPIPE | 1 << SIGSYS;
+            if (!(error_sigs & 1 << WTERMSIG(status)))
               exit_mintty();
           }
         }
@@ -411,7 +411,13 @@ child_proc(void)
           s = _("TERMINATED");
         }
         if (s) {
+          char * wsl_pre = "\0337\033[H\033[L";
+          char * wsl_post = "\0338\033[B";
+          if (err && support_wsl)
+            term_write(wsl_pre, strlen(wsl_pre));
           childerror(s, false, 0, err ? 41 : 42);
+          if (err && support_wsl)
+            term_write(wsl_post, strlen(wsl_post));
         }
 
         if (cfg.exit_title && *cfg.exit_title)

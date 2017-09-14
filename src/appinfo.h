@@ -6,7 +6,7 @@
 
 #define MAJOR_VERSION  2
 #define MINOR_VERSION  7
-#define PATCH_NUMBER   7
+#define PATCH_NUMBER   9
 #define BUILD_NUMBER   0
 
 // needed for res.rc
@@ -46,8 +46,13 @@
   (MAJOR_VERSION * 10000 + MINOR_VERSION * 100 + PATCH_NUMBER)
 
 // needed for mintty -V and Options... - About...
+#ifdef VERSION_SUFFIX
+#define VERSION_TEXT \
+  APPNAME " " VERSION " (" STRINGIFY(TARGET) ") " STRINGIFY(VERSION_SUFFIX)
+#else
 #define VERSION_TEXT \
   APPNAME " " VERSION " (" STRINGIFY(TARGET) ")"
+#endif
 
 #define LICENSE_TEXT \
   "License GPLv3+: GNU GPL version 3 or later"

@@ -25,8 +25,8 @@
 #define CPAIR(x, y) ((x) << 8 | (y))
 
 static string primary_da1 = "\e[?1;2c";
-static string primary_da2 = "\e[?62;1;2;4;6;22c";
-static string primary_da3 = "\e[?63;1;2;4;6;22c";
+static string primary_da2 = "\e[?62;1;2;4;6;15;22c";
+static string primary_da3 = "\e[?63;1;2;4;6;15;22c";
 
 
 static bool
@@ -389,10 +389,10 @@ do_ctrl(char c)
       free(ab);
     }
     when CTRL('N'):   /* LS1: Locking-shift one */
-      term.curs.g1 = true;
+      term.curs.g0123 = 1;
       term_update_cs();
     when CTRL('O'):   /* LS0: Locking-shift zero */
-      term.curs.g1 = false;
+      term.curs.g0123 = 0;
       term_update_cs();
     otherwise:
       return false;
@@ -466,19 +466,30 @@ do_esc(uchar c)
       term.lines[curs->y]->lattr = LATTR_NORM;
     when CPAIR('#', '6'):  /* DECDWL: 2*width */
       term.lines[curs->y]->lattr = LATTR_WIDE;
-    when CPAIR('(', 'A') or CPAIR('(', 'B') or CPAIR('(', '0'):
+    when CPAIR('(', 'A') or CPAIR('(', 'B') or CPAIR('(', '0') or CPAIR('(', '>'):
      /* GZD4: G0 designate 94-set */
       curs->csets[0] = c;
       term_update_cs();
     when CPAIR('(', 'U'):  /* G0: OEM character set */
       curs->csets[0] = CSET_OEM;
       term_update_cs();
-    when CPAIR(')', 'A') or CPAIR(')', 'B') or CPAIR(')', '0'):
+    when CPAIR(')', 'A') or CPAIR(')', 'B') or CPAIR(')', '0') or CPAIR(')', '>')
+      or CPAIR('-', 'A') or CPAIR('-', 'B') or CPAIR('-', '0') or CPAIR('-', '>'):
      /* G1D4: G1-designate 94-set */
       curs->csets[1] = c;
       term_update_cs();
     when CPAIR(')', 'U'): /* G1: OEM character set */
       curs->csets[1] = CSET_OEM;
+      term_update_cs();
+    when CPAIR('*', 'A') or CPAIR('*', 'B') or CPAIR('*', '0') or CPAIR('*', '>')
+      or CPAIR('.', 'A') or CPAIR('.', 'B') or CPAIR('.', '0') or CPAIR('.', '>'):
+     /* Designate G2 character set */
+      curs->csets[2] = c;
+      term_update_cs();
+    when CPAIR('+', 'A') or CPAIR('+', 'B') or CPAIR('+', '0') or CPAIR('+', '>')
+      or CPAIR('/', 'A') or CPAIR('/', 'B') or CPAIR('/', '0') or CPAIR('/', '>'):
+     /* Designate G3 character set */
+      curs->csets[3] = c;
       term_update_cs();
     when CPAIR('%', '8') or CPAIR('%', 'G'):
       curs->utf = true;
@@ -486,6 +497,16 @@ do_esc(uchar c)
     when CPAIR('%', '@'):
       curs->utf = false;
       term_update_cs();
+    when 'n':  /* LS2: Invoke G2 character set as GL */
+      term.curs.g0123 = 2;
+      term_update_cs();
+    when 'o':  /* LS3: Invoke G3 character set as GL */
+      term.curs.g0123 = 3;
+      term_update_cs();
+    when 'N':  /* SS2: Single Shift G2 character set */
+      term.curs.cset_single = curs->csets[2];
+    when 'O':  /* SS3: Single Shift G3 character set */
+      term.curs.cset_single = curs->csets[3];
   }
 }
 
@@ -506,23 +527,39 @@ do_sgr(void)
       when 3: attr.attr |= ATTR_ITALIC;
       when 4: attr.attr |= ATTR_UNDER;
       when 5: attr.attr |= ATTR_BLINK;
+      when 6: attr.attr |= ATTR_BLINK2;
       when 7: attr.attr |= ATTR_REVERSE;
       when 8: attr.attr |= ATTR_INVISIBLE;
       when 9: attr.attr |= ATTR_STRIKEOUT;
-      when 10 ... 11:  // ... 12 disabled
+      when 10 ... 11: {  // ... 12 disabled
         // mode 10 is the configured Character set
         // mode 11 is the VGA character set (CP437 + control range graphics)
         // mode 12 is a weird feature from the Linux console,
         // cloning the VGA character set (CP437) into the ASCII range;
-        // should we disable it? (not supported by cygwin console)
-        term.curs.oem_acs = term.csi_argv[i] - 10;
-        term_update_cs();
+        // disabled (not supported by cygwin console);
+        // modes 11 (and 12) are overridden by alternate font setting
+        // if configured
+          uchar arg_10 = term.csi_argv[i] - 10;
+          if (arg_10 && *cfg.fontfams[arg_10].name) {
+            attr.attr &= ~FONTFAM_MASK;
+            attr.attr |= (unsigned long long)arg_10 << ATTR_FONTFAM_SHIFT;
+          }
+          else {
+            if (!arg_10)
+              attr.attr &= ~FONTFAM_MASK;
+            term.curs.oem_acs = arg_10;
+            term_update_cs();
+          }
+        }
+      when 12 ... 19:
+        attr.attr &= ~FONTFAM_MASK;
+        attr.attr |= (unsigned long long)(term.csi_argv[i] - 10) << ATTR_FONTFAM_SHIFT;
       //when 21: attr.attr &= ~ATTR_BOLD;
       when 21: attr.attr |= ATTR_DOUBLYUND;
       when 22: attr.attr &= ~(ATTR_BOLD | ATTR_DIM);
       when 23: attr.attr &= ~ATTR_ITALIC;
       when 24: attr.attr &= ~(ATTR_UNDER | ATTR_DOUBLYUND);
-      when 25: attr.attr &= ~ATTR_BLINK;
+      when 25: attr.attr &= ~(ATTR_BLINK | ATTR_BLINK2);
       when 27: attr.attr &= ~ATTR_REVERSE;
       when 28: attr.attr &= ~ATTR_INVISIBLE;
       when 29: attr.attr &= ~ATTR_STRIKEOUT;
@@ -599,8 +636,15 @@ set_modes(bool state)
       switch (arg) {
         when 1:  /* DECCKM: application cursor keys */
           term.app_cursor_keys = state;
-        when 2:  /* DECANM: VT52 mode */
-          // IGNORE
+        when 2:  /* DECANM: VT100/VT52 mode */
+          if (state) {
+            // Designate USASCII for character sets G0-G3
+            for (uint i = 0; i < lengthof(term.curs.csets); i++)
+              term.curs.csets[i] = CSET_ASCII;
+            term.curs.cset_single = CSET_ASCII;
+            term_update_cs();
+          }
+          // IGNORE VT52
         when 3:  /* DECCOLM: 80/132 columns */
           if (term.deccolm_allowed) {
             term.selected = false;
@@ -869,6 +913,9 @@ do_csi(uchar c)
       move((arg1 ?: 1) - 1,
            (curs->origin ? term.marg_top : 0) + arg0_def1 - 1,
            curs->origin ? 2 : 0);
+    when 'I':  /* CHT: move right N TABs */
+      for (int i = 0; i < arg0_def1; i++)
+       write_tab();
     when 'J' or CPAIR('?', 'J'): { /* ED/DECSED: (selective) erase in display */
       if (arg0 == 3 && !term.esc_mod) { /* Erase Saved Lines (xterm) */
         term_clear_scrollback();
@@ -897,7 +944,7 @@ do_csi(uchar c)
       insert_char(-arg0_def1);
     when 'n':        /* DSR: cursor position query */
       if (arg0 == 6)
-        child_printf("\e[%d;%dR", curs->y + 1, curs->x + 1);
+        child_printf("\e[%d;%dR", curs->y + 1 - (curs->origin ? term.marg_top : 0), curs->x + 1);
       else if (arg0 == 5)
         child_write("\e[0n", 4);
     when 'h' or CPAIR('?', 'h'):  /* SM: toggle modes to high */
@@ -1196,15 +1243,26 @@ do_dcs(void)
           p += sprintf(p, ";4");
         if (attr.attr & ATTR_BLINK)
           p += sprintf(p, ";5");
+        if (attr.attr & ATTR_BLINK2)
+          p += sprintf(p, ";6");
         if (attr.attr & ATTR_REVERSE)
           p += sprintf(p, ";7");
         if (attr.attr & ATTR_INVISIBLE)
           p += sprintf(p, ";8");
         if (attr.attr & ATTR_STRIKEOUT)
           p += sprintf(p, ";9");
+        if (attr.attr & ATTR_DOUBLYUND)
+          p += sprintf(p, ";21");
+        if (attr.attr & ATTR_OVERL)
+          p += sprintf(p, ";53");
 
         if (term.curs.oem_acs)
           p += sprintf(p, ";%u", 10 + term.curs.oem_acs);
+        else {
+          uint ff = (attr.attr & FONTFAM_MASK) >> ATTR_FONTFAM_SHIFT;
+          if (ff)
+            p += sprintf(p, ";%u", 10 + ff);
+        }
 
         uint fg = (attr.attr & ATTR_FGMASK) >> ATTR_FGSHIFT;
         if (fg != FG_COLOUR_I) {
@@ -1598,10 +1656,15 @@ term_write(const char *buf, uint len)
           width = xcwidth(wc);
 #endif
 
-        switch (term.curs.csets[term.curs.g1]) {
+        short cset = term.curs.csets[term.curs.g0123];
+        if (term.curs.cset_single != CSET_ASCII) {
+          cset = term.curs.cset_single;
+          term.curs.cset_single = CSET_ASCII;
+        }
+        switch (cset) {
           when CSET_LINEDRW:  // VT100 line drawing characters
             if (0x60 <= wc && wc <= 0x7E) {
-              wchar dispwc = win_linedraw_chars[wc - 0x60];
+              wchar dispwc = win_linedraw_char(wc - 0x60);
 #define draw_vt100_line_drawing_chars
 #ifdef draw_vt100_line_drawing_chars
               if ('j' <= wc && wc <= 'x') {
@@ -1623,6 +1686,19 @@ term_write(const char *buf, uint len)
               }
 #endif
               wc = dispwc;
+            }
+          when CSET_TECH:
+            if (c > ' ' && c < 0x7F) {
+              // = W("⎷┌─⌠⌡│⎡⎣⎤⎦⎛⎝⎞⎠⎨⎬␦␦╲╱␦␦␦␦␦␦␦≤≠≥∫∴∝∞÷Δ∇ΦΓ∼≃Θ×Λ⇔⇒≡ΠΨ␦Σ␦␦√ΩΞΥ⊂⊃∩∪∧∨¬αβχδεφγηιθκλ␦ν∂πψρστ␦ƒωξυζ←↑→↓")
+              wc = W("⎷┌─⌠⌡│⎡⎣⎤⎦⎛⎝⎞⎠⎨⎬╶╶╲╱╴╴╳␦␦␦␦≤≠≥∫∴∝∞÷Δ∇ΦΓ∼≃Θ×Λ⇔⇒≡ΠΨ␦Σ␦␦√ΩΞΥ⊂⊃∩∪∧∨¬αβχδεφγηιθκλ␦ν∂πψρστ␦ƒωξυζ←↑→↓")
+                   [c - ' ' - 1];
+              if (c >= 0x31 && c <= 0x37) {
+                static uchar techdraw_code[7] = {
+                  0x81, 0x82, 0, 0, 0x85, 0x86, 0x87
+                };
+                uchar dispcode = techdraw_code[c - 0x31];
+                term.curs.attr.attr |= ((unsigned long long)dispcode) << ATTR_GRAPH_SHIFT;
+              }
             }
           when CSET_GBCHR:
             if (c == '#')

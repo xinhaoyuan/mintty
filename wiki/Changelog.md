@@ -1,3 +1,48 @@
+  * Tweaked width expansion of ambiguous-width characters (#680, ~#638, ~#615).
+  * New option BellFlashStyle (#676).
+
+### 2.7.9 (30 July 2017) ###
+
+Character display
+  * Fixed character attribute handling in scrollback buffer.
+  * Fixed rendering of some combining characters by heuristic tweaking.
+  * Avoid misplaced artefacts of combining doubles while moving cursor over them.
+  * Limiting glyph width checking to symbol ranges to avoid performance penalty (~#615).
+
+WSL support
+  * Build option VERSION_SUFFIX to add package version indication (mintty/wsltty#35, mintty/wsltty#50).
+  * WSL path conversion supports Store distribution packages (mintty/wsltty#52).
+
+Other
+  * Unicode 10.0 updates.
+  * Avoid multiple reporting of font problems.
+  * Fixed process list in Close prompt (if started from desktop).
+
+### 2.7.8 (25 June 2017) ###
+
+Font rendering
+  * Support for alternative fonts as selected via ECMA-48 SGR codes 11...19.
+  * Tweaked ambiguous width checking to not expand glyphs excessively (#615).
+
+Terminal features
+  * SGR 6 attribute "rapidly blinking" (ECMA-48).
+  * Fixed Cursor Position Report (CPR) in Origin Mode (DECOM) (vttest 6-3).
+  * DEC Technical character set support (approximating some segments).
+  * G2/G3 character set designations and GL mapping (vttest 3-10 GL cases).
+  * G2/G3 character set single shift selection (vttest 3-11).
+  * Resetting invoked character set to G0 on terminal reset.
+  * CHT (move right n tab positions) (vttest 11-5-4).
+  * Completed Status String (DECRQSS) with missing attributes.
+
+Window handling
+  * Suppressing Windows-caused side effects of "resizing" to current size (#629).
+  * Tweaked window-raising to top (previous #652) to not stick on top (mintty/wsltty#47, #667).
+  * Reverted capturing of Shift+Ctrl+0 (~#233) to enable language switching (#663).
+  * Capture key after leaving system menu with ESC; insert it and prevent beep.
+
+Configuration
+  * Reverted to stripping CR from most configuration strings (mintty/wsltty#46).
+
 ### 2.7.7 (20 May 2017) ###
 
 Font rendering and display handling

@@ -9,6 +9,7 @@
 #############################################################################
 # Variables intended for setting on the make command line.
 # - RELEASE: release number for packaging
+# - VERSION_SUFFIX: suffix for version information
 # - TARGET: target triple for cross compiling
 #	values: i686-pc-cygwin, x86_64-pc-cygwin, i686-pc-msys, x86_64-pc-msys
 # - DEBUG: define to enable debug build
@@ -59,6 +60,9 @@ else
 endif
 
 CPPFLAGS := -DTARGET=$(TARGET)
+ifdef VERSION_SUFFIX
+CPPFLAGS += -DVERSION_SUFFIX="$(VERSION_SUFFIX)"
+endif
 
 ifndef RELEASE
   svn_rev := $(shell svn info 2>/dev/null | grep ^Revision: | sed 's/Revision: //')
@@ -154,8 +158,9 @@ $(bin): $(bins)
 #############################################################################
 # generate
 
-#WGET=curl -R -O --connect-timeout 55
-WGET=wget -N -t 1 --timeout=55
+#WGET=wget -N -t 1 --timeout=55
+WGET=curl -R -O --connect-timeout 55
+WGET+=-z $@
 
 rgb:	# /usr/share/X11/rgb.txt # X11 color names
 #	255 250 250		snow
@@ -163,12 +168,16 @@ rgb:	# /usr/share/X11/rgb.txt # X11 color names
 #		{255, 250, 250, "snow"},
 	sed -e 's,	, ,g' -e 's/ *\([0-9][0-9]*\) *\([0-9][0-9]*\) *\([0-9][0-9]*\) *\([^ ].*[^ ]\) */	{\1, \2, \3, "\4"},/' /usr/share/X11/rgb.txt > rgb.t
 
-unidata:	combining.t ambiguous.t combdouble.t combined.t bidiclasses.t
+combdata:	combining.t combdouble.t combined.t
+unidata:	$(combdata) ambiguous.t casefold.t bidiclasses.t wide.t
+
+clean-unicode:
+	rm -f $(unidata)
 
 combining.t:	# UnicodeData.txt Blocks.txt
 	uniset +cat=Me +cat=Mn +cat=Cf -00AD +1160-11FF +200B +D7B0-D7C6 +D7CB-D7FB c > combining.t
 
-ambiguous.t:	# UnicodeData.txt Blocks.txt WIDTH-A
+ambiguous.t:	WIDTH-A # UnicodeData.txt Blocks.txt
 	uniset +WIDTH-A -cat=Me -cat=Mn -cat=Cf c > ambiguous.t
 
 combdouble=$(shell sed -e "s,^\([^;]*\);.*Mn;23[34];.*, +\1," -e t -e d UnicodeData.txt )
@@ -178,6 +187,12 @@ combdouble.t:	# UnicodeData.txt Blocks.txt
 
 WIDTH-A:	# UnicodeData.txt Blocks.txt EastAsianWidth.txt
 	sh ./mkwidthA
+
+wide.t:	# UnicodeData.txt Blocks.txt EastAsianWidth.txt
+	sh ./mkwide
+
+casefold.t:	# CaseFolding.txt
+	sh ./mkcasefold > casefold.t
 
 combined.t:	# UnicodeData.txt
 	sh ./mkcombinedt > combined.t
