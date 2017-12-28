@@ -134,19 +134,23 @@ static void
 term_cursor_reset(term_cursor *curs)
 {
   curs->attr = CATTR_DEFAULT;
-  curs->g0123 = 0;
+  curs->gl = 0;
+  curs->gr = 0;
   curs->oem_acs = 0;
   curs->utf = false;
   for (uint i = 0; i < lengthof(curs->csets); i++)
     curs->csets[i] = CSET_ASCII;
   curs->cset_single = CSET_ASCII;
+  curs->decnrc_enabled = false;
 
   curs->autowrap = true;
   curs->rev_wrap = cfg.old_wrapmodes;
+
+  curs->origin = false;
 }
 
 void
-term_reset(void)
+term_reset(bool full)
 {
   if (term.cmd_buf == NULL) {
     term.cmd_buf = newn(char, 128);
@@ -155,40 +159,59 @@ term_reset(void)
 
   term.state = NORMAL;
 
+  // DECSTR attributes and cursor states to be reset
   term_cursor_reset(&term.curs);
   term_cursor_reset(&term.saved_cursors[0]);
   term_cursor_reset(&term.saved_cursors[1]);
   term_update_cs();
+  term.erase_char = basic_erase_char;
 
-  term.backspace_sends_bs = cfg.backspace_sends_bs;
-  term.delete_sends_del = cfg.delete_sends_del;
-  if (term.tabs) {
+  // DECSTR states to be reset (in addition to cursor states)
+  // https://www.vt100.net/docs/vt220-rm/table4-10.html
+  term.cursor_on = true;
+  term.insert = false;
+  term.marg_top = 0;
+  term.marg_bot = term.rows - 1;
+  term.app_cursor_keys = false;
+
+  if (full) {
+    term.vt220_keys = vt220(cfg.term);  // not reset by xterm
+    term.app_keypad = false;  // xterm only with RIS
+    term.app_wheel = false;
+    term.app_control = 0;
+  }
+  term.modify_other_keys = 0;  // xterm resets this
+
+  term.backspace_sends_bs = cfg.backspace_sends_bs;  // xterm only with RIS
+  term.delete_sends_del = cfg.delete_sends_del;  // not reset by xterm
+  if (full && term.tabs) {
     for (int i = 0; i < term.cols; i++)
       term.tabs[i] = (i % 8 == 0);
   }
-  term.rvideo = 0;
-  term.in_vbell = false;
-  term.cursor_on = true;
-  term.echoing = false;
-  term.insert = false;
-  term.shortcut_override = term.escape_sends_fs = term.app_escape_key = false;
-  term.app_control = 0;
-  term.vt220_keys = vt220(cfg.term);
-  term.app_keypad = term.app_cursor_keys = term.app_wheel = false;
-  term.bell_taskbar = cfg.bell_taskbar;
-  term.bell_popup = cfg.bell_popup;
-  term.mouse_mode = MM_NONE;
-  term.mouse_enc = ME_X10;
-  term.wheel_reporting = true;
-  term.modify_other_keys = 0;
-  term.report_focus = 0;
-  term.report_font_changed = 0;
-  term.report_ambig_width = 0;
-  term.bracketed_paste = false;
-  term.show_scrollbar = true;
-  term.wide_indic = false;
-  term.wide_extra = false;
-  term.disable_bidi = false;
+  if (full) {
+    term.rvideo = 0;  // not reset by xterm
+    term.bell_taskbar = cfg.bell_taskbar;  // not reset by xterm
+    term.bell_popup = cfg.bell_popup;  // not reset by xterm
+    term.mouse_mode = MM_NONE;
+    term.mouse_enc = ME_X10;
+    term.locator_by_pixels = false;
+    term.locator_1_enabled = false;
+    term.locator_report_up = false;
+    term.locator_report_dn = false;
+    term.locator_rectangle = false;
+    term.report_focus = 0;  // xterm only with RIS
+    term.report_font_changed = 0;
+    term.report_ambig_width = 0;
+    term.shortcut_override = term.escape_sends_fs = term.app_escape_key = false;
+    term.wheel_reporting = true;
+    term.echoing = false;
+    term.bracketed_paste = false;
+    term.show_scrollbar = true;  // enable_scrollbar not reset by xterm
+    term.wide_indic = false;
+    term.wide_extra = false;
+    term.disable_bidi = false;
+    term.enable_bold_colour = cfg.bold_as_colour;
+  }
 
   term.virtuallines = 0;
   term.altvirtuallines = 0;
@@ -201,28 +224,31 @@ term_reset(void)
   term.sixel_scrolls_right = 0;
   term.sixel_scrolls_left = 0;
 
-  term.marg_top = 0;
-  term.marg_bot = term.rows - 1;
-
   term.cursor_type = -1;
-  term.cursor_blinks = -1;
-  term.blink_is_real = cfg.allow_blinking;
-  term.even_line_highlight_delta = cfg.even_line_highlight_delta;
-  term.erase_char = basic_erase_char;
-  term.on_alt_screen = false;
-  term_print_finish();
-  if (term.lines) {
-    term_switch_screen(1, false);
-    term_erase(false, false, true, true);
-    term_switch_screen(0, false);
-    term_erase(false, false, true, true);
-    term.curs.y = term_last_nonempty_line() + 1;
-    if (term.curs.y == term.rows) {
-      term.curs.y--;
-      term_do_scroll(0, term.rows - 1, 1, true);
+  if (full) {
+    term.cursor_blinks = -1;  // not reset by xterm
+    term.blink_is_real = cfg.allow_blinking;
+	term.even_line_highlight_delta = cfg.even_line_highlight_delta;
+  }
+
+  if (full) {
+    term.selected = false;
+    term.on_alt_screen = false;
+    term_print_finish();
+    if (term.lines) {
+      term_switch_screen(1, false);
+      term_erase(false, false, true, true);
+      term_switch_screen(0, false);
+      term_erase(false, false, true, true);
+      term.curs.y = term_last_nonempty_line() + 1;
+      if (term.curs.y == term.rows) {
+        term.curs.y--;
+        term_do_scroll(0, term.rows - 1, 1, true);
+      }
     }
   }
-  term.selected = false;
+
+  term.in_vbell = false;
   term_schedule_tblink();
   term_schedule_tblink2();
   term_schedule_cblink();
@@ -1130,8 +1156,25 @@ term_paint(void)
           : posle(term.sel_start, scrpos) && poslt(scrpos, term.sel_end)
         );
 
-      if (selected)
-        tattr.attr ^= ATTR_REVERSE;
+      if (selected) {
+        colour bg = win_get_colour(SEL_COLOUR_I);
+        if (bg != (colour)-1) {
+          tattr.truebg = bg;
+          tattr.attr = (tattr.attr & ~ATTR_BGMASK) | (TRUE_COLOUR << ATTR_BGSHIFT);
+
+          colour fg = win_get_colour(SEL_TEXT_COLOUR_I);
+          if (fg == (colour)-1)
+            fg = apply_attr_colour(tattr, ACM_SIMPLE).truefg;
+          static uint mindist = 22222;
+          bool too_close = colour_dist(fg, tattr.truebg) < mindist;
+          if (too_close)
+            fg = brighten(fg, tattr.truebg, false);
+          tattr.truefg = fg;
+          tattr.attr = (tattr.attr & ~ATTR_FGMASK) | (TRUE_COLOUR << ATTR_FGSHIFT);
+        }
+        else
+          tattr.attr ^= ATTR_REVERSE;
+      }
 
       bool flashchar = term.in_vbell &&
                        ((cfg.bell_flash_style & FLASH_FULL)
@@ -1147,34 +1190,7 @@ term_paint(void)
         if (cfg.bell_flash_style & FLASH_REVERSE)
           tattr.attr ^= ATTR_REVERSE;
         else {
-          colour_i bgi = (tattr.attr & ATTR_BGMASK) >> ATTR_BGSHIFT;
-          if (term.rvideo) {
-            if (bgi >= 256)
-              bgi ^= 2;
-          }
-          colour bg = bgi >= TRUE_COLOUR ? tattr.truebg : colours[bgi];
-
-          colour_i fgi = (tattr.attr & ATTR_FGMASK) >> ATTR_FGSHIFT;
-          if (term.rvideo) {
-            if (fgi >= 256)
-              fgi ^= 2;
-          }
-          if (tattr.attr & ATTR_BOLD && cfg.bold_as_colour) {
-            if (fgi < 8) {
-              fgi |= 8;
-            }
-            else if (fgi >= 256 && fgi != TRUE_COLOUR && !cfg.bold_as_font) {
-              fgi |= 1;
-            }
-          }
-          colour fg = fgi >= TRUE_COLOUR ? tattr.truefg : colours[fgi];
-          if (tattr.attr & ATTR_DIM) {
-            fg = (fg & 0xFEFEFEFE) >> 1;
-            if (!cfg.bold_as_colour || fgi >= 256)
-              fg += (bg & 0xFEFEFEFE) >> 1;
-          }
-
-          tattr.truebg = brighten(bg, fg);
+          tattr.truebg = apply_attr_colour(tattr, ACM_VBELL_BG).truebg;
           tattr.attr = (tattr.attr & ~ATTR_BGMASK) | (TRUE_COLOUR << ATTR_BGSHIFT);
         }
       }
@@ -1237,11 +1253,14 @@ term_paint(void)
               )
       {
         if ((tattr.attr & ATTR_WIDE) == 0 && win_char_width(tchar) == 2
+            // do not tamper with graphics
+            && !line->lattr
             // and restrict narrowing to ambiguous width chars
             //&& ambigwide(tchar)
             // but then they will be clipped...
-           )
+           ) {
           tattr.attr |= ATTR_NARROW;
+        }
         else if (tattr.attr & ATTR_WIDE
                  // guard character expanding properly to avoid 
                  // false hits as reported for CJK in #570,
@@ -1252,8 +1271,9 @@ term_paint(void)
                  && win_char_width(tchar) == 1 // && !widerange(tchar)
                  // and reassure to apply this only to ambiguous width chars
                  && ambigwide(tchar)
-                )
+                ) {
           tattr.attr |= ATTR_EXPAND;
+        }
       }
       else if (dispchars[j].attr.attr & ATTR_NARROW)
         tattr.attr |= ATTR_NARROW;
@@ -1577,22 +1597,27 @@ term_paint(void)
 #endif
       cattr attr = icp->attr;
       attr.attr &= ~ATTR_ITALIC;
+      int bglen = icp->len;
+      if (is_high_surrogate(icp->text[0])) {
+        // heuristic distinction: for non-BMP runs:
+        bglen = 1;
+      }
       static wchar * bgspace = 0;
       static int bgspaces = 0;
       // provide a sufficient number of spaces for the background
-      if (icp->len > bgspaces) {
+      if (bglen > bgspaces) {
         if (bgspace)
-          bgspace = renewn(bgspace, icp->len);
+          bgspace = renewn(bgspace, bglen);
         else
-          bgspace = newn(wchar, icp->len);
-        for (int k = bgspaces; k < icp->len; k++)
+          bgspace = newn(wchar, bglen);
+        for (int k = bgspaces; k < bglen; k++)
           bgspace[k] = ' ';
-        bgspaces = icp->len;
+        bgspaces = bglen;
       }
       // background: non-italic
-      win_text(icp->x, i, bgspace, icp->len, attr, icp->textattr, line->lattr, icp->has_rtl);
+      win_text(icp->x, i, bgspace, bglen, attr, icp->textattr, line->lattr | LATTR_DISP1, icp->has_rtl);
       // foreground: transparent and with extended clipping box
-      win_text(icp->x, i, icp->text, icp->len, icp->attr, icp->textattr, line->lattr, icp->has_rtl);
+      win_text(icp->x, i, icp->text, icp->len, icp->attr, icp->textattr, line->lattr | LATTR_DISP2, icp->has_rtl);
       free(icp->text);
       free(icp->textattr);
     }
@@ -1694,7 +1719,7 @@ term_update_cs(void)
   cs_set_mode(
     curs->oem_acs ? CSM_OEM :
     curs->utf ? CSM_UTF8 :
-    curs->csets[curs->g0123] == CSET_OEM ? CSM_OEM : CSM_DEFAULT
+    curs->csets[curs->gl] == CSET_OEM ? CSM_OEM : CSM_DEFAULT
   );
 }
 

@@ -1,5 +1,107 @@
+### 2.8.2 (17 Dec 2017) ###
+
+Window and session control
+  * Transparent session switcher icons (#699).
+  * Avoid blocking when switching to other window which is blocked/suspended.
+  * Prevent initial bogus font zooming (#708).
+  * Prevent accidental text selection on mouse-click window activation (#717).
+  * Terminal Break available in extended context menu (#716).
+  * Terminal Break assignable to Break key (option Key_Break) (#716).
+
+Configuration
+  * Support ~/ prefix for config files in SessionCommands configuration for session launcher.
+  * Support ~/ prefix for logfiles, especially for usage in config files.
+  * With --WSL, let option "-" request login shell.
+  * Icon determined via --WSL shall not override icon taken from shortcut.
+  * Option ShortLongOpts enables single-dash named options on command line (#600, requested by Brian Inglis).
+  * Convenience xterm-style command line options: -fn, -fs, -geometry, -fg, -bg, ...
+
+Character rendering and text attribute handling
+  * Caching ambiguous character width for speed-up (#712).
+  * Revised weight attribute handling, esp. bold display (thanks to avih, #714, #710).
+  * Distinguishing ANSI colours 0..15 from palette colours 0..15 like xterm (~#714).
+  * OSC 6 can enable/disable bold foreground colour (xterm).
+  * Tweaked brightened bold to never decrease the text colour contrast.
+  * Terminal Reset also resets dynamic bold foreground colour.
+  * Fixed non-BMP italic display.
+  * Proper support of true colour attribute for Copy as rich text (thanks to avih, #710).
+  * Colour setting sequence OSC 4 limited to the defined palette range (~#710).
+  * Allowing minor font size deviation of bold font.
+  * Underlay manual underline and overline behind text.
+  * Option BoldAsRainbowSparkles.
+
+Other
+  * Bundling selected theme files with the package (#711).
+  * Support Alt+F2 in same directory (after OSC 7) for WSL.
+  * MINTTY_PID in UserCommands: support to terminate foreground process (#716).
+  * Fixed bug when copying true-colour text as rich text (thanks to avih).
+  * Prevent HOME from being propagated back to Windows applications if called from WSL (mintty/wsltty#76).
+
+### 2.8.1 (31 Oct 2017) ###
+
+Character display
+  * Option Charwidth for built-in Unicode width or ambiguous wide mode (#88, #671).
+
+Window and session control
+  * Virtual Tabs: additional SessionGeomSync levels (#699).
+  * Window icons can optionally be shown in session switcher (#699).
+  * Restore window frame when leaving fullscreen mode via escape sequence.
+  * Tweaked full-screen handling in session switcher and launcher (#600).
+
+Pathname handling
+  * Relative pathname opening considers interactive working directory (~mintty/wsltty#19).
+  * Pathname opening accepts escaped space or embedding quotes (~mintty/wsltty#19).
+  * Relative pathname opening from WSL ignores improper directories (mintty/wsltty#19).
+
+WSL support
+  * Made WSL parameter optional: --WSL.
+  * Option --WSL supports legacy-only installation "Bash on Windows" (mintty/wsltty#64).
+
+### 2.8.0 (22 Oct 2017) ###
+
+Window and session control
+  * Virtual Tabs (#8, #600).
+  * Options SessionCommands, SessionGeomSync, Menu*.
+
+Configuration
+  * New option BellFlashStyle (#676) and more moderate default flash style.
+  * Option -l / --log implies Logging=yes.
+  * `mintheme` command-line theme switcher (#685).
+  * Preventing @cjknarrow locale modifier for WSL (#686).
+  * Fixed Alt+F2 in same dir (with OSC 701) not to expand symbolic links.
+  * Options HighlightBackgroundColour and HighlightForegroundColour.
+
+WSL support
+  * Option --WSL= to run WSL session (mintty/wsltty#52, mintty/wsltty#59, ~mintty/wsltty#60).
+  * Option -~ to start in user's home directory (~mintty/wsltty#3).
+  * Update availability check for wsltty build refers to wsltty version (mintty/wsltty#20).
+  * Fixed rootfs handling in pathname conversion (mintty/wsltty#19).
+
+Terminal control sequences
+  * Fixed status string DECRQSS (#689, #690, mintty/wsltty#55, vim/vim#2003).
+  * DEC Locator mouse mode (facilitating pixel-based position).
+  * DECRQM request mode (to reach VT300 conformance level).
+  * Save/Restore DEC Private Mode (DECSET) values (#267).
+  * DECSTR soft terminal reset.
+  * DSR DEC variant (cursor/printer status).
+  * REP: repeat preceding character.
+  * OSC 50: set/query font.
+  * OSC 17/19/117/119: set/reset selection highlight colours.
+
+Character display
   * Tweaked width expansion of ambiguous-width characters (#680, ~#638, ~#615).
-  * New option BellFlashStyle (#676).
+  * Fixed notes on ambiguous-width handling with Locale parameter (~#686).
+  * Legacy character set support: NRC, DEC Supplemental, GR invocation.
+  * Fixed NRC single shift with attributes.
+  * DEC Tech: tweaked √/Σ segments (hand-drawn), fixed double-size characters.
+  * Fraktur font support (ANSI character attribute 20).
+
+Keyboard and Mouse
+  * Workaround for broken AltGr of Windows on-screen keyboard (#692).
+  * 5-button mouse support.
+
+Localization meanwhile available for (in alphabetical order of locale ids):
+  * German, English (UK/US), Spanish, French, Japanese, Russian, Chinese.
 
 ### 2.7.9 (30 July 2017) ###
 

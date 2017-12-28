@@ -1,7 +1,7 @@
 #ifndef CHILD_H
 #define CHILD_H
 
-#include <sys/termios.h>
+#include <termios.h>
 
 extern bool clone_size_token;
 
@@ -12,6 +12,7 @@ extern bool logging;
 extern void child_proc(void);
 extern void child_kill(bool point_blank);
 extern void child_write(const char *, uint len);
+extern void child_break(void);
 extern void child_printf(const char * fmt, ...) __attribute__((format(printf, 1, 2)));
 extern void child_send(const char *, uint len);
 extern void child_sendw(const wchar *, uint len);
@@ -24,5 +25,6 @@ extern void user_command(int n);
 extern wstring child_conv_path(wstring);
 extern void child_fork(int argc, char * argv[], int moni);
 extern void child_set_fork_dir(char *);
+extern void child_launch(int n, int argc, char * argv[], int moni);
 
 #endif

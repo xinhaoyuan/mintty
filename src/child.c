@@ -16,7 +16,9 @@
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
-#include <sys/cygwin.h>
+#ifdef __CYGWIN__
+#include <sys/cygwin.h>  // cygwin_internal
+#endif
 
 #if CYGWIN_VERSION_API_MINOR >= 93
 #include <pty.h>
@@ -35,7 +37,7 @@ int forkpty(int *, char *, struct termios *, struct winsize *);
 
 bool clone_size_token = true;
 
-string child_dir = null;
+static string child_dir = null;
 
 static pid_t pid;
 static bool killed;
@@ -112,7 +114,15 @@ open_logfile(bool toggling)
       logging = true;
     }
     else {
-      char * log = path_win_w_to_posix(cfg.log);
+      char * log;
+      if (*cfg.log == '~' && cfg.log[1] == '/') {
+        // substitute '~' -> home
+        char * path = cs__wcstombs(&cfg.log[2]);
+        log = asform("%s/%s", home, path);
+        free(path);
+      }
+      else
+        log = path_win_w_to_posix(cfg.log);
 #ifdef debug_logfilename
       printf("<%ls> -> <%s>\n", cfg.log, log);
 #endif
@@ -305,6 +315,14 @@ child_create(char *argv[], struct winsize *winp)
     exit(255);
   }
   else { // Parent process.
+#ifdef __midipix__
+    // This corrupts CR in cygwin
+    struct termios attr;
+    tcgetattr(pty_fd, &attr);
+    cfmakeraw(&attr);
+    tcsetattr(pty_fd, TCSANOW, &attr);
+#endif
+
     fcntl(pty_fd, F_SETFL, O_NONBLOCK);
 
     //child_update_charset();  // could do it here or as above
@@ -519,6 +537,22 @@ child_write(const char *buf, uint len)
     write(pty_fd, buf, len);
 }
 
+/*
+  Simulate a BREAK event.
+ */
+void
+child_break()
+{
+  int gid = tcgetpgrp(pty_fd);
+  if (gid > 1) {
+    struct termios attr;
+    tcgetattr(pty_fd, &attr);
+    if ((attr.c_iflag & (IGNBRK | BRKINT)) == BRKINT) {
+      kill(gid, SIGINT);
+    }
+  }
+}
+
 void
 child_printf(const char *fmt, ...)
 {
@@ -568,6 +602,19 @@ foreground_pid()
 static char *
 foreground_cwd()
 {
+  // if working dir is communicated interactively, use it
+  if (child_dir && *child_dir)
+    return strdup(child_dir);
+
+  // for WSL, do not check foreground process; hope start dir is good
+  if (support_wsl) {
+    char cwd[MAX_PATH];
+    if (getcwd(cwd, sizeof(cwd)))
+      return strdup(cwd);
+    else
+      return 0;
+  }
+
   int fg_pid = foreground_pid();
   if (fg_pid > 0) {
     char proc_cwd[32];
@@ -619,6 +666,15 @@ user_command(int n)
         *sepp = '\0';
 
       if (n == 0) {
+        int fgpid = foreground_pid();
+        if (fgpid) {
+          char * _fgpid = 0;
+          asprintf(&_fgpid, "%d", fgpid);
+          if (_fgpid) {
+            setenv("MINTTY_PID", _fgpid, true);
+            free(_fgpid);
+          }
+        }
         char * fgp = foreground_prog();
         if (fgp) {
           setenv("MINTTY_PROG", fgp, true);
@@ -643,6 +699,9 @@ user_command(int n)
   }
 }
 
+/*
+   used by win_open
+*/
 wstring
 child_conv_path(wstring wpath)
 {
@@ -731,6 +790,14 @@ child_set_fork_dir(char * dir)
 }
 
 void
+setenvi(char * env, int val)
+{
+  static char valbuf[22];  // static to prevent #530
+  sprintf(valbuf, "%d", val);
+  setenv(env, valbuf, true);
+}
+
+void
 child_fork(int argc, char *argv[], int moni)
 {
   void reset_fork_mode()
@@ -769,8 +836,27 @@ child_fork(int argc, char *argv[], int moni)
       close(log_fd);
     close(win_fd);
 
-    if (child_dir && *child_dir)
-      chdir(child_dir);
+    if (child_dir && *child_dir) {
+      string set_dir = child_dir;
+      if (support_wsl) {
+        wchar * wcd = cs__utftowcs(child_dir);
+#ifdef debug_wsl
+        printf("fork wsl <%ls>\n", wcd);
+#endif
+        wcd = dewsl(wcd);
+#ifdef debug_wsl
+        printf("fork wsl <%ls>\n", wcd);
+#endif
+        set_dir = (string)cs__wcstombs(wcd);
+        delete(wcd);
+      }
+
+      chdir(set_dir);
+      setenv("PWD", set_dir, true);
+
+      if (support_wsl)
+        delete(set_dir);
+    }
 
 #ifdef add_child_parameters
     // add child parameters
@@ -801,12 +887,6 @@ child_fork(int argc, char *argv[], int moni)
 #else
     (void) argc;
 #endif
-
-    void setenvi(char * env, int val) {
-      static char valbuf[22];  // static to prevent #530
-      sprintf(valbuf, "%d", val);
-      setenv(env, valbuf, true);
-    }
 
     // provide environment to clone size
     if (clone_size_token) {
@@ -839,3 +919,69 @@ child_fork(int argc, char *argv[], int moni)
   }
   reset_fork_mode();
 }
+
+void
+child_launch(int n, int argc, char * argv[], int moni)
+{
+  if (*cfg.session_commands) {
+    char * cmds = cs__wcstombs(cfg.session_commands);
+    char * cmdp = cmds;
+    char sepch = ';';
+    if ((uchar)*cmdp <= (uchar)' ')
+      sepch = *cmdp++;
+
+    char * paramp;
+    while (n >= 0 && (paramp = strchr(cmdp, ':'))) {
+      paramp++;
+      char * sepp = strchr(paramp, sepch);
+      if (sepp)
+        *sepp = '\0';
+
+      if (n == 0) {
+        if (cfg.geom_sync) {
+          if (win_is_fullscreen) {
+            setenvi("MINTTY_DX", 0);
+            setenvi("MINTTY_DY", 0);
+          }
+          else {
+            RECT r;
+            GetWindowRect(wnd, &r);
+            setenvi("MINTTY_X", r.left);
+            setenvi("MINTTY_Y", r.top);
+            setenvi("MINTTY_DX", r.right - r.left);
+            setenvi("MINTTY_DY", r.bottom - r.top);
+          }
+        }
+        argc = 1;
+        char ** new_argv = newn(char *, argc + 1);
+        new_argv[0] = argv[0];
+        // prepare launch parameters from config string
+        while (*paramp) {
+          while (*paramp == ' ')
+            paramp++;
+          if (*paramp) {
+            new_argv = renewn(new_argv, argc + 2);
+            new_argv[argc] = paramp;
+            argc++;
+            while (*paramp && *paramp != ' ')
+              paramp++;
+            if (*paramp == ' ')
+              *paramp++ = '\0';
+          }
+        }
+        new_argv[argc] = 0;
+        child_fork(argc, new_argv, moni);
+        free(new_argv);
+        break;
+      }
+      n--;
+
+      if (sepp)
+        cmdp = sepp + 1;
+      else
+        break;
+    }
+    free(cmds);
+  }
+}
+

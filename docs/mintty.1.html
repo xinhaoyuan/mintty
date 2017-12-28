@@ -1,5 +1,5 @@
 <!-- Creator     : groff version 1.22.3 -->
-<!-- CreationDate: Fri Jul 28 16:07:34 2017 -->
+<!-- CreationDate: Sat Dec 16 19:45:36 2017 -->
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
 "http://www.w3.org/TR/html4/loose.dtd">
 <html>
@@ -86,7 +86,9 @@ shell.</p>
 <p style="margin-left:11%; margin-top: 1em">The standard
 GNU option formats are accepted, with single dashes
 introducing short options and double dashes introducing long
-options. <b><br>
+options. <br>
+Note that setting <b>ShortLongOpts</b> enables single-dash
+long options. <b><br>
 -c</b>, <b>--config</b> <i>FILENAME</i></p>
 
 <p style="margin-left:22%;">Read settings from the
@@ -156,7 +158,7 @@ with an error, i.e. with a non-zero exit status or due to a
 signal indicating a runtime error.</p>
 
 <p style="margin-left:11%;"><b>-i</b>, <b>--icon</b>
-<i>FILE</i>[<b>,</b><i>INDEX</i>]</p>
+<i>FILE</i>[<b>,</b><i>INDEX</i><b>]</b></p>
 
 <p style="margin-left:22%;">Load the window icon from an
 executable, DLL, or icon file. The optional comma-separated
@@ -179,11 +181,16 @@ leading Windows environment variable (like
 
 <p style="margin-left:22%;">Copy all output into the
 specified log file, or standard output if a dash is given
-instead of a file name. If FILE contains <b>%d</b> it will
-be substituted with the process ID. See description of
-equivalent option &quot;Log file&quot; (Log=) below for
-further formatting options and hints. Note that logging can
-be toggled from the extended context menu.</p>
+instead of a file name. (Implies <b>-o Logging=yes</b>.)</p>
+
+<p style="margin-left:22%; margin-top: 1em">If FILE
+contains <b>%d</b> it will be substituted with the process
+ID. See description of equivalent option &quot;Log
+file&quot; (Log=) below for further formatting options and
+hints.</p>
+
+<p style="margin-left:22%; margin-top: 1em">Note that
+logging can be toggled from the extended context menu.</p>
 
 <p style="margin-left:11%;"><b>--logfile</b>
 <i>FILE</i>|<b>-</b></p>
@@ -239,18 +246,16 @@ window, see the description of Alt+F2.</p>
 
 <p style="margin-left:22%;">Set the default size of the
 window in character columns and rows. (The xterm-like syntax
-<i>COLS</i><b>x</b><i>ROWS</i> is accepted too.) Instead of
-coordinates, &quot;maxwidth&quot; or &quot;maxheight&quot;
-can be specified; this can be combined with another
-parameter <b>-s</b> for the other dimension. The dimension
-for which &quot;max&quot; is applied is ignored in further
-<b>-s</b> or <b>-p</b> parameters. For example, <b>mintty -s
-maxwidth -p 0,0 -s 0,10</b> will start a window at full
-screen width, positioned at the top of the screen, with 10
-lines.</p>
+<i>COLS</i><b>x</b><i>ROWS</i> <b>is accepted too.) Instead
+of coordinates, &quot;maxwidth&quot; or
+&quot;maxheight&quot; can be specified; this can be combined
+with another parameter -s for the other dimension. The
+dimension for which &quot;max&quot; is applied is ignored in
+further -s or -p parameters. For example, mintty -s maxwidth
+-p 0,0 -s 0,10 will start a window at full screen width,
+positioned at the top of the screen, with 10 lines.</b></p>
 
-<p style="margin-left:11%;"><b>--nobidi</b>,
-<b>--nortl</b></p>
+<p style="margin-left:11%;"><b>--nobidi, --nortl</b></p>
 
 <p style="margin-left:22%;">Disable bidi display
 (right-to-left support). Same as <b>-o Bidi=0</b>.</p>
@@ -374,7 +379,27 @@ file or folder into mintty, it will be pasted using the
 Linux path name. <br>
 &ndash; When Ctrl+clicking a file name, it will be
 interpreted in the Linux namespace and converted before
-opening in Windows.</p>
+opening in Windows. <br>
+&ndash; Options DropCommands and setting MINTTY_PROG for
+UserCommands are disabled. <br>
+&ndash; The working directory of the current foreground
+process (for click-opening pathnames) cannot be detected.
+<br>
+&ndash; Locale modification (@cjk...) is disabled.</p>
+
+<p style="margin-left:11%;"><b>--WSL</b> <i>WSL
+DISTRIBUTION NAME</i></p>
+
+<p style="margin-left:22%;">Run a WSL session, setting
+other parameters as appropriate and involving the
+<i>wslbridge</i> gateway implicitly (which should be
+installed in /bin for this purpose). If the distribution
+name is empty, the default WSL installation is run;
+otherwise, it refers to the installed WSL packages as listed
+by the Windows tool <b>wslconfig /l</b>. Implies <b>--wsl -o
+Locale=C -o Charset=UTF-8</b>, <b>--rootfs=</b>..., and
+<b>--icon=</b>... if a respective icon file exists for the
+distribution.</p>
 
 <p style="margin-left:11%;"><b>--rootfs</b>
 <i>ROOTFOLDER</i></p>
@@ -382,6 +407,22 @@ opening in Windows.</p>
 <p style="margin-left:22%;">Provide the root filesystem
 folder to adjust path conversion properly for the respective
 WSL installation.</p>
+
+<table width="100%" border="0" rules="none" frame="void"
+       cellspacing="0" cellpadding="0">
+<tr valign="top" align="left">
+<td width="11%"></td>
+<td width="3%">
+
+
+<p><b>-~</b></p></td>
+<td width="8%"></td>
+<td width="78%">
+
+
+<p>Start in the user&rsquo;s home directory. Affects also
+WSL sessions.</p></td></tr>
+</table>
 
 <p style="margin-left:11%;"><b>-H</b>, <b>--help</b></p>
 
@@ -392,6 +433,127 @@ and exit.</p>
 
 <p style="margin-left:22%;">Print version information and
 exit.</p>
+
+<p style="margin-left:11%;">A number of xterm-style
+convenience options are also available:</p>
+
+<table width="100%" border="0" rules="none" frame="void"
+       cellspacing="0" cellpadding="0">
+<tr valign="top" align="left">
+<td width="11%"></td>
+<td width="6%">
+
+
+<p><b>--fg</b></p></td>
+<td width="5%"></td>
+<td width="33%">
+
+
+<p>Sets ForegroundColour.</p></td>
+<td width="45%">
+</td></tr>
+<tr valign="top" align="left">
+<td width="11%"></td>
+<td width="6%">
+
+
+<p><b>--bg</b></p></td>
+<td width="5%"></td>
+<td width="33%">
+
+
+<p>Sets BackgroundColour.</p></td>
+<td width="45%">
+</td></tr>
+<tr valign="top" align="left">
+<td width="11%"></td>
+<td width="6%">
+
+
+<p><b>--cr</b></p></td>
+<td width="5%"></td>
+<td width="33%">
+
+
+<p>Sets CursorColour.</p></td>
+<td width="45%">
+</td></tr>
+</table>
+
+<p style="margin-left:11%;"><b>--selfg</b></p>
+
+<p style="margin-left:22%;">Sets
+HighlightForegroundColour.</p>
+
+<p style="margin-left:11%;"><b>--selbg</b></p>
+
+<p style="margin-left:22%;">Sets
+HighlightBackgroundColour.</p>
+
+<p style="margin-left:11%;"><b>--fn</b>, <b>--font</b></p>
+
+<p style="margin-left:22%;">Sets Font.</p>
+
+<table width="100%" border="0" rules="none" frame="void"
+       cellspacing="0" cellpadding="0">
+<tr valign="top" align="left">
+<td width="11%"></td>
+<td width="6%">
+
+
+<p><b>--fs</b></p></td>
+<td width="5%"></td>
+<td width="21%">
+
+
+<p>Sets FontSize.</p></td>
+<td width="57%">
+</td></tr>
+</table>
+
+<p style="margin-left:11%;"><b>--geometry</b>
+<i>COLS</i><b>x</b><i>ROWS</i><b>[[-+]</b><i>X</i><b>[-+]</b><i>Y</i><b>][</b><i>@</i><b>MONITOR]</b></p>
+
+<p style="margin-left:22%;">Sets size and position,
+extending xterm syntax by an optional monitor number.</p>
+
+<table width="100%" border="0" rules="none" frame="void"
+       cellspacing="0" cellpadding="0">
+<tr valign="top" align="left">
+<td width="11%"></td>
+<td width="6%">
+
+
+<p><b>--en</b></p></td>
+<td width="5%"></td>
+<td width="78%">
+
+
+<p>Sets Charset within the current locale.</p></td></tr>
+<tr valign="top" align="left">
+<td width="11%"></td>
+<td width="6%">
+
+
+<p><b>--lf</b></p></td>
+<td width="5%"></td>
+<td width="78%">
+
+
+<p>Sets Log, the log file name. Use <b>-l</b> to both set
+the log file name and enable loggin.</p></td></tr>
+<tr valign="top" align="left">
+<td width="11%"></td>
+<td width="6%">
+
+
+<p><b>--sl</b></p></td>
+<td width="5%"></td>
+<td width="78%">
+
+
+<p>Sets ScrollbackLines.</p></td></tr>
+</table>
 
 <h2>USAGE
 <a name="USAGE"></a>
@@ -484,10 +646,16 @@ Files, directories, URLs and web addresses beginning with
 while left-clicking on them (or double-clicking, if and as
 enabled by option OpeningClicks), or by selecting them and
 choosing the <b>Open</b> command from the context menu.
-Please note that a relative file or directory path is
-interpreted as relative to the current working directory of
-the terminal foreground process if that can be
-determined.</p>
+Embedded spaces are considered if escaped with a backslash;
+for selected pathnames, also embedding quote marks are
+considered.</p>
+
+<p style="margin-left:11%; margin-top: 1em">A relative
+pathname is interpreted as relative to the current working
+directory of the terminal foreground process if that can be
+determined, overridden by the working directory
+interactively communicated by the respective control
+sequence.</p>
 
 <p style="margin-left:11%; margin-top: 1em"><b>Font
 zoom</b> <br>
@@ -606,6 +774,20 @@ The <b>Ctrl+Tab</b> and <b>Ctrl+Shift+Tab</b> shortcuts can
 be used to switch between mintty windows. Minimised windows
 are skipped.</p>
 
+<p style="margin-left:11%; margin-top: 1em"><b>Virtual
+Tabs</b> <br>
+The Virtual Tabs feature provides a list of all running
+mintty sessions (session switcher) as well as configurable
+launch parameters for new sessions (session launcher). By
+default, the list is shown in the extended context menu
+(Ctrl+right-click), the mouse button 5 menu, and the menus
+opened with the Ctrl+Menu key and the Ctrl+Shift+I shortcut
+(if enabled). (Menu contents for the various context menu
+invocations is configurable.) For configuration, see
+settings <b>SessionCommands</b>, <b>Menu*</b>, and
+<b>SessionGeomSync</b>. Distinct sets of sessions can be set
+up with the setting <b>-o Class=...</b>.</p>
+
 <p style="margin-left:11%; margin-top: 1em"><b>Closing a
 session</b> <br>
 Clicking the window&rsquo;s close button, pressing
@@ -619,6 +801,24 @@ be forced to terminate by sending a <i>SIGKILL</i> signal
 instead. This can be done by holding down <b>Shift</b> when
 using the close button, shortcut or menu item.</p>
 
+<p style="margin-left:11%; margin-top: 1em"><b>Terminal
+Break</b> <br>
+A traditional BRK event on a serial terminal connection can
+be simulated. The Break is available in the extended context
+menu and it can be mapped to the Break key by configuration.
+Note, however, that a BRK can be ignored by configuration of
+the terminal device (pty) or can be ignored by an
+application by catching the SIGINT signal. For more forceful
+interruption of the terminal client application, see the
+Tips wiki page
+<i>https://github.com/mintty/mintty/wiki/Tips#terminating-the-foreground-program</i>.</p>
+
+<p style="margin-left:11%; margin-top: 1em">Note that
+Ctrl+C is often configured to raise a SIGINT signal.
+However, this is not a terminal feature and can also be
+reconfigured (stty), so in fact BRK and Ctrl+C are
+inherently different functions.</p>
+
 <p style="margin-left:11%; margin-top: 1em"><b>Mouse
 tracking</b> <br>
 When an application activates mouse tracking, mouse events
@@ -628,6 +828,10 @@ changing from an <b>I</b> shape to an arrow. Holding down
 <b>Shift</b> overrides mouse tracking mode and sends mouse
 events to the window instead, so that e.g. text can be
 selected and the context menu can be accessed.</p>
+
+<p style="margin-left:11%; margin-top: 1em">Mintty supports
+5-button mice, handling mouse buttons 4 / 5 like
+Alt+click-left / right in most mouse modes.</p>
 
 <p style="margin-left:11%; margin-top: 1em"><b>Alt
 codes</b> <br>
@@ -650,8 +854,8 @@ other Unicode encodings such as GB18030, the entered code is
 interpreted as a Unicode codepoint and encoded accordingly
 before it is sent. For other encodings, the entered code is
 sent as is. If it doesn&rsquo;t fit into one byte, it is
-sent as multiple bytes, with the the most significant
-non-zero byte first.</p>
+sent as multiple bytes, with the most significant non-zero
+byte first.</p>
 
 
 <p style="margin-left:11%; margin-top: 1em"><b>Shortcuts</b>
@@ -867,9 +1071,10 @@ configuration value is not valid UTF-8, it is interpreted in
 the system ANSI encoding. (This does not apply to the same
 configuration settings when given on the command-line.) <br>
 Unicode-enabled settings: BellFile, ThemeFile, Title,
-ExitTitle, Icon, Log, Language, Font, Printer, Answerback,
-SixelClipChars, Class, AppID, AppName, AppLaunchCmd,
-DropCommands, UserCommands.</p>
+ExitTitle, Icon, Log, Language, Font, Font1..., FontSample,
+Printer, Answerback, SixelClipChars, Class, AppID, AppName,
+AppLaunchCmd, DropCommands, UserCommands,
+SessionCommands.</p>
 
 <p style="margin-left:11%; margin-top: 1em">Be careful when
 running multiple instances of mintty. If options are saved
@@ -922,19 +1127,23 @@ X11 color names are supported. <br>
 (UnderlineColour=-1)</p>
 
 <p style="margin-left:22%; margin-top: 1em">&ndash;
-<b>Theme</b> (ThemeFile=): The popup offers theme files as
-stored in a resource subdirectory <i>themes</i> for
+<b>Theme</b> (ThemeFile=): The popup menu offers theme files
+as stored in a resource subdirectory <i>themes</i> for
 selection as a colour scheme. The option can also be set to
 a filename (like D:/.../solarized-light.minttyrc).</p>
 
 <p style="margin-left:22%; margin-top: 1em">The field can
 also be used as a drag-and-drop target for colour schemes
 downloaded from the Color Scheme Configurator, or for theme
-files from the web (note that the program <b>curl</b> needs
-to be installed for the latter option). See the Tips wiki
-page
+files from the web. See the Tips wiki page
 <i>https://github.com/mintty/mintty/wiki/Tips#using-colour-schemes-themes</i>
 about this mechanism.</p>
+
+<p style="margin-left:22%; margin-top: 1em">Note: Mintty
+also provides the command-line script <b>mintheme</b> which
+can display the themes available in the mintty configuration
+directories or activate one of them in the current mintty
+window.</p>
 
 <p style="margin-left:11%;"><b>Transparency</b>
 (Transparency=off)</p>
@@ -1023,16 +1232,20 @@ a font family has no bold weight but boldness was requested,
 mintty does not adhere to this scheme but enforces bold font
 selection; however, in this case the bold attribute may not
 be effective. <br>
-&ndash; <b>Alternative fonts</b> (Font1= ... Font9= ,
-Font1Weight= ... Font9Weight=): With these settings, up to 9
-alternative fonts (and optionally weights) can be configured
-which would then be selectable via ECMA-48 SGR character
-attributes (see Tips wiki page
+&ndash; <b>Alternative fonts</b> (Font1= ... Font10= ,
+Font1Weight= ... Font10Weight=): With these settings, up to
+10 alternative fonts (and optionally weights) can be
+configured which would then be selectable via ECMA-48 SGR
+character attributes (see Tips wiki page
 <i>https://github.com/mintty/mintty/wiki/Tips#text-attributes-and-rendering</i>).
-<i>Note:</i> The control sequence for alternative font 1
-overrides the identical control sequence to select the VGA
-character set, which would thus be disabled. Configuring
-alternative font 1 is therefore discouraged. <br>
+<i>Note:</i> Font10 has a special preference property; if it
+is not configured, mintty will try to activate it anyway,
+looking for an installed Fraktur or Blackletter font
+(ECMA-48 &quot;Gothic&quot;). <i>Note:</i> The control
+sequence for alternative font 1 overrides the identical
+control sequence to select the VGA character set, which
+would thus be disabled. Configuring alternative font 1 is
+therefore discouraged. <br>
 &ndash; <b>Font sample text</b> (FontSample=): This setting
 overrides the text for the &quot;Sample&quot; box in the
 Font chooser dialog. <br>
@@ -1065,35 +1278,87 @@ affected by Windows-generated underline modes.</p>
 <p style="margin-left:11%;"><b>Show bold as font</b>
 (BoldAsFont=no)</p>
 
-<p style="margin-left:22%;">When this option is enabled,
-the ANSI bold (or &rsquo;intense&rsquo;) text attribute is
-shown as a bold-style font. Where a bold variant of the
-selected font that has the same width as the base font is
-available, that is used; otherwise, the bolding is simulated
-by rendering the text twice with a one-pixel offset.</p>
+<p style="margin-left:22%;">This option sets the preferred
+rendering of the ANSI bold (or &rsquo;intense&rsquo;) text
+attribute to use a bold-style font; where a suitable bold
+variant of the selected font (that has the same width as the
+base font) is available, that is used; otherwise, the
+bolding is simulated by rendering the text twice with a
+one-pixel offset (&rsquo;overstrike&rsquo;). <br>
+(Corresponds roughly to the xterm resource
+<b>allowBoldFonts</b>.)</p>
+
+<p style="margin-left:22%; margin-top: 1em">This option is
+not fully independent. If both BoldAsFont and BoldAsColour
+are true, both display methods are combined where
+applicable. If both are false, xterm default behaviour is
+applied. See <b>Bold Behaviour</b> for an overview.</p>
 
 <p style="margin-left:11%;"><b>Show bold as colour</b>
 (BoldAsColour=yes)</p>
 
-<p style="margin-left:22%;">By default, text with the ANSI
-bold attribute set is displayed with a different colour,
-usually with increased brightness (mapping ANSI colours 0..7
-to their bright variants 8..15). This can be disabled
-here.</p>
+<p style="margin-left:22%;">This option sets the preferred
+rendering of the ANSI bold (or &rsquo;intense&rsquo;) text
+attribute to use a different colour, usually with increased
+brightness; it maps ANSI colours 0..7 (unless selected with
+the palette colour escape sequences) to their bright
+variants 8..15, and the default colour to a brightened
+variant. Rendering of other colours is not affected. <br>
+(Corresponds largely to the xterm resource
+<b>boldColors</b>.)</p>
 
-<p style="margin-left:22%; margin-top: 1em">Note that when
-<b>BoldAsFont</b> is enabled, only bold text in one of the
-eight ANSI colours has its colour changed, i.e. bold text
-without an explicitly specified colour is shown with a bold
-font only. This matches <b>xterm</b> behaviour. Note also
-setting <b>BoldColour</b>.</p>
+<p style="margin-left:22%; margin-top: 1em">This option is
+not fully independent. If both BoldAsColour and BoldAsFont
+are true, both display methods are combined where
+applicable. If both are false, xterm default behaviour is
+applied. See <b>Bold Behaviour</b> for an overview.</p>
 
-<p style="margin-left:22%; margin-top: 1em">This option
-also controls how the &rsquo;half-bright&rsquo; (or
-&rsquo;dim&rsquo;) text attribute is displayed: if it is on,
-half-bright text is shown with halved foreground colour
-brightness; otherwise, it is shown by blending the
-foreground colour with the background colour.</p>
+<p style="margin-left:11%;"><b>Bold substitution colour</b>
+(BoldColour=)</p>
+
+<p style="margin-left:22%;">This hidden option sets a
+colour to be used to render the bold attribute of text that
+would otherwise have the default foreground colour,
+overriding other bold rendering; it is only applied if
+option BoldAsColour is true. The bold substitution colour
+can also be set, modified, enabled or disabled with the
+respective xterm OSC control sequences. <br>
+(Corresponds to the xterm resources <b>colorBD</b> and
+<b>colorBDMode</b>.)</p>
+
+<p style="margin-left:11%;"><b>Bold as special
+background</b> (BoldAsRainbowSparkles=false)</p>
+
+<p style="margin-left:22%;">This hidden option displays the
+bold attribute by underlaying special background. Overrides
+BoldAsFont. This is a fun option, use at your own risk.</p>
+
+<p style="margin-left:11%;"><b>Note: Bold Behaviour</b></p>
+
+<p style="margin-left:22%;">When the bold text attribute is
+set, mintty distinguishes three classes of colours: <br>
+&ndash; <b>Default</b>: The default terminal foreground
+colour. <br>
+&ndash; <b>ANSI-8</b>: The ANSI colours 0..7 (used for SGR
+30..37). <br>
+&ndash; <b>Extended</b>: True colours and the rest of the
+256 colours palette.</p>
+
+<p style="margin-left:22%; margin-top: 1em">The colour
+classes are affected by the bold text attribute as follows:
+<br>
+&ndash; Extended colours are always shown with a boldened
+font only. <br>
+&ndash; When both BoldAsFont and BoldAsColour are disabled,
+mintty engages a mode similar to the xterm default
+behaviour: ANSI-8 is displayed with a bold font and a
+different colour, Default colour only uses a bold font. <br>
+&ndash; Otherwise, Default and ANSI-8 colours are affected
+by BoldAsFont and BoldAsColour independently, such that it
+is possible to choose only bold font, or only different
+colour, or both. <br>
+&ndash; Note that Default bold display can be overridden by
+the BoldColour mode.</p>
 
 <p style="margin-left:11%;"><b>Allow blinking</b>
 (AllowBlinking=no)</p>
@@ -1152,6 +1417,21 @@ This means, while not strictly necessary, that also locale
 variables unrelated to the terminal character set (e.g.
 LC_MESSAGES) are cleared to avoid confusion.</p>
 
+<p style="margin-left:22%; margin-top: 1em"><i>Note:</i> If
+the locale option is set, mintty further checks whether the
+locale is a &quot;wide&quot; locale (i.e. ambiguous-width
+characters are wide in the locale) but the selected font is
+actually &quot;ambiguous-narrow&quot; (i.e. ambiguous-width
+characters are narrow in the font) in which case it appends
+the &quot;@cjknarrow&quot; locale modifier.</p>
+
+<p style="margin-left:22%; margin-top: 1em">By default, the
+selected locale also determines the character width
+assumptions used for screen rendering. For exceptions, see
+the setting <b>Charwidth</b> and the control sequences for
+special wide character handling
+(<i>https://github.com/mintty/mintty/wiki/CtrlSeqs#wide-characters</i>).</p>
+
 <p style="margin-left:11%;"><b>Character set</b>
 (Charset=)</p>
 
@@ -1187,15 +1467,15 @@ Backarrow sends ^H</b> (BackspaceSendsBS=no)</p>
 <b>^?</b> (ASCII DEL) as the keycode for the backspace key.
 If this option is enabled, <b>^H</b> is sent instead. This
 also changes the <b>Ctrl+Backspace</b> code from <b>^_</b>
-to <b>^?</b>. (Corresponds to the xterm resource
-<b>backarrowKey</b>.)</p>
+to <b>^?</b>. <br>
+(Corresponds to the xterm resource <b>backarrowKey</b>.)</p>
 
 <p style="margin-left:11%;"><b>Delete sends
 DEL</b>(DeleteSendsDEL=no)</p>
 
 <p style="margin-left:22%;">By default, mintty sends VT100
 Remove as the keycode for the keypad Del key. If this option
-is enabled, <b>^?</b> (ASCII DEL) is sent instead.
+is enabled, <b>^?</b> (ASCII DEL) is sent instead. <br>
 (Corresponds to the xterm resource <b>deleteIsDEL</b>.)</p>
 
 <p style="margin-left:11%;"><b>Ctrl+LeftAlt is AltGr</b>
@@ -1222,6 +1502,14 @@ ticking the checkbox here.</p>
 <p style="margin-left:22%; margin-top: 1em">The setting
 makes no difference for keys without AltGr key bindings
 (e.g. any key on the standard US layout).</p>
+
+<p style="margin-left:11%;"><b>Old method of AltGr
+detection</b> (OldAltGrDetection=no)</p>
+
+<p style="margin-left:22%;">Setting this hidden option
+would disable a workaround for an incompatibility in the
+Windows on-screen keyboard, just in case is has any side
+effects.</p>
 
 <p style="margin-left:11%;"><b>Copy and Paste shortcuts</b>
 (ClipShortcuts=yes)</p>
@@ -1419,8 +1707,10 @@ ColSpacing=1 can avoid boldened glyphs being clipped.</p>
 
 <p style="margin-left:22%;">Window padding; margin between
 text and window border. The effective value is limited by
-the character cell width (scaling with font zooming). A
-negative value indicates that always the character cell
+the character cell width (scaling with font zooming). <br>
+(Corresponds to the xterm resource <b>internalBorder</b>.)
+<br>
+A negative value indicates that always the character cell
 width shall be used, without fixed limit.</p>
 
 <p style="margin-left:11%;"><b>Scrollback lines</b>
@@ -1586,21 +1876,39 @@ sound</b> (BellType=1): Preferred system sound, values:</p>
 5</b> : Asterisk</p>
 
 <p style="margin-left:22%;">&ndash; <b>Wave</b>
-(BellFile=): The popup offers wave files as stored in a
+(BellFile=): The popup menu offers wave files as stored in a
 resource subdirectory <i>sounds</i> for selection. The
 option can also be set to a filename (like
-D:/.../soundfile.wav). This setting overrides the Bell
-system sound except No Beep. <br>
+D:/.../soundfile.wav); this can be achieved also by
+drag-and-drop from a local file. This setting overrides the
+Bell system sound except No Beep. <br>
 &ndash; <b>Play</b>: The button plays the selected sound for
 testing. The sound is also played when it is changed. <br>
-&ndash; <b>Flash</b> (BellFlash=no): Briefly invert the
-foreground and background colours. (Corresponds to the xterm
-resource <b>visualBell</b>.) <br>
-&ndash; <b>Highlight in taskbar</b> (BellTaskbar=yes):
-Change the colour of mintty&rsquo;s taskbar entry if the
-mintty window is not active. (Corresponds to the xterm
-resource <b>bellIsUrgent</b>, switchable by an escape
-sequence.) <br>
+&ndash; <b>Flash</b> (BellFlash=no): Briefly flash the
+terminal or window. (Corresponds to the xterm resource
+<b>visualBell</b>.) <br>
+&ndash; <b>Flash style</b> (BellFlashStyle=4): Tune the
+style to flash the terminal or window; this is a bitmask
+composed of the following values:</p>
+
+<p style="margin-left:32%;"><b>1</b> : Flash the window
+frame (using Windows) <b><br>
+2</b> : Flash the outer character cells; not recommended;
+<br>
+will look ragged with double-width characters <b><br>
+4</b> : Flash the whole terminal pane (all character cells)
+<b><br>
+8</b> : cell flash briefly inverts foreground and
+background; <br>
+default is to moderately brighten the background colour
+<b><br>
+12</b> : (combining 4 and 8) classic bright full flash</p>
+
+<p style="margin-left:22%;">&ndash; <b>Highlight in
+taskbar</b> (BellTaskbar=yes): Change the colour of
+mintty&rsquo;s taskbar entry if the mintty window is not
+active. (Corresponds to the xterm resource
+<b>bellIsUrgent</b>, switchable by an escape sequence.) <br>
 &ndash; <b>Popup on bell</b> (BellPopup=no): Popup mintty to
 desktop foreground. (Corresponds to the xterm resource
 <b>popOnBell</b>, switchable by an escape sequence.)</p>
@@ -1659,21 +1967,22 @@ signal indicating a runtime error. <br>
 <p style="margin-left:11%;"><b>Window icon</b> (Icon=)</p>
 
 <p style="margin-left:22%;">The <b>Icon</b> setting with
-format <i>FILE</i>[<b>,</b><i>INDEX</i>] allows to load the
-window icon from an executable, DLL, or icon file. The
+format <i>FILE</i>[<b>,</b><i>INDEX</i><b>] allows to load
+the window icon from an executable, DLL, or icon file. The
 optional comma-separated index can be used to select a
-particular icon in a file with multiple icons.</p>
+particular icon in a file with multiple icons.</b></p>
 
-<p style="margin-left:22%; margin-top: 1em">If the setting
-is empty, as it is by default, mintty&rsquo;s program icon
-is used, unless mintty was invoked from a desktop shortcut
-in which case it uses the shortcut icon.</p>
+<p style="margin-left:22%; margin-top: 1em"><b>If the
+setting is empty, as it is by default, mintty&rsquo;s
+program icon is used, unless mintty was invoked from a
+desktop shortcut in which case it uses the shortcut
+icon.</b></p>
 
-<p style="margin-left:22%; margin-top: 1em">For interaction
-problems of icon, shortcut, and the Windows taskbar, see the
-note for the -i option above.</p>
+<p style="margin-left:22%; margin-top: 1em"><b>For
+interaction problems of icon, shortcut, and the Windows
+taskbar, see the note for the -i option above.</b></p>
 
-<p style="margin-left:11%;"><b>Log file</b> (Log=)</p>
+<p style="margin-left:11%;"><b>Log file (Log=)</b></p>
 
 <p style="margin-left:22%;">The <b>Log</b> setting can be
 used to specify a log file that all output is copied into.
@@ -1755,7 +2064,28 @@ The following settings appear neither in the options dialog
 nor as command line options, which means they can only be
 set in config files or using the <b>--option</b> or
 <b>-o</b> command line option. <b><br>
-Bidirectional rendering</b> (Bidi=2)</p>
+Single-dash long options</b> (ShortLongOpts=false)</p>
+
+<p style="margin-left:22%;">This settings enables names
+options (&quot;long options&quot;) on the command line to be
+given with only one dash rather than a double dash.</p>
+
+<p style="margin-left:11%;"><b>Character width handling</b>
+(Charwidth=locale)</p>
+
+<p style="margin-left:22%;">With this option,
+locale-determined character width properties can be
+overridden: <br>
+&ndash; <b>locale</b> Use locale width properties. <br>
+&ndash; <b>unicode</b> Use built-in width properties, likely
+based on a more up-to-date Unicode version. (Corresponds to
+the xterm resource <b>mkWidth</b>.) <br>
+&ndash; <b>ambig-wide</b> Use built-in width properties,
+with ambiguous-width characters assumed to be wide.
+(Corresponds to the xterm resource <b>cjkWidth</b>.)</p>
+
+<p style="margin-left:11%;"><b>Bidirectional rendering</b>
+(Bidi=2)</p>
 
 <p style="margin-left:22%;">With this option, bidi
 rendering support can be disabled conditionally or
@@ -1881,7 +2211,8 @@ some generic Alt or Shift modification is applied. For
 <b>Pause</b> and <b>Break</b>, control characters are the
 default values, they can be cleared with an empty
 assignment. For empty values, the default layout of the
-keyboard is applied. <br>
+keyboard is applied. The <b>Break</b> key can also be
+assigned the traditional terminal line Break function. <br>
 &ndash; <b>Key_Pause</b>=^] <i>(Ctrl+])</i> <br>
 &ndash; <b>Key_Break</b>=^\ <i>(Ctrl+\)</i> <br>
 &ndash; <b>Key_Menu</b>= <br>
@@ -1889,9 +2220,11 @@ keyboard is applied. <br>
 &ndash; <b>Key_PrintScreen</b>=</p>
 
 <p style="margin-left:22%; margin-top: 1em">Examples: <br>
-Key_Break=2 would turn the Break key into an Insert key <br>
 Key_Menu=29 would make the Menu key send the same escape
-sequence as in xterm</p>
+sequence as in xterm <br>
+Key_Break=2 would turn the Break key into an Insert key <br>
+Key_Break=_BRK_ would assign the simulated terminal line
+Break function</p>
 
 <p style="margin-left:11%;"><b>Use system colours</b>
 (UseSystemColours=no)</p>
@@ -1947,26 +2280,27 @@ are supported. <br>
 <p style="margin-left:22%;">This setting is not intended
 for manual configuration. It can store a colour scheme as
 downloaded from the Color Scheme Configurator or from a
-theme file on the web via drag-and-drop to the Options menu.
-After the colour scheme is stored to a colour scheme file,
-this setting is not used anymore.</p>
+theme file on the web via drag-and-drop to the Theme of the
+Options menu. After the colour scheme is stored to a colour
+scheme file, this setting is not used anymore.</p>
 
 <p style="margin-left:22%; margin-top: 1em">See the Tips
 wiki page
 <i>https://github.com/mintty/mintty/wiki/Tips#using-colour-schemes-themes</i>
 about this mechanism.</p>
 
-<p style="margin-left:11%;"><b>Bold substitution colour</b>
-(BoldColour=)</p>
+<p style="margin-left:11%;"><b>Selection highlight
+colours</b></p>
 
-<p style="margin-left:22%;">The colour to be used instead
-of the bold attribute can be configured. The bold
-substitution colour is only applied if option BoldAsFont is
-false and option BoldAsColour is true. The default is
-<i>none</i>, meaning that a brightened colour derived from
-the effective foreground colour is used. The bold
-substitution colour can also be set and reset with the
-respective xterm OSC control sequences.</p>
+<p style="margin-left:22%;">The highlighting colours of
+selected text can be configured. <br>
+&ndash; <b>HighlightBackgroundColour</b>= selected text
+background (corresponds to the xterm resource
+<b>highlightColor</b>) <br>
+&ndash; <b>HighlightForegroundColour</b>= selected text
+colour (corresponds to the xterm resource
+<b>highlightTextColor</b> with <b>highlightColorMode</b>);
+only effective if both are configured</p>
 
 <p style="margin-left:11%;"><b>Scrollback search
 colours</b></p>
@@ -2132,6 +2466,8 @@ starting at the current scroll position <br>
 MINTTY_OUTPUT for the output of the previous command, if
 prompt lines are marked <br>
 MINTTY_TITLE for the window title text <br>
+MINTTY_PID for the program ID of the terminal foreground
+process <br>
 MINTTY_PROG for the program name of the terminal foreground
 process <br>
 MINTTY_CWD for the current working directory of the
@@ -2177,6 +2513,87 @@ text.</p>
 Control characters need to be embedded verbatim; there is no
 escape notation.</p>
 
+<p style="margin-left:11%;"><b>Session launcher
+commands</b> (SessionCommands=)</p>
+
+<p style="margin-left:22%;">This setting lists mintty
+invocation parameters for the session launcher. The value is
+a series of semicolon-separated, colon-combined pairs of
+session launch names (used as menu item labels) and
+configuration parameter lists; when selecting one of the
+launch names, mintty is invoked with the respective
+parameters. (If a semicolon shall be embedded into any of
+the command patterns, a non-whitespace control character
+(i.e. none of <b>^I^J^K^L^M</b>) can be specified as an
+alternative separator by starting the whole setting with
+it.)</p>
+
+<p style="margin-left:22%; margin-top: 1em"><i>Note:</i>
+Session launch names are subject to localization if they are
+added to the localization file of the selected UI
+localization language (in subdirectory <i>lang</i> of a
+mintty resource directory).</p>
+
+<p style="margin-left:22%; margin-top: 1em"><i>Note:</i>
+This is an experimental feature, with an experimental
+configuration format.</p>
+
+<p style="margin-left:22%; margin-top: 1em">Examples: <br>
+&ndash; <b>SessionCommands=big:-w
+max;Ubuntu:--WSL=Ubuntu;mybox:ssh mybox</b> <br>
+&ndash; <b>SessionCommands=mycolours:-C
+~/.minttyrc.mycolours</b></p>
+
+<p style="margin-left:22%; margin-top: 1em"><i>Note:</i>
+Control characters need to be embedded verbatim; there is no
+escape notation.</p>
+
+<p style="margin-left:11%;"><b>Menu contents</b></p>
+
+<p style="margin-left:22%;">These settings allow to
+customize the context menu as opened in various ways. <br>
+&ndash; <b>Mouse</b> (MenuMouse=b); the normal mouse-click
+context menu <br>
+&ndash; <b>Ctrl+Mouse</b> (MenuCtrlMouse=e|ls); the
+Ctrl+mouse-click menu <br>
+&ndash; <b>Mouse button 5</b> (MenuMouse5=ls); the mouse
+button 5 menu <br>
+&ndash; <b>Menu key</b> (MenuMenu=bs); the Menu key (unless
+redefined) <br>
+&ndash; <b>Ctrl+Menu key</b> (MenuCtrlMenu=e|ls); the
+Ctrl+Menu-key</p>
+
+<p style="margin-left:22%; margin-top: 1em">Menu contents
+can be configured by a sequence of characters with the
+following meaning: <br>
+&ndash; <b>b</b>: basic context menu <br>
+&ndash; <b>e</b>: extended context menu <br>
+&ndash; <b>|</b>: vertical separator, adding a new column
+<br>
+&ndash; <b>l</b>: session launcher <br>
+&ndash; <b>s</b>: session switcher (Virtual Tabs) <br>
+&ndash; <b>T</b>: the menu is opened at the text cursor
+position <br>
+&ndash; <b>P</b>: the menu is opened at the mouse pointer
+position <br>
+&ndash; <b>W</b>: show window icon for uniconized windows in
+session switcher</p>
+
+<p style="margin-left:11%;"><b>Session geometry
+synchronization / Virtual tabs</b> (SessionGeomSync=0)</p>
+
+<p style="margin-left:22%;">This setting defines the level
+of approximation of &quot;tabbed&quot; window operation
+within the Virtual Tabs feature: <br>
+&ndash; <b>0</b>: no geometry handling; terminal session
+windows are separate <br>
+&ndash; <b>1</b>: sync. position/size when
+switching/launching a session <br>
+&ndash; <b>2</b>: sync. also when window is moved or resized
+<br>
+&ndash; <b>3</b>: sync. also when window is minimized <br>
+&ndash; <b>4</b>: sync. also when window is started</p>
+
 <h2>LIMITATIONS
 <a name="LIMITATIONS"></a>
 </h2>
@@ -2212,13 +2629,13 @@ xterm features</b> <br>
 Mintty is nowhere near as configurable as xterm. Of
 xterm&rsquo;s keyboard modes, only the default PC-style and
 VT220-style are available. 8-bit control characters are not
-supported, nor are ISO2022 character sets. There is no
-Tektronix 4014 emulation. Mouse highlighting mode is not
-implemented.</p>
+supported. There is no Tektronix 4014 emulation. Mouse
+highlighting mode is not implemented.</p>
 
 <p style="margin-left:11%; margin-top: 1em">The majority of
-xterm&rsquo;s many control sequences is implemented, but
-quite a few are missing. Significant omissions should be
+xterm&rsquo;s many control sequences is implemented, up to
+the VT300 series level; VT400 rectangular area operations
+are not implemented. Significant omissions should be
 reported to the issue tracker.</p>
 
 <h2>SEE ALSO

@@ -17,7 +17,7 @@ typedef enum {
   CYAN_I    = 6,
   WHITE_I   = 7,
 
-  // Bold ANSI colours
+  // Bright/Bold ANSI colours
   BOLD_BLACK_I   = 8,
   BOLD_RED_I     = 9,
   BOLD_GREEN_I   = 10,
@@ -34,21 +34,35 @@ typedef enum {
   // gray shades running between black and white but not including either
   // on grounds of redundancy.
 
+  // Colour numbers 256 through 271 are copies of ANSI colours 0 through 15
+  // supporting distinct handling of ANSI colours SGR 30..37/40../90../100.. 
+  // and palette colours SGR 38/48;5;0..15
+  // For distinct bold handling alone, they could also be mapped to 0..15
+  // but duplicating them would also facilitate distinct colour values if desired
+  ANSI0            = 256,
+
   // Default foreground
-  FG_COLOUR_I      = 256,
-  BOLD_FG_COLOUR_I = 257,
+  FG_COLOUR_I      = 272,
+  BOLD_FG_COLOUR_I = 273,
 
   // Default background
-  BG_COLOUR_I      = 258,
-  BOLD_BG_COLOUR_I = 259,
+  BG_COLOUR_I      = 274,
+  BOLD_BG_COLOUR_I = 275,
 
   // Cursor colours
-  CURSOR_TEXT_COLOUR_I = 260,
-  CURSOR_COLOUR_I      = 261,
-  IME_CURSOR_COLOUR_I  = 262,
+  CURSOR_TEXT_COLOUR_I = 276,
+  CURSOR_COLOUR_I      = 277,
+  IME_CURSOR_COLOUR_I  = 278,
+
+  // Selection highlight colours
+  SEL_COLOUR_I         = 279,
+  SEL_TEXT_COLOUR_I    = 280,
+
+  // configured Bold colour
+  BOLD_COLOUR_I = 281,
 
   // Number of colours
-  COLOUR_NUM = 263,
+  COLOUR_NUM = 282,
 
   // True Colour indicator
   // assert (TRUE_COLOUR % 4) == 0 so that checking x >= TRUE_COLOUR
@@ -56,6 +70,10 @@ typedef enum {
   TRUE_COLOUR = 0x180
 } colour_i;
 
+// colour classes
+#define CCL_ANSI8(i) ((i) >= ANSI0 && (i) < ANSI0 + 8)
+#define CCL_DEFAULT(i) ((i) >= FG_COLOUR_I && (i) <= BOLD_BG_COLOUR_I)
+#define CCL_TRUEC(i) ((i) >= TRUE_COLOUR)
 
 /* Special Characters:
  * UCSWIDE is a special value used in the terminal data to signify
@@ -127,16 +145,25 @@ enum {
   DATTR_STARTRUN  = 0x8000000000000000u, /* start of redraw run */
   DATTR_MASK      = TATTR_RIGHTCURS | TATTR_PASCURS | TATTR_ACTCURS
                     | DATTR_STARTRUN
+  // unassigned bits:
+  //                0x0000000800000000u
+  //                0x0010000000000000u
+  //                0x0020000000000000u
+  //                0x0040000000000000u
+  //                0x0080000000000000u
+  //                0x1000000000000000u
+  //                0x2000000000000000u
+  //                0x4000000000000000u
 };
 
 /* Line attributes.
  */
 enum {
-  LATTR_NORM      = 0x0000u,
-  LATTR_WIDE      = 0x0001u,
-  LATTR_TOP       = 0x0002u,
-  LATTR_BOT       = 0x0003u,
-  LATTR_MODE      = 0x0003u,
+  LATTR_NORM      = 0x0000u, /* DEC single-width line (DECSWL) */
+  LATTR_WIDE      = 0x0001u, /* DEC double-width line (DECDWL) */
+  LATTR_TOP       = 0x0002u, /* DEC double-height line (DECDHL), top half */
+  LATTR_BOT       = 0x0003u, /* DEC double-height line (DECDHL), bottom half */
+  LATTR_MODE      = 0x0003u, /* mask for double-width/height attributes */
   LATTR_WRAPPED   = 0x0010u, /* this line wraps to next */
   LATTR_WRAPPED2  = 0x0020u, /* with WRAPPED: CJK wide character
                                   * wrapped to next line, so last
@@ -144,7 +171,10 @@ enum {
   LATTR_CLEARPAD  = 0x0040u, /* flag to clear padding from overhang */
   LATTR_MARKED    = 0x0100u, /* scroll marker */
   LATTR_UNMARKED  = 0x0200u, /* secondary scroll marker */
-  LATTR_NOBIDI    = 0x1000u, /* disable bidi on this line */
+  LATTR_NOBIDI    = 0x4000u, /* disable bidi on this line */
+  // overlay line display (italic right-to-left overhang handling):
+  LATTR_DISP1     = 0x1000u,
+  LATTR_DISP2     = 0x2000u,
 };
 
 enum {
@@ -153,8 +183,10 @@ enum {
   ATTR_DEFAULT = ATTR_DEFFG | ATTR_DEFBG,
 };
 
+typedef unsigned long long cattrflags;
+
 typedef struct {
-  unsigned long long attr;
+  cattrflags attr;
   uint truefg;
   uint truebg;
 } cattr;
@@ -234,7 +266,22 @@ typedef enum {
   CSET_GBCHR = 'A',   /* UK variant */
   CSET_LINEDRW = '0', /* Line drawing charset */
   CSET_TECH = '>',    /* DEC Technical */
-  CSET_OEM = 'U'      /* OEM Codepage 437 */
+  CSET_OEM = 'U',     /* OEM Codepage 437 */
+  // definitions for DEC Supplemental support:
+  CSET_DECSUPP = '<', // <      DEC Supplementary (VT200)
+  CSET_DECSPGR = '%', // % 5    DEC Supplementary Graphics (VT300)
+  // definitions for NRC support:
+  CSET_NL = '4', // 4           Dutch
+  CSET_FI = '5', // C or 5      Finnish
+  CSET_FR = 'R', // R or f      French
+  CSET_CA = 'Q', // Q or 9      French Canadian (VT200, VT300)
+  CSET_DE = 'K', // K           German
+  CSET_IT = 'Y', // Y           Italian
+  CSET_NO = '`', // ` or E or 6 Norwegian/Danish
+  CSET_PT = '6', // % 6         Portuguese (VT300)
+  CSET_ES = 'Z', // Z           Spanish
+  CSET_SE = '7', // H or 7      Swedish
+  CSET_CH = '=', // =           Swiss
 } term_cset;
 
 typedef struct {
@@ -242,7 +289,7 @@ typedef struct {
 } pos;
 
 typedef enum {
-  MBT_LEFT = 1, MBT_MIDDLE = 2, MBT_RIGHT = 3
+  MBT_LEFT = 1, MBT_MIDDLE = 2, MBT_RIGHT = 3, MBT_4 = 4, MBT_5 = 5
 } mouse_button;
 
 enum {
@@ -282,11 +329,12 @@ typedef struct {
   bool autowrap;  // switchable (xterm Wraparound Mode (DECAWM Auto Wrap))
   bool wrapnext;
   bool rev_wrap;  // switchable (xterm Reverse-wraparound Mode)
-  short g0123;
+  short gl, gr;
   term_cset csets[4];
   term_cset cset_single;
   uchar oem_acs;
   bool utf;
+  bool decnrc_enabled;    /* DECNRCM sequence to enable NRC? */
 } term_cursor;
 
 typedef struct {
@@ -391,6 +439,7 @@ struct term {
   bool wide_indic;
   bool wide_extra;
   bool disable_bidi;
+  bool enable_bold_colour;
 
   bool sixel_display;        // true if sixel scrolling mode is off
   bool sixel_scrolls_right;  // on: sixel scrolling leaves cursor to right of graphic
@@ -436,7 +485,8 @@ struct term {
     MM_X10,       // just clicks
     MM_VT200,     // click and release
     MM_BTN_EVENT, // click, release, and drag with button down
-    MM_ANY_EVENT  // click, release, and any movement
+    MM_ANY_EVENT, // click, release, and any movement
+    MM_LOCATOR,   // DEC locator events
   } mouse_mode;
 
   // Mouse encoding
@@ -452,6 +502,13 @@ struct term {
     MS_SEL_CHAR = -1, MS_SEL_WORD = -2, MS_SEL_LINE = -3,
     MS_COPYING = -4, MS_PASTING = -5, MS_OPENING = -6
   } mouse_state;
+
+  bool locator_1_enabled;
+  bool locator_by_pixels;
+  bool locator_report_up;
+  bool locator_report_dn;
+  bool locator_rectangle;
+  int locator_top, locator_left, locator_bottom, locator_right;
 
   bool sel_rect, selected;
   pos sel_start, sel_end, sel_anchor;
@@ -491,7 +548,7 @@ extern struct term term;
 
 extern void term_resize(int, int);
 extern void term_scroll(int, int);
-extern void term_reset(void);
+extern void term_reset(bool full);
 extern void term_clear_scrollback(void);
 extern void term_mouse_click(mouse_button, mod_keys, pos, int count);
 extern void term_mouse_release(mouse_button, mod_keys, pos);

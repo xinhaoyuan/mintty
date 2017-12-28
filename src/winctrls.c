@@ -1417,7 +1417,7 @@ fonthook(HWND hdlg, UINT msg, WPARAM wParam, LPARAM lParam)
     // (few bytes per "Apply" click)
     fsp->name = wcsdup(lfapply.lfFaceName);
 
-    HDC dc = GetDC(0);
+    HDC dc = GetDC(wnd);
     fsp->size = -MulDiv(lfapply.lfHeight, 72, GetDeviceCaps(dc, LOGPIXELSY));
     trace_fontsel(("Apply lfHeight %ld -> size %d <%ls>\n", (long int)lfapply.lfHeight, fsp->size, lfapply.lfFaceName));
     ReleaseDC(0, dc);
@@ -1461,7 +1461,7 @@ select_font(winctrl *c)
 {
   font_spec fs = *(font_spec *) c->data;
   LOGFONTW lf;
-  HDC dc = GetDC(0);
+  HDC dc = GetDC(wnd);
  /* We could have the idea to consider `dpi` here, like for MulDiv in 
   * win_init_fonts, but that's wrong.
   */
@@ -1990,28 +1990,18 @@ dlg_fontsel_set(control *ctrl, font_spec *fs)
 
   //char * boldstr = fs->isbold ? "bold, " : "";
   char * boldstr = boldnesses[boldness];
-#if CYGWIN_VERSION_API_MINOR >= 201
-  int wsize = wcslen(fs->name) + strlen(boldstr) + (fs->size ? 31 : 17);
+  char * stylestr =
+    fs->size ? asform(", %s%d%s", boldstr, abs(fs->size), fs->size < 0 ? "px" : "pt")
+             : asform(", %sdefault size", fs->name, boldstr);
+  wchar * wstylestr = cs__utftowcs(stylestr);
+  int wsize = wcslen(fs->name) + wcslen(wstylestr) + 1;
   wchar * wbuf = newn(wchar, wsize);
-  if (fs->size)
-    swprintf(wbuf, wsize, W("%ls, %s%d%s"), fs->name, boldstr, abs(fs->size),
-             fs->size < 0 ? "px" : "pt");
-  else
-    swprintf(wbuf, wsize, W("%ls, %sdefault size"), fs->name, boldstr);
+  wcscpy(wbuf, fs->name);
+  wcscat(wbuf, wstylestr);
   SetDlgItemTextW(dlg.wnd, c->base_id + 1, wbuf);
   free(wbuf);
-#else
-  // no swprintf, don't like to fiddle label together for old MinGW
-  char * fn = cs__wcstombs(fs->name);
-  char * buf =
-    fs->size
-    ? asform("%s, %s%d%s", fn, boldstr, abs(fs->size),
-             fs->size < 0 ? "px" : "pt")
-    : asform("%s, %sdefault size", fn, boldstr);
-  free(fn);
-  SetDlgItemTextA(dlg.wnd, c->base_id + 1, buf);
-  free(buf);
-#endif
+  free(wstylestr);
+  free(stylestr);
 }
 
 void

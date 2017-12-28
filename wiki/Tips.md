@@ -55,21 +55,61 @@ shortcut, or follow the advice about avoiding trouble with taskbar grouping
 in the manual page.
 
 
-## Using mintty for Bash on Ubuntu on Windows (UoW) / Windows Subsystem for Linux (WSL) ##
+## Supporting Linux/Posix subsystems ##
 
-Install [wsltty](https://github.com/mintty/wsltty).
+If you have any Linux distribution for the Windows Subsystem for Linux (WSL) 
+installed, mintty can be called from cygwin to run a WSL terminal session:
+* `mintty --WSL=Ubuntu`
+* `mintty --WSL` (for the Default distribution as set with `wslconfig /s`)
 
-Or, to help reproduce the installation manually, for users of cygwin or msys2:
+Note, the `wslbridge` tool needs to be installed in `/bin` for this purpose 
+(see below for details).
+
+A WSL terminal session can be configured for the mintty session launcher 
+in the config file, like:
+* `SessionCommands=Ubuntu:--WSL=Ubuntu`
+
+
+### WSLtty, the standalone WSL mintty terminal ###
+
+For a standalone mintty deployment as a WSL terminal, also providing 
+desktop and start menu shortcuts, command line launch scripts, and 
+optional Windows Explorer integration, install 
+[wsltty](https://github.com/mintty/wsltty).
+
+### Manual setup of WSL terminal ###
+
+To help reproduce the installation manually, for users of cygwin or msys2:
 * From https://github.com/rprichard/wslbridge/releases, download the `wslbridge` archive corresponding to your system (cygwin/msys2 32/64 bit)
 * Install `wslbridge.exe` and `wslbridge-backend` into your cygwin or msys2 `/bin` directory
 * Make a desktop shortcut (Desktop right-click – New ▸ Shortcut) with
-  * Target: `X:\cygwin64\bin\mintty.exe /bin/wslbridge.exe -t /bin/bash -l`
-  * Icon location (Change Icon…): `%LOCALAPPDATA%\lxss\bash.ico`
+  * Target: `X:\cygwin64\bin\mintty.exe --WSL=Linux_Distribution -`
+  * Icon location (Change Icon…) for Legacy “Ubuntu on Windows”: `%LOCALAPPDATA%\lxss\bash.ico`
 
-Replace ```X:\cygwin64``` with your cygwin or msys2 root directory path.
-The “Start in:” directory does not normally matter if you include the bash “login” option 
-```-l``` as shown above and have a typical Linux profile configuration.
-You may replace ```/bin/bash``` above with your favourite shell if desired.
+Replace `X:\cygwin64` with your cygwin or msys2 root directory path 
+and `Linux_Distribution` with your preferred distribution. The suitable 
+icon location for each respective distribution is not easily found; the 
+standalone package would find that for you.
+Instead of `-`, you may add an explicit invocation target like 
+`/bin/wslbridge -t -C~ /bin/bash -l` to select your favourite shell, 
+ask for a login shell (`-l`) or set a start directory (`-C`) if desired.
+If no start directory is otherwise selected, the “Start in:” directory 
+of the shortcut may be set to `%USERPROFILE%`.
+
+### Interix ###
+
+On Windows 7, mintty may also be used as a terminal for the 
+Subsystem for UNIX-based applications (SUA), also known as Interix.
+For the mintty session launcher, this can be configured for the 
+available shells as follows (concatened with ‘;’ separator for multiple targets):
+* `SessionCommands=Interix Korn Shell:winpty 'C:\Windows\posix.exe' /u /c /bin/ksh -l`
+* `SessionCommands=Interix SVR-5 Korn Shell:winpty 'C:\Windows\posix.exe' /u /p /svr-5/bin/ksh /c -ksh`
+* `SessionCommands=Interix C Shell:winpty 'C:\Windows\posix.exe' /u /c /bin/csh -l`
+
+For a desktop or start menu shortcut, the respective target command would 
+look like `X:\cygwin\bin\mintty.exe winpty` …
+(and may use the icon location 
+%SystemRoot%\Installer\{DB88A98A-792B-4441-8E60-05A6D3E2B2C0}\sh.exe).
 
 
 ## Starting mintty from a batch file ##
@@ -355,14 +395,12 @@ are not saved to this file, or with the new setting _ThemeFile_.
 
 In the Options menu, section _Looks_, the _Theme_ popup offers theme files 
 as stored in a resource directory for selection.
-This dialog field can be used in different ways:
+This dialog field (or the “Color Scheme Designer” button for drag-and-drop) 
+can be used in different ways:
 * Popup the selection to choose a theme configured in your resource directory
 * Insert a file name (e.g. by pasting or drag-and-drop from Windows Explorer)
 * Drag-and-drop a theme file from the Internet (may be embedded in HTML page)
 * Drag-and-drop a colour scheme directly from the Color Scheme Designer (see below)
-
-Note that the drag-and-drop theme file option needs the program ```curl```
-to be installed (and properly configured for a proxy if needed).
 
 After drag-and-drop of a colour scheme, you may Apply it for testing;
 to keep the scheme in your popup selection, assign a name to it by typing it 
@@ -384,8 +422,12 @@ click the “Store” button to store the colour scheme.
 
 A number of colour schemes have been published for mintty, e.g.
 * https://github.com/oumu/mintty-color-schemes
-* https://github.com/mavnn/mintty-colors-solarized
 * https://github.com/PhilipDaniels/mintty/tree/master/themes
+* https://github.com/goreliu/wsl-terminal/tree/master/src/etc/themes
+
+Mintty also provides the command-line script ```mintheme``` which can 
+display the themes available in the mintty configuration directories or 
+activate one of them in the current mintty window.
 
 
 ## Providing and selecting fonts ##
@@ -433,13 +475,26 @@ a collection of such fonts can be found at [Nerd Fonts](http://nerdfonts.com/).
 
 ### Alternative fonts ###
 
-Mintty supports up to 9 alternative fonts that can be selected as 
+Mintty supports up to 10 alternative fonts that can be selected as 
 character attributes (see Text attributes below). They are configured 
-in the config file (see manual page).
+in the config file (see manual page), except for font 10 which has a 
+default preference; mintty will try to find a Fraktur or Blackletter font 
+for it on your system.
 <img align=top src=https://github.com/mintty/mintty/wiki/mintty-alternative-fonts.png>
 
 
-## Ambiguous width setting ##
+## Character width ##
+
+By default, mintty adjusts character width to the width assumption of the 
+locale mechanism (function `wcwidth`).
+If it is desired to use more up-to-date Unicode width properties, this can 
+be chosen with option `Charwidth=unicode`. Note that actual width 
+properties as rendered on the screen and width assumptions of the 
+`wcwidth` function will be inconsistent then for the impacted characters, 
+which may confuse screen applications (such as editors) that rely on 
+`wcwidth` information.
+
+### Ambiguous width setting ###
 
 A number of Unicode characters have an “ambiguous width” property due to 
 legacy issues with dedicated CJK fonts, meaning they can be narrow 
@@ -452,6 +507,35 @@ not need to be CJK), e.g.:
 ```
 LC_CTYPE=zh_SG.utf8 mintty &
 ```
+
+If the locale is selected via the Locale setting, however, it is necessary 
+to choose an ambiguous-wide font in addition (CJK font), or mintty will 
+enforce the ambiguous-narrow mode of rendering by appending the 
+“@cjknarrow” locale modifier:
+
+```
+mintty -o Locale=zh_CN -o Font=FangSong &
+```
+
+If it is not desired to set a specific base locale in order to enable 
+ambiguous-wide mode, option `Charwidth=ambig-wide` can be used.
+It implies `Charwidth=unicode` behaviour, with the same caveats as above.
+Mintty indicates this mode by appending the `@cjkwide` modifier to the 
+`LC_CTYPE` locale variable (not yet supported by cygwin).
+
+### Selective double character width ###
+
+While mintty fully supports double-width characters (esp. CJK) as well 
+as ambiguous-width characters, there are also characters of fuzzy 
+width property, because their rendered glyph is wider than one 
+terminal character cell in most fonts, but yet they are defined as 
+single-width by Unicode. Such characters often appear to be clipped 
+on the screen. Mintty has an experimental feature to display semi-wide 
+Indic and some other characters at double-cell width
+(see [Control Sequences – Wide characters](https://github.com/mintty/mintty/wiki/CtrlSeqs#wide-characters)),
+but not all such characters are handled, and there is no perfect solution 
+that would also comply with the locale mechanism unless the terminal would 
+support proportional fonts.
 
 
 ## Font rendering and geometry ##
@@ -474,20 +558,6 @@ Note: The term “leading” (pronounced like “ledding”) comes from the
 times of metal typesetting when strips of lead (the metal) were used 
 to adjust line spacing.
 
-### Character width ###
-
-While mintty fully supports double-width characters (esp. CJK) as well 
-as ambiguous-width characters, there are also characters of fuzzy 
-width property, because their rendered glyph is wider than one 
-terminal character cell in most fonts, but yet they are defined as 
-single-width by Unicode. Such characters often appear to be clipped 
-on the screen. Mintty has an experimental feature to display semi-wide 
-Indic and some other characters at double-cell width
-(see [Control Sequences – Wide characters](https://github.com/mintty/mintty/wiki/CtrlSeqs#wide-characters)),
-but not all such characters are handled, and there is no perfect solution 
-that would also comply with the locale mechanism unless the terminal would 
-support proportional fonts.
-
 
 ## Text attributes and rendering ##
 
@@ -508,6 +578,7 @@ Mintty supports a maximum of usual and unusual text attributes:
 | 12                     | 10                | alternative font 2            |
 | ...                    | 10                | alternative fonts 3...8       |
 | 19                     | 10                | alternative font 9            |
+| 20                     | 23, 10            | Fraktur/Blackletter font      |
 | 21                     | 24                | doubly underline              |
 | 53                     | 55                | overline                      |
 | 30...37                | 39                | foreground ANSI colour        |
@@ -519,6 +590,10 @@ Mintty supports a maximum of usual and unusual text attributes:
 | 38;2;R;G;B             | 39                | foreground true colour        |
 | 48;2;R;G;B             | 49                | background true colour        |
 | _any_                  | 0                 |                               |
+
+Note: The control sequences for Fraktur (“Gothic”) font are described 
+in ECMA-48, see also [wiki:ANSI code](https://en.wikipedia.org/wiki/ANSI_escape_code).
+To use this feature, it is suggested to install `F25 Blackletter Typewriter`.
 
 Note: The control sequence for alternative font 1 overrides the identical 
 control sequence to select the VGA character set. Configuring alternative 
@@ -576,6 +651,19 @@ unless the remote and local paths match.
 Note also that from a login terminal (e.g. using parameter `-` to start 
 a login shell), Alt+F2 starts again a login terminal, whose login shell 
 is likely to reset the working directory to the home directory.
+
+
+## Virtual Tabs ##
+
+The Virtual Tabs feature provides a list of all running mintty sessions 
+as well as configurable launch parameters for new sessions.
+By default, the list is shown in the extended context menu (Ctrl+right-click), 
+the mouse button 5 menu, and the menus opened with the Ctrl+Menu key 
+and the Ctrl+Shift+I shortcut (if enabled).
+(Menu contents for the various context menu invocations is configurable.)
+For configuration, see settings `SessionCommands`, `Menu*`, 
+and `SessionGeomSync`.
+Distinct sets of sessions can be set up with the setting `-o Class=...`.
 
 
 ## Multi-monitor support ##
@@ -675,6 +763,17 @@ Mintty supports two extension features:
 * User-defined commands and filter functions (option `UserCommands`)
 
 See the manual page for details.
+
+### Terminating the foreground program ###
+
+As an example for a user-defined command, that is not used for filtering 
+text in this case, assume the user wants a menu option to terminate the 
+terminal foreground process (in case it is stalled). This can be done by 
+including a user command:
+
+```
+UserCommands=Kill foreground process:kill -9 $MINTTY_PID
+```
 
 
 ## Running mintty stand-alone ##

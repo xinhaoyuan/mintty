@@ -5,7 +5,7 @@
 
 #include "winpriv.h"
 #include "winsearch.h"
-#include "charset.h"  // wcscpy, combiningdouble
+#include "charset.h"  // wcscpy, wcsncat, combiningdouble
 #include "config.h"
 #include "winimg.h"  // winimg_paint
 
@@ -13,12 +13,15 @@
 #include <usp10.h>  // Uniscribe
 
 
+#define dont_debug_bold 1
+
 enum {
   FONT_NORMAL    = 0x00,
   FONT_BOLD      = 0x01,
-  FONT_UNDERLINE = 0x02,
+  FONT_ITALIC    = 0x02,
+  FONT_BOLDITAL  = FONT_BOLD | FONT_ITALIC,
+  FONT_UNDERLINE = 0x04,
   FONT_BOLDUND   = FONT_BOLD | FONT_UNDERLINE,
-  FONT_ITALIC    = 0x04,
   FONT_STRIKEOUT = 0x08,
   FONT_HIGH      = 0x10,
   FONT_ZOOMFULL  = 0x20,
@@ -70,7 +73,7 @@ static const wchar linedraw_chars[LDRAW_CHAR_NUM][LDRAW_CHAR_TRIES] = {
 };
 
 
-// colour values
+// colour values; this should perhaps be part of struct term
 COLORREF colours[COLOUR_NUM];
 
 // diagnostic information flag
@@ -94,6 +97,11 @@ bool font_ambig_wide;
 typedef enum {BOLD_SHADOW, BOLD_FONT} BOLD_MODE;
 typedef enum {UND_LINE, UND_FONT} UND_MODE;
 
+struct charpropcache {
+  uint width: 2;
+  xchar ch: 21;
+} __attribute__((packed));
+
 // font family properties
 struct fontfam {
   wstring name;
@@ -103,6 +111,8 @@ struct fontfam {
   HFONT fonts[FONT_MAXNO];
   bool fontflag[FONT_MAXNO];
   bool font_dualwidth;
+  struct charpropcache * cpcache[FONT_BOLDITAL + 1];
+  uint cpcachelen[FONT_BOLDITAL + 1];
   int fw_norm;
   int fw_bold;
   BOLD_MODE bold_mode;
@@ -111,7 +121,7 @@ struct fontfam {
   int descent;
   // VT100 linedraw character mappings for current font:
   wchar win_linedraw_chars[LDRAW_CHAR_NUM];
-} fontfamilies[10];
+} fontfamilies[11];
 
 wchar
 win_linedraw_char(int i)
@@ -127,8 +137,10 @@ fontpropinfo()
 {
   //__ Options - Text: font properties information ("leading" ("ledding"): add. row spacing)
   char * fontinfopat = _("Leading: %d, Bold: %s, Underline: %s");
-  char * fontinfo_font = "font";
-  char * fontinfo_manual = "manual";
+  //__ Options - Text: font properties: value taken from font
+  char * fontinfo_font = _("font");
+  //__ Options - Text: font properties: value affected by option
+  char * fontinfo_manual = _("manual");
   int taglen = max(strlen(fontinfo_font), strlen(fontinfo_manual));
   char * fontinfo = newn(char, strlen(fontinfopat) + 23 + 2 * taglen);
   sprintf(fontinfo, fontinfopat, fontfamilies->row_spacing, 
@@ -137,7 +149,8 @@ fontpropinfo()
   return fontinfo;
 }
 
-static uint
+
+uint
 colour_dist(colour a, colour b)
 {
   return
@@ -149,7 +162,7 @@ colour_dist(colour a, colour b)
 #define dont_debug_brighten
 
 colour
-brighten(colour c, colour against)
+brighten(colour c, colour against, bool monotone)
 {
   uint r = red(c), g = green(c), b = blue(c);
   // "brighten" away from the background:
@@ -179,6 +192,10 @@ brighten(colour c, colour against)
     printf("darker %06X -> %06X dist %d\n", c, bright, colour_dist(c, bright));
 #endif
     if (colour_dist(bright, c) < thrsh || colour_dist(bright, against) < thrsh) {
+      if (monotone) {
+        uint r = red(bright), g = green(bright), b = blue(bright);
+        return make_colour(r - (r >> 2), g - (g >> 2), b - (b >> 2));
+      }
       bright = _brighter();
 #ifdef debug_brighten
       printf("   fix %06X -> %06X dist %d/%d\n", c, bright, colour_dist(bright, c), colour_dist(bright, against));
@@ -191,6 +208,10 @@ brighten(colour c, colour against)
     printf("lightr %06X -> %06X dist %d\n", c, bright, colour_dist(c, bright));
 #endif
     if (colour_dist(bright, c) < thrsh || colour_dist(bright, against) < thrsh) {
+      if (monotone) {
+        uint r = red(bright), g = green(bright), b = blue(bright);
+        return make_colour(r + ((256 - r) >> 2), g + ((256 - g) >> 2), b + ((256 - b) >> 2));
+      }
       bright = _darker();
 #ifdef debug_brighten
       printf("   fix %06X -> %06X dist %d/%d\n", c, bright, colour_dist(bright, c), colour_dist(bright, against));
@@ -215,9 +236,9 @@ get_font_quality(void)
 
 #define dont_debug_create_font
 
-#define dont_debug_fonts
+#define dont_debug_fonts 1
 
-#ifdef debug_fonts
+#if defined(debug_fonts) && debug_fonts > 0
 #define trace_font(params)	printf params
 #else
 #define trace_font(params)	
@@ -309,14 +330,8 @@ static void
 adjust_font_weights(struct fontfam * ff)
 {
   LOGFONTW lf;
-#if CYGWIN_VERSION_API_MINOR >= 201
-  swprintf(lf.lfFaceName, lengthof(lf.lfFaceName), W("%ls"), ff->name);
-#else
-  if (wcslen(ff->name) < lengthof(lf.lfFaceName))
-    wcscpy(lf.lfFaceName, ff->name);
-  else
-    wcscpy(lf.lfFaceName, W(""));
-#endif
+  wcscpy(lf.lfFaceName, W(""));
+  wcsncat(lf.lfFaceName, ff->name, lengthof(lf.lfFaceName) - 1);
   lf.lfPitchAndFamily = 0;
   //lf.lfCharSet = ANSI_CHARSET;   // report only ANSI character range
   // use this to avoid double error popup (e.g. Font=David):
@@ -340,8 +355,9 @@ adjust_font_weights(struct fontfam * ff)
     (void)fontType;
     (void)lParam;
 
-    //trace_font(("%ls %ldx%ld (%ldx%ld) %ld it %d cs %d %s\n", lfp->lfFaceName, (long int)lfp->lfWidth, (long int)lfp->lfHeight, (long int)tmp->tmAveCharWidth, (long int)tmp->tmHeight, (long int)lfp->lfWeight, lfp->lfItalic, lfp->lfCharSet, (lfp->lfPitchAndFamily & 3) == FIXED_PITCH ? "fixed" : ""));
-    trace_font(("%ls %ldx%ld %ld it %d cs %d %s\n", lfp->lfFaceName, (long int)lfp->lfWidth, (long int)lfp->lfHeight, (long int)lfp->lfWeight, lfp->lfItalic, lfp->lfCharSet, (lfp->lfPitchAndFamily & 3) == FIXED_PITCH ? "fixed" : ""));
+#if defined(debug_fonts) && debug_fonts > 1
+    trace_font(("%ls %dx%d %d it %d cs %d %s\n", lfp->lfFaceName, (int)lfp->lfWidth, (int)lfp->lfHeight, (int)lfp->lfWeight, lfp->lfItalic, lfp->lfCharSet, (lfp->lfPitchAndFamily & 3) == FIXED_PITCH ? "fixed" : ""));
+#endif
 
     font_found = true;
     if (lfp->lfCharSet == ANSI_CHARSET)
@@ -430,18 +446,25 @@ win_init_fontfamily(HDC dc, int findex)
 
   trace_resize(("--- init_fontfamily\n"));
   TEXTMETRIC tm;
-  int fontsize[3];
-  int i;
+  int fontsize[FONT_UNDERLINE + 1];
 
-  for (i = 0; i < FONT_MAXNO; i++) {
+  for (uint i = 0; i < FONT_BOLDITAL; i++) {
+    if (ff->fonts[i])
+      delete(ff->cpcache[i]);
+    ff->cpcache[i] = 0;
+    ff->cpcachelen[i] = 0;
+  }
+  for (uint i = 0; i < FONT_MAXNO; i++) {
     if (ff->fonts[i]) {
       DeleteObject(ff->fonts[i]);
       ff->fonts[i] = 0;
     }
-    ff->fontflag[i] = 0;
+    ff->fontflag[i] = false;
   }
 
-  ff->bold_mode = cfg.bold_as_font ? BOLD_FONT : BOLD_SHADOW;
+  // if initialized as BOLD_SHADOW then real bold is never attempted
+  ff->bold_mode = BOLD_FONT;
+
   ff->und_mode = UND_FONT;
   if (cfg.underl_manual || cfg.underl_colour != (colour)-1)
     ff->und_mode = UND_LINE;
@@ -469,7 +492,7 @@ win_init_fontfamily(HDC dc, int findex)
 
   LOGFONT logfont;
   GetObject(ff->fonts[FONT_NORMAL], sizeof(LOGFONT), &logfont);
-  trace_font(("created font %s %ld it %d cs %d\n", logfont.lfFaceName, (long int)logfont.lfWeight, logfont.lfItalic, logfont.lfCharSet));
+  trace_font(("created font %s %d it %d cs %d\n", logfont.lfFaceName, (int)logfont.lfWeight, logfont.lfItalic, logfont.lfCharSet));
   SelectObject(dc, ff->fonts[FONT_NORMAL]);
   GetTextMetrics(dc, &tm);
   if (!tm.tmHeight) {
@@ -493,14 +516,17 @@ win_init_fontfamily(HDC dc, int findex)
 
   if (!findex) {
     ff->row_spacing = row_padding(tm.tmInternalLeading, tm.tmExternalLeading);
-    trace_font(("h %ld asc %ld dsc %ld ild %ld eld %ld %ls\n", (long int)tm.tmHeight, (long int)tm.tmAscent, (long int)tm.tmDescent, (long int)tm.tmInternalLeading, (long int)tm.tmExternalLeading, ff->name));
+    trace_font(("00 height %d avwidth %d asc %d dsc %d intlead %d extlead %d %ls\n", 
+               (int)tm.tmHeight, (int)tm.tmAveCharWidth, (int)tm.tmAscent, (int)tm.tmDescent, 
+               (int)tm.tmInternalLeading, (int)tm.tmExternalLeading, 
+               ff->name));
     ff->row_spacing += cfg.row_spacing;
     if (ff->row_spacing < -tm.tmDescent)
       ff->row_spacing = -tm.tmDescent;
-    trace_font(("row spacing int %ld ext %ld -> %+d; add %+d -> %+d; desc %ld -> %+d %ls\n", 
-        (long int)tm.tmInternalLeading, (long int)tm.tmExternalLeading, row_padding(tm.tmInternalLeading, tm.tmExternalLeading),
+    trace_font(("row spacing int %d ext %d -> %+d; add %+d -> %+d; desc %d -> %+d %ls\n", 
+        (int)tm.tmInternalLeading, (int)tm.tmExternalLeading, row_padding(tm.tmInternalLeading, tm.tmExternalLeading),
         cfg.row_spacing, row_padding(tm.tmInternalLeading, tm.tmExternalLeading) + cfg.row_spacing,
-        (long int)tm.tmDescent, ff->row_spacing, ff->name));
+        (int)tm.tmDescent, ff->row_spacing, ff->name));
     ff->col_spacing = cfg.col_spacing;
 
     cell_height = tm.tmHeight + ff->row_spacing;
@@ -622,10 +648,25 @@ win_init_fontfamily(HDC dc, int findex)
   if (ff->descent >= cell_height)
     ff->descent = cell_height - 1;
 
-  for (i = 0; i < 3; i++) {
+#ifdef handle_baseline_leap
+  int base_ascent = tm.tmAscent;
+#endif
+  for (uint i = 0; i < lengthof(fontsize); i++) { // could skip FONT_ITALIC here
     if (ff->fonts[i]) {
-      if (SelectObject(dc, ff->fonts[i]) && GetTextMetrics(dc, &tm))
+      if (SelectObject(dc, ff->fonts[i]) && GetTextMetrics(dc, &tm)) {
         fontsize[i] = tm.tmAveCharWidth + 256 * tm.tmHeight;
+        trace_font(("%02X height %d avwidth %d asc %d dsc %d intlead %d extlead %d %ls\n", 
+               i, (int)tm.tmHeight, (int)tm.tmAveCharWidth, (int)tm.tmAscent, (int)tm.tmDescent, 
+               (int)tm.tmInternalLeading, (int)tm.tmExternalLeading, 
+               ff->name));
+#ifdef handle_baseline_leap
+        if (i == FONT_BOLD && tm.tmAscent < base_ascent) {
+          // for Courier New, this correlates with a significant visual leap 
+          // of the bold font from the baseline of the normal font,
+          // but not for other fonts; so let's do nothing
+        }
+#endif
+      }
       else
         fontsize[i] = -i;
     }
@@ -640,14 +681,82 @@ win_init_fontfamily(HDC dc, int findex)
     ff->fonts[FONT_UNDERLINE] = 0;
   }
 
-  if (ff->bold_mode == BOLD_FONT && fontsize[FONT_BOLD] != fontsize[FONT_NORMAL]) {
-    trace_font(("bold_mode %d\n", ff->bold_mode));
-    ff->bold_mode = BOLD_SHADOW;
-    DeleteObject(ff->fonts[FONT_BOLD]);
-    ff->fonts[FONT_BOLD] = 0;
+  if (ff->bold_mode == BOLD_FONT) {
+    int diffsize = abs(fontsize[FONT_BOLD] - fontsize[FONT_NORMAL]);
+#if defined(debug_create_font) || defined(debug_bold)
+    if (*ff->name)
+      printf("bold_mode %d font_size %d size %d bold %d diff %d %s %ls\n",
+             ff->bold_mode, font_size,
+             fontsize[FONT_NORMAL], fontsize[FONT_BOLD], diffsize,
+             fontsize[FONT_BOLD] != fontsize[FONT_NORMAL] ? "///" : "===",
+             ff->name);
+#endif
+    if (diffsize * 16 > fontsize[FONT_NORMAL]) {
+      trace_font(("bold_mode %d\n", ff->bold_mode));
+      ff->bold_mode = BOLD_SHADOW;
+      DeleteObject(ff->fonts[FONT_BOLD]);
+      ff->fonts[FONT_BOLD] = 0;
+    }
   }
   trace_font(("bold_mode %d\n", ff->bold_mode));
-  ff->fontflag[0] = ff->fontflag[1] = ff->fontflag[2] = 1;
+  ff->fontflag[FONT_NORMAL] = true;
+  ff->fontflag[FONT_BOLD] = true;
+  ff->fontflag[FONT_UNDERLINE] = true;
+}
+
+static wstring
+wcscasestr(wstring in, wstring find)
+{
+#if CYGWIN_VERSION_API_MINOR < 206
+#define wcsncasecmp wcsncmp
+#endif
+  int l = wcslen(find);
+  wstring look = in;
+  for (int i = 0; i <= (int)wcslen(in) - l; i++, look++) { // uint fails!
+    if (0 == wcsncasecmp(look, find, l)) {
+      return look;
+    }
+  }
+  return 0;
+}
+
+static void
+findFraktur(wstring * fnp)
+{
+  LOGFONTW lf;
+  wcscpy(lf.lfFaceName, W(""));
+  lf.lfPitchAndFamily = 0;
+  lf.lfCharSet = ANSI_CHARSET;   // report only ANSI character range
+
+  int CALLBACK enum_fonts(const LOGFONTW * lfp, const TEXTMETRICW * tmp, DWORD fontType, LPARAM lParam)
+  {
+    (void)tmp;
+    (void)fontType;
+    (void)lParam;
+
+#if defined(debug_fonts) && debug_fonts > 1
+    trace_font(("%ls %dx%d %d it %d cs %d %s\n", lfp->lfFaceName, (int)lfp->lfWidth, (int)lfp->lfHeight, (int)lfp->lfWeight, lfp->lfItalic, lfp->lfCharSet, (lfp->lfPitchAndFamily & 3) == FIXED_PITCH ? "fixed" : ""));
+#endif
+    if ((lfp->lfPitchAndFamily & 3) == FIXED_PITCH
+     && !lfp->lfCharSet
+     && lfp->lfFaceName[0] != '@'
+       )
+    {
+      if (wcscasestr(lfp->lfFaceName, W("Fraktur"))) {
+        *fnp = wcsdup(lfp->lfFaceName);
+        return 0;  // done
+      }
+      else if (wcscasestr(lfp->lfFaceName, W("Blackletter"))) {
+        *fnp = wcsdup(lfp->lfFaceName);
+        // continue to look for "Fraktur"
+      }
+    }
+    return 1;  // continue
+  }
+
+  HDC dc = GetDC(0);
+  EnumFontFamiliesExW(dc, 0, enum_fonts, 0, 0);
+  ReleaseDC(0, dc);
 }
 
 /*
@@ -685,6 +794,8 @@ win_init_fonts(int size)
       fontfamilies[fi].weight = cfg.fontfams[fi].weight;
       fontfamilies[fi].isbold = false;
     }
+    if (fi == 20 - 10 && !*(fontfamilies[fi].name))
+      findFraktur(&fontfamilies[fi].name);
     if (initinit)
       fontfamilies[fi].name_reported = null;
 
@@ -693,6 +804,29 @@ win_init_fonts(int size)
   initinit = false;
 
   ReleaseDC(wnd, dc);
+}
+
+wstring
+win_get_font(uint fi)
+{
+  if (fi < lengthof(fontfamilies))
+    return fontfamilies[fi].name;
+  else
+    return null;
+}
+
+void
+win_change_font(uint fi, wstring fn)
+{
+  if (fi < lengthof(fontfamilies)) {
+    fontfamilies[fi].name = fn;
+    fontfamilies[fi].name_reported = null;
+    HDC dc = GetDC(wnd);
+    win_init_fontfamily(dc, fi);
+    ReleaseDC(wnd, dc);
+    win_adapt_term_size(true, false);
+    win_font_cs_reconfig(true);
+  }
 }
 
 uint
@@ -1071,19 +1205,25 @@ another_font(struct fontfam * ff, int fontno)
     u = true;
   int y = font_height * (1 + !!(fontno & FONT_HIGH));
   if (fontno & FONT_ZOOMFULL) {
-    y = cell_height;
-    x = cell_width;
+    y = cell_height * (1 + !!(fontno & FONT_HIGH));
+    x = cell_width * (1 + !!(fontno & FONT_WIDE));
   }
 
 #ifdef debug_create_font
-  printf("font [%02X]: %d (size %d) %d w%4d i%d u%d s%d\n", fontno, font_height * (1 + !!(fontno & FONT_HIGH)), font_size, x, w, i, u, s);
+  printf("font [%02X]: %d (size %d%s%s%s%s) %d w%4d i%d u%d s%d\n", 
+	fontno, font_height * (1 + !!(fontno & FONT_HIGH)), font_size, 
+	fontno & FONT_HIGH     ? " hi" : "",
+	fontno & FONT_WIDE     ? " wd" : "",
+	fontno & FONT_NARROW   ? " nr" : "",
+	fontno & FONT_ZOOMFULL ? " zf" : "",
+	x, w, i, u, s);
 #endif
   ff->fonts[fontno] =
     CreateFontW(y, x, 0, 0, w, i, u, s,
                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                 get_font_quality(), FIXED_PITCH | FF_DONTCARE, ff->name);
 
-  ff->fontflag[fontno] = 1;
+  ff->fontflag[fontno] = true;
 }
 
 void
@@ -1099,27 +1239,22 @@ win_set_ime_open(bool open)
 
 #define dont_debug_win_text
 
+#ifdef debug_win_text
 static void
-_trace_line(char * tag, wchar * text, int len)
+_trace_line(char * tag, cattr attr, ushort lattr, wchar * text, int len)
 {
   bool show = false;
   for (int i = 0; i < len; i++)
     if (text[i] != ' ') show = true;
   if (show) {
-    printf("%s", tag);
+    printf("%s %04X %08llX", tag, lattr, attr.attr);
     for (int i = 0; i < len; i++) printf(" %04X", text[i]);
     printf("\n");
   }
 }
-
-inline static void
-trace_line(char * tag, wchar * text, int len)
-{
-  _trace_line(tag, text, len);
-}
-
-#ifndef debug_win_text
-#define trace_line(tag, text, len)	
+#define trace_line(tag) _trace_line(tag, attr, lattr, text, len)
+#else
+#define trace_line(tag)
 #endif
 
 static wchar
@@ -1255,6 +1390,291 @@ text_out_end()
     ScriptStringFree(&ssa);
 }
 
+
+// applies bold as colour if required, returns true if still needs thickening
+static bool
+old_apply_bold_colour(colour_i *pfgi)
+{
+  // We use two bits to control colouring and thickening for three classes of
+  // colours: ANSI (0-7), default, and other (8-256, true). We also reserve one
+  // combination for xterm's default (thicken everything, ANSI is also coloured).
+  // - "other" is always thickened and never gets colouring.
+  // - when bold_as_colour=no: ANSI+defaut are only thickened.
+  // - when bold_as_colour=yes:
+  //   .. and bold_as_font=no:  ANSI+default are only coloured
+  //   .. and bold_as_font=yes: ANSI+default are thickened, ANSI also coloured (xterm)
+  if (cfg.bold_as_colour) {
+    if (CCL_ANSI8(*pfgi)) {
+      *pfgi |= 8;     // (BLACK|...|WHITE)_I -> BOLD_(BLACK|...|WHITE)_I
+      return cfg.bold_as_font;
+    }
+    if (CCL_DEFAULT(*pfgi) && !cfg.bold_as_font) {
+      *pfgi |= 1;     // (FG|BG)_COLOUR_I -> BOLD_(FG|BG)_COLOUR_I
+      return false;
+    }
+  }
+  return true;
+}
+
+// removes default colours if not reversed, returns true if still needs thickening
+static bool
+old_rtf_bold_decolour(cattrflags attr, colour_i * pfgi, colour_i * pbgi)
+{
+  bool bold_thickens = cfg.bold_as_font;  // all colours
+  // if not reverse:
+  // - if only bold_as_colour, ATTR_BOLD still thickens default fg on default bg
+  // - don't colour default fg/bg (caller interprets COLOUR_NUM as "no colour").
+  if (!(attr & ATTR_REVERSE)) {
+    if (cfg.bold_as_colour && CCL_DEFAULT(*pfgi) && CCL_DEFAULT(*pbgi))
+      bold_thickens = true;  // even if bold_as_font=no
+    if (CCL_DEFAULT(*pfgi))
+      *pfgi = COLOUR_NUM;  // no colouring
+    if (CCL_DEFAULT(*pbgi))
+      *pbgi = COLOUR_NUM;  // no colouring
+  }
+  return (attr & ATTR_BOLD) && bold_thickens;
+}
+
+// Applies attributes to the fg/bg colours and returns the new cattr.
+//
+// "mode" maps to arbitrary sets of "things to do". Mostly these are just
+// groups of attributes to handle, but it may also reflect custom needs.
+//
+// While {FG|BG}MASK and truefg/truebg might update, attributes remain the same.
+// The exception is bold which can be applied as colour and/or thickness,
+// so ATTR_BOLD bit will be turned off if further thickening should not happen.
+// Always returns true colour, except ACM_RTF* modes which only do the palette.
+static cattr
+old_apply_attr_colour(cattr a, attr_colour_mode mode)
+{
+  // indexed modifications
+  bool do_reverse_i = mode & (ACM_RTF_PALETTE | ACM_RTF_GEN);
+  bool do_bold_i = mode & (ACM_TERM | ACM_RTF_PALETTE | ACM_RTF_GEN | ACM_SIMPLE | ACM_VBELL_BG);
+  bool do_blink_i = mode & (ACM_TERM | ACM_RTF_PALETTE | ACM_RTF_GEN);
+  bool do_finalize_rtf_i = mode & (ACM_RTF_PALETTE | ACM_RTF_GEN);
+  bool do_rtf_bold_decolour_i = mode & (ACM_RTF_GEN);
+
+  colour_i fgi = (a.attr & ATTR_FGMASK) >> ATTR_FGSHIFT;
+  colour_i bgi = (a.attr & ATTR_BGMASK) >> ATTR_BGSHIFT;
+  a.attr &= ~(ATTR_FGMASK | ATTR_BGMASK);  // we'll refill it later
+
+  if (do_reverse_i && (a.attr & ATTR_REVERSE)) {
+    colour_i t = fgi; fgi = bgi; bgi = t;
+    colour tmp = a.truefg; a.truefg = a.truebg; a.truebg = tmp;
+  }
+
+  bool reset_bold = false;
+  if (do_bold_i && (a.attr & ATTR_BOLD))    // rtf_bold_decolour uses ATTR_BOLD
+    reset_bold = !old_apply_bold_colour(&fgi);  // we'll reset afterwards if needed
+
+  if (do_blink_i && (a.attr & ATTR_BLINK)) {
+    if (CCL_ANSI8(bgi))
+      bgi |= 8;
+    else if (CCL_DEFAULT(bgi))
+      bgi |= 1;
+  }
+
+  if (do_finalize_rtf_i) {
+    if (do_rtf_bold_decolour_i) {  // uses ATTR_BOLD, ATTR_REVERSE
+      bool thicken = old_rtf_bold_decolour(a.attr, &fgi, &bgi);
+      if (!thicken)
+        a.attr &= ~ATTR_BOLD;
+    }
+
+    if (a.attr & ATTR_INVISIBLE) {
+      fgi = bgi; a.truefg = a.truebg;
+    }
+
+    a.attr |= fgi << ATTR_FGSHIFT | bgi << ATTR_BGSHIFT;
+    return a;  // rtf colouring prefers indexed where possible
+  }
+
+  if (reset_bold)
+    a.attr &= ~ATTR_BOLD;  // off if we should not further thicken
+
+  // from here onward the result is true colour
+  bool do_dim = mode & (ACM_TERM | ACM_SIMPLE | ACM_VBELL_BG);
+  bool do_reverse = mode & (ACM_TERM);
+  bool do_invisible = mode & (ACM_TERM | ACM_SIMPLE);
+  bool do_vbell_bg = mode & (ACM_VBELL_BG);
+
+  colour fg = fgi >= TRUE_COLOUR ? a.truefg : win_get_colour(fgi);
+  colour bg = bgi >= TRUE_COLOUR ? a.truebg : win_get_colour(bgi);
+
+  if (do_dim && (a.attr & ATTR_DIM)) {
+    // we dim by blending fg 50-50 with the default terminal bg
+    // (x & 0xFEFEFEFE) >> 1  halves each of the RGB components of x .
+    // win_get_colour(..) takes term.rvideo into account.
+    fg = ((fg & 0xFEFEFEFE) >> 1) + ((win_get_colour(BG_COLOUR_I) & 0xFEFEFEFE) >> 1);
+  }
+
+  if (do_reverse && (a.attr & ATTR_REVERSE)) {
+    colour t = fg; fg = bg; bg = t;
+  }
+
+  if (do_invisible && (a.attr & ATTR_INVISIBLE))
+    fg = bg;
+
+  if (do_vbell_bg)  // FIXME: we should have TATTR_VBELL. selection should too
+    bg = brighten(bg, fg, false);
+
+  // ACM_TERM does also search and cursor colours. for now we don't handle those
+
+  a.truefg = fg;
+  a.truebg = bg;
+  a.attr |= TRUE_COLOUR << ATTR_FGSHIFT | TRUE_COLOUR << ATTR_BGSHIFT;
+  return a;
+}
+
+// applies bold as colour if required, returns true if still needs thickening
+static bool
+apply_bold_colour(colour_i *pfgi)
+{
+  // We use two bits to control colouring and thickening for three classes of
+  // colours: ANSI (0-7), default, and other (8-256, true). We also reserve one
+  // combination for xterm's default (thicken everything, ANSI is also coloured).
+  // - "other" is always thickened and never gets colouring.
+  // - bold_as_font:  thicken ANSI/default colours.
+  // - bold_as_colour: colour ANSI/default colours.
+  // Exception if both false: thicken ANSI/default, colour ANSI (xterm's default).
+  bool ansi = CCL_ANSI8(*pfgi);
+  if (!ansi && !CCL_DEFAULT(*pfgi))
+    return true;  // neither ANSI nor default -> always thicken, no colouring
+
+  if (!cfg.bold_as_colour && !cfg.bold_as_font) {  // the exception: xterm-like
+    if (ansi)  // coloured
+      *pfgi |= 8;  // (BLACK|...|WHITE)_I -> BOLD_(BLACK|...|WHITE)_I
+    return true;  // both thickened
+  }
+  // switchable bold_colour
+  if (term.enable_bold_colour && CCL_DEFAULT(*pfgi)
+      && colours[BOLD_COLOUR_I] != (colour)-1) {
+    *pfgi = BOLD_COLOUR_I;
+  }
+  else
+  // normal independent as_font/as_colour controls
+  if (cfg.bold_as_colour) {
+    if (ansi)
+      *pfgi |= 8;
+    else  // default
+      *pfgi |= 1;  // (FG|BG)_COLOUR_I -> BOLD_(FG|BG)_COLOUR_I
+  }
+  return cfg.bold_as_font;  // thicken if bold_as_font
+}
+
+// removes default colours if not reversed, returns true if still needs thickening
+static bool
+rtf_bold_decolour(cattrflags attr, colour_i * pfgi, colour_i * pbgi)
+{
+  bool bold_thickens = cfg.bold_as_font;  // all colours
+  // if not reverse:
+  // - ATTR_BOLD always thickens default fg on default bg
+  // - don't colour default fg/bg (caller interprets COLOUR_NUM as "no colour").
+  if (!(attr & ATTR_REVERSE)) {
+    if (CCL_DEFAULT(*pfgi) && CCL_DEFAULT(*pbgi))
+      bold_thickens = true;  // even if bold_as_font=no
+    if (CCL_DEFAULT(*pfgi))
+      *pfgi = COLOUR_NUM;  // no colouring
+    if (CCL_DEFAULT(*pbgi))
+      *pbgi = COLOUR_NUM;  // no colouring
+  }
+  return (attr & ATTR_BOLD) && bold_thickens;
+}
+
+// Applies attributes to the fg/bg colours and returns the new cattr.
+//
+// "mode" maps to arbitrary sets of "things to do". Mostly these are just
+// groups of attributes to handle, but it may also reflect custom needs.
+//
+// While {FG|BG}MASK and truefg/truebg might update, attributes remain the same.
+// The exception is bold which can be applied as colour and/or thickness,
+// so ATTR_BOLD bit will be turned off if further thickening should not happen.
+// Always returns true colour, except ACM_RTF* modes which only do the palette.
+cattr
+apply_attr_colour(cattr a, attr_colour_mode mode)
+{
+  if (cfg.old_bold)
+    return old_apply_attr_colour(a, mode);
+
+  // indexed modifications
+  bool do_reverse_i = mode & (ACM_RTF_PALETTE | ACM_RTF_GEN);
+  bool do_bold_i = mode & (ACM_TERM | ACM_RTF_PALETTE | ACM_RTF_GEN | ACM_SIMPLE | ACM_VBELL_BG);
+  bool do_blink_i = mode & (ACM_TERM | ACM_RTF_PALETTE | ACM_RTF_GEN);
+  bool do_finalize_rtf_i = mode & (ACM_RTF_PALETTE | ACM_RTF_GEN);
+  bool do_rtf_bold_decolour_i = mode & (ACM_RTF_GEN);
+
+  colour_i fgi = (a.attr & ATTR_FGMASK) >> ATTR_FGSHIFT;
+  colour_i bgi = (a.attr & ATTR_BGMASK) >> ATTR_BGSHIFT;
+  a.attr &= ~(ATTR_FGMASK | ATTR_BGMASK);  // we'll refill it later
+
+  if (do_reverse_i && (a.attr & ATTR_REVERSE)) {
+    colour_i t = fgi; fgi = bgi; bgi = t;
+    colour tmp = a.truefg; a.truefg = a.truebg; a.truebg = tmp;
+  }
+
+  bool reset_bold = false;
+  if (do_bold_i && (a.attr & ATTR_BOLD))    // rtf_bold_decolour uses ATTR_BOLD
+    reset_bold = !apply_bold_colour(&fgi);  // we'll reset afterwards if needed
+
+  if (do_blink_i && (a.attr & ATTR_BLINK)) {
+    if (CCL_ANSI8(bgi))
+      bgi |= 8;
+    else if (CCL_DEFAULT(bgi))
+      bgi |= 1;
+  }
+
+  if (do_finalize_rtf_i) {
+    if (do_rtf_bold_decolour_i) {  // uses ATTR_BOLD, ATTR_REVERSE
+      bool thicken = rtf_bold_decolour(a.attr, &fgi, &bgi);
+      if (!thicken)
+        a.attr &= ~ATTR_BOLD;
+    }
+
+    if (a.attr & ATTR_INVISIBLE) {
+      fgi = bgi; a.truefg = a.truebg;
+    }
+
+    a.attr |= fgi << ATTR_FGSHIFT | bgi << ATTR_BGSHIFT;
+    return a;  // rtf colouring prefers indexed where possible
+  }
+
+  if (reset_bold)
+    a.attr &= ~ATTR_BOLD;  // off if we should not further thicken
+
+  // from here onward the result is true colour
+  bool do_dim = mode & (ACM_TERM | ACM_SIMPLE | ACM_VBELL_BG);
+  bool do_reverse = mode & (ACM_TERM);
+  bool do_invisible = mode & (ACM_TERM | ACM_SIMPLE);
+  bool do_vbell_bg = mode & (ACM_VBELL_BG);
+
+  colour fg = fgi >= TRUE_COLOUR ? a.truefg : win_get_colour(fgi);
+  colour bg = bgi >= TRUE_COLOUR ? a.truebg : win_get_colour(bgi);
+
+  if (do_dim && (a.attr & ATTR_DIM)) {
+    // we dim by blending fg 50-50 with the default terminal bg
+    // (x & 0xFEFEFEFE) >> 1  halves each of the RGB components of x .
+    // win_get_colour(..) takes term.rvideo into account.
+    fg = ((fg & 0xFEFEFEFE) >> 1) + ((win_get_colour(BG_COLOUR_I) & 0xFEFEFEFE) >> 1);
+  }
+
+  if (do_reverse && (a.attr & ATTR_REVERSE)) {
+    colour t = fg; fg = bg; bg = t;
+  }
+
+  if (do_invisible && (a.attr & ATTR_INVISIBLE))
+    fg = bg;
+
+  if (do_vbell_bg)  // FIXME: we should have TATTR_VBELL. selection should too
+    bg = brighten(bg, fg, false);
+
+  // ACM_TERM does also search and cursor colours. for now we don't handle those
+
+  a.truefg = fg;
+  a.truebg = bg;
+  a.attr |= TRUE_COLOUR << ATTR_FGSHIFT | TRUE_COLOUR << ATTR_BGSHIFT;
+  return a;
+}
+
 /*
  * Draw a line of text in the window, at given character
  * coordinates, in given attributes.
@@ -1265,14 +1685,16 @@ void
 win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort lattr, bool has_rtl)
 {
   bool even_line = y % 2;
-
+  int graph = (attr.attr >> ATTR_GRAPH_SHIFT) & 0xFF;
   int findex = (attr.attr & FONTFAM_MASK) >> ATTR_FONTFAM_SHIFT;
   struct fontfam * ff = &fontfamilies[findex];
 
   bool clearpad = lattr & LATTR_CLEARPAD;
-  trace_line("win_text:", text, len);
+  trace_line("win_text:");
 
+  bool ldisp2 = !!(lattr & LATTR_DISP2);
   lattr &= LATTR_MODE;
+
   int char_width = cell_width * (1 + (lattr != LATTR_NORM));
 
  /* Only want the left half of double width lines */
@@ -1287,6 +1709,64 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
   if (attr.attr & ATTR_WIDE)
     char_width *= 2;
 
+  attr = apply_attr_colour(attr, ACM_TERM);
+  colour fg = attr.truefg;
+  colour bg = attr.truebg;
+  // ATTR_BOLD is now set if and only if we need further thickening.
+
+  bool has_cursor = attr.attr & (TATTR_ACTCURS | TATTR_PASCURS);
+  colour cursor_colour = 0;
+
+  if (attr.attr & (TATTR_CURRESULT | TATTR_CURMARKED)) {
+    bg = cfg.search_current_colour;
+    fg = cfg.search_fg_colour;
+  }
+  else if (attr.attr & (TATTR_RESULT | TATTR_MARKED)) {
+    bg = cfg.search_bg_colour;
+    fg = cfg.search_fg_colour;
+  }
+
+  if (has_cursor) {
+    cursor_colour = colours[ime_open ? IME_CURSOR_COLOUR_I : CURSOR_COLOUR_I];
+
+    //static uint mindist = 32768;
+    static uint mindist = 22222;
+    //static uint mindist = 8000;
+    bool too_close = colour_dist(cursor_colour, bg) < mindist;
+
+    if (too_close) {
+      //cursor_colour = fg;
+      colour ccfg = brighten(cursor_colour, fg, false);
+      colour ccbg = brighten(cursor_colour, bg, false);
+      if (colour_dist(ccfg, bg) < mindist
+          && colour_dist(ccfg, bg) < colour_dist(ccbg, bg))
+        cursor_colour = ccbg;
+      else
+        cursor_colour = ccfg;
+    }
+
+    if ((attr.attr & TATTR_ACTCURS) && term_cursor_type() == CUR_BLOCK) {
+      fg = colours[CURSOR_TEXT_COLOUR_I];
+      if (too_close && colour_dist(cursor_colour, fg) < mindist)
+        fg = bg;
+      bg = cursor_colour;
+#ifdef debug_cursor
+      printf("set cursor (colour %06X) @(row %d col %d) cursor_on %d\n", bg, (y - PADDING) / cell_height, (x - PADDING) / char_width, term.cursor_on);
+#endif
+    }
+  }
+
+  if (even_line && term.even_line_highlight_delta > 0) {
+      int r = red(bg), g = green(bg), b = blue(bg);
+	  int delta = term.even_line_highlight_delta;
+      bg = make_colour(
+          r < 128 ? (r + delta) : (r - delta),
+          g < 128 ? (g + delta) : (g - delta),
+          b < 128 ? (b + delta) : (b - delta)
+      );
+  }
+
+ /* Now that attributes are sorted out, select proper font */
   uint nfont;
   switch (lattr) {
     when LATTR_NORM: nfont = 0;
@@ -1300,10 +1780,11 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
   if (attr.attr & ATTR_NARROW)
     nfont |= FONT_NARROW;
 
-#ifdef debug_bold
-  wchar t[len + 1]; wcsncpy(t, text, len); t[len] = 0;
-  printf("bold_mode %d attr_bold %d <%ls>\n", ff->bold_mode, !!(attr.attr & ATTR_BOLD), t);
-#endif
+  bool do_special_underlay = false;
+  if (cfg.bold_as_special && (attr.attr & ATTR_BOLD)) {
+    do_special_underlay = true;
+    attr.attr &= ~ATTR_BOLD;
+  }
   if (ff->bold_mode == BOLD_FONT && (attr.attr & ATTR_BOLD))
     nfont |= FONT_BOLD;
   if (ff->und_mode == UND_FONT && (attr.attr & ATTR_UNDER))
@@ -1330,111 +1811,12 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
   if (!ff->fonts[nfont])
     nfont = FONT_NORMAL;
 
-  colour_i fgi = (attr.attr & ATTR_FGMASK) >> ATTR_FGSHIFT;
-  colour_i bgi = (attr.attr & ATTR_BGMASK) >> ATTR_BGSHIFT;
-
-  bool apply_shadow = true;
-  if (term.rvideo) {
-    if (fgi >= 256)
-      fgi ^= 2;     // (BOLD_)?FG_COLOUR_I <-> (BOLD_)?BG_COLOUR_I
-    if (bgi >= 256)
-      bgi ^= 2;     // (BOLD_)?FG_COLOUR_I <-> (BOLD_)?BG_COLOUR_I
-  }
-  if (attr.attr & ATTR_BOLD && cfg.bold_as_colour) {
-    if (fgi < 8) {
-      if (!cfg.bold_as_font)
-        apply_shadow = false;
-#ifdef debug_bold
-      printf("fgi < 8 (%d %d): apply_shadow %d\n", (int)colours[fgi], (int)colours[fgi | 8], apply_shadow);
+#if defined(debug_bold) && debug_bold > 1
+  wchar t[len + 1]; wcsncpy(t, text, len); t[len] = 0;
+  printf("font %02X (%dpt) bold_mode %d attr_bold %d fg %06X <%ls>\n", nfont, font_size, ff->bold_mode, !!(attr.attr & ATTR_BOLD), fg, t);
 #endif
-#ifdef enforce_bold
-      if (colours[fgi] == colours[fgi | 8])
-        apply_shadow = true;
-#endif
-      fgi |= 8;     // (BLACK|...|WHITE)_I -> BOLD_(BLACK|...|WHITE)_I
-    }
-    else if (fgi >= 256 && fgi != TRUE_COLOUR && !cfg.bold_as_font) {
-      apply_shadow = false;
-#ifdef enforce_bold
-      if (colours[fgi] == colours[fgi | 1])
-        apply_shadow = true;
-#endif
-      fgi |= 1;     // (FG|BG)_COLOUR_I -> BOLD_(FG|BG)_COLOUR_I
-    }
-  }
-  if (attr.attr & ATTR_BLINK) {
-    if (bgi < 8)
-      bgi |= 8;
-    else if (bgi >= 256)
-      bgi |= 1;
-  }
 
-  colour fg = fgi >= TRUE_COLOUR ? attr.truefg : colours[fgi];
-  colour bg = bgi >= TRUE_COLOUR ? attr.truebg : colours[bgi];
-
-  if (even_line && term.even_line_highlight_delta > 0) {
-      int r = red(bg), g = green(bg), b = blue(bg);
-	  int delta = term.even_line_highlight_delta;
-      bg = make_colour(
-          r < 128 ? (r + delta) : (r - delta),
-          g < 128 ? (g + delta) : (g - delta),
-          b < 128 ? (b + delta) : (b - delta)
-      );
-  }
-
-  if (attr.attr & ATTR_DIM) {
-    fg = (fg & 0xFEFEFEFE) >> 1; // Halve the brightness.
-    if (!cfg.bold_as_colour || fgi >= 256)
-      fg += (bg & 0xFEFEFEFE) >> 1; // Blend with background.
-  }
-  if (attr.attr & ATTR_REVERSE) {
-    colour t = fg; fg = bg; bg = t;
-  }
-  if (attr.attr & ATTR_INVISIBLE)
-    fg = bg;
-
-  bool has_cursor = attr.attr & (TATTR_ACTCURS | TATTR_PASCURS);
-  colour cursor_colour = 0;
-
-  if (attr.attr & (TATTR_CURRESULT | TATTR_CURMARKED)) {
-    bg = cfg.search_current_colour;
-    fg = cfg.search_fg_colour;
-  }
-  else if (attr.attr & (TATTR_RESULT | TATTR_MARKED)) {
-    bg = cfg.search_bg_colour;
-    fg = cfg.search_fg_colour;
-  }
-
-  if (has_cursor) {
-    cursor_colour = colours[ime_open ? IME_CURSOR_COLOUR_I : CURSOR_COLOUR_I];
-
-    //uint mindist = 32768;
-    uint mindist = 22222;
-    //uint mindist = 8000;
-    bool too_close = colour_dist(cursor_colour, bg) < mindist;
-
-    if (too_close) {
-      //cursor_colour = fg;
-      colour ccfg = brighten(cursor_colour, fg);
-      colour ccbg = brighten(cursor_colour, bg);
-      if (colour_dist(ccfg, bg) < mindist
-          && colour_dist(ccfg, bg) < colour_dist(ccbg, bg))
-        cursor_colour = ccbg;
-      else
-        cursor_colour = ccfg;
-    }
-
-    if ((attr.attr & TATTR_ACTCURS) && term_cursor_type() == CUR_BLOCK) {
-      fg = colours[CURSOR_TEXT_COLOUR_I];
-      if (too_close && colour_dist(cursor_colour, fg) < mindist)
-        fg = bg;
-      bg = cursor_colour;
-#ifdef debug_cursor
-      printf("set cursor (colour %06X) @(row %d col %d) cursor_on %d\n", bg, (y - PADDING) / cell_height, (x - PADDING) / char_width, term.cursor_on);
-#endif
-    }
-  }
-
+ /* With selected font, begin preparing the rendering */
   SelectObject(dc, ff->fonts[nfont]);
   SetTextColor(dc, fg);
   SetBkColor(dc, bg);
@@ -1473,11 +1855,11 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
       .nGlyphs = len
     };
 
-    trace_line(" <ChrPlc:", text, len);
+    trace_line(" <ChrPlc:");
     GetCharacterPlacementW(dc, text, len, 0, &gcpr,
                            FLI_MASK | GCP_CLASSIN | GCP_DIACRITIC);
     len = gcpr.nGlyphs;
-    trace_line(" >ChrPlc:", text, len);
+    trace_line(" >ChrPlc:");
     eto_options |= ETO_GLYPH_INDEX;
   }
 
@@ -1500,7 +1882,6 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
     }
   }
 
-  int graph = (attr.attr >> ATTR_GRAPH_SHIFT) & 0xFF;
   if (graph && !(graph & 0x80)) {
     for (int i = 0; i < len; i++)
       text[i] = ' ';
@@ -1555,9 +1936,17 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
     xt = x;
   }
 
+  int line_width = (3
+                    + (attr.attr & ATTR_BOLD ? 1 : 0)
+                    + (lattr >= LATTR_WIDE ? 2 : 0)
+                    + (lattr >= LATTR_TOP ? 2 : 0)
+                   ) * cell_height / 40;
+  if (line_width < 1)
+    line_width = 1;
+
  /* Determine shadow/overstrike bold or double-width/height width */
   int xwidth = 1;
-  if (apply_shadow && ff->bold_mode == BOLD_SHADOW && (attr.attr & ATTR_BOLD)) {
+  if (ff->bold_mode == BOLD_SHADOW && (attr.attr & ATTR_BOLD)) {
     // This could be scaled with font size, but at risk of clipping
     xwidth = 2;
     if (lattr != LATTR_NORM) {
@@ -1565,14 +1954,151 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
     }
   }
 
+ /* Manual underline */
+  colour ul = fg;
+  int uloff = ff->descent + (cell_height - ff->descent + 1) / 2;
+  if (lattr == LATTR_BOT)
+    uloff = ff->descent + (cell_height - ff->descent + 1) / 2;
+  uloff += line_width / 2;
+  if (uloff >= cell_height)
+    uloff = cell_height - 1;
+
+  if (cfg.underl_colour != (colour)-1)
+    ul = cfg.underl_colour;
+#ifdef debug_underline
+  if (cfg.underl_colour == (colour)-1)
+    ul = 0x802020E0;
+  if (lattr == LATTR_TOP)
+    ul = 0x80E0E020;
+  if (lattr == LATTR_BOT)
+    ul = 0x80E02020;
+#endif
+#ifdef debug_bold
+  if (xwidth > 1) {
+    force_manual_underline = true;
+    ul = 0x802020E0;
+  }
+  else if (nfont & FONT_BOLD) {
+    force_manual_underline = true;
+    ul = 0x8020E020;
+  }
+#endif
+
+  bool underlaid = false;
+  void clear_run() {
+    if (!underlaid) {
+      ExtTextOutW(dc, xt, yt, eto_options | ETO_OPAQUE, &box, W(" "), 1, dxs);
+
+      underlaid = true;
+    }
+  }
+
+ /* Special underlay */
+  if (do_special_underlay && !ldisp2) {
+    xchar uc = 0x2312;
+    int ulaylen = uc > 0xFFFF ? ulen * 2 : ulen;
+    wchar ulay[ulaylen];
+    for (int i = 0; i < ulaylen; i++)
+      if (uc > 0xFFFF)
+        if (i & 1)
+          ulay[i] = low_surrogate(uc);
+        else
+          ulay[i] = high_surrogate(uc);
+      else
+        ulay[i] = uc;
+
+    static colour rainbow[] = { // https://en.wikipedia.org/wiki/Rainbow
+      RGB(0xFF, 0x00, 0x00), // red
+      RGB(0xFF, 0x66, 0x00), // orange
+      RGB(0xFF, 0xEE, 0x00), // yellow
+      RGB(0x00, 0xFF, 0x00), // green
+      RGB(0x00, 0x99, 0xFF), // blue
+      RGB(0x44, 0x00, 0xFF), // indigo
+      RGB(0x99, 0x00, 0xFF), // violet
+      };
+
+    int dist = cell_height / 20 + 1;
+    int leap = cell_height <= 20 ? 3 : cell_height <= 30 ? 2 : 1;
+    int y = yt - cell_height / 2 + 4 * dist;
+    for (uint c = 0; c < lengthof(rainbow); c += leap) {
+      SetTextColor(dc, rainbow[c]);
+      uint eto = eto_options;
+      if (!underlaid && !c)
+        eto |= ETO_OPAQUE;
+      ExtTextOutW(dc, xt, y, eto, &box, ulay, ulaylen, dxs);
+      y += dist;
+    }
+    SetTextColor(dc, bg);
+    ExtTextOutW(dc, xt, y, eto_options, &box, ulay, ulaylen, dxs);
+    SetTextColor(dc, fg);
+
+    underlaid = true;
+  }
+
+ /* Underline */
+  if (!ldisp2 && lattr != LATTR_TOP &&
+      (force_manual_underline ||
+       (ff->und_mode == UND_LINE && (attr.attr & ATTR_UNDER)) ||
+       (attr.attr & ATTR_DOUBLYUND))) {
+    clear_run();
+
+    HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, 0, ul));
+    int gapfrom = 0, gapdone = 0;
+    if (attr.attr & ATTR_DOUBLYUND) {
+      if (line_width < 3)
+        line_width = 3;
+      int gap = line_width / 3;
+      gapfrom = (line_width - gap) / 2;
+      gapdone = line_width - gapfrom;
+    }
+    for (int l = 0; l < line_width; l++) {
+      if (l >= gapdone || l < gapfrom) {
+        MoveToEx(dc, x, y + uloff - l, null);
+        LineTo(dc, x + ulen * char_width, y + uloff - l);
+      }
+    }
+    oldpen = SelectObject(dc, oldpen);
+    DeleteObject(oldpen);
+  }
+
+ /* Overline */
+  if (!ldisp2 && lattr != LATTR_BOT && attr.attr & ATTR_OVERL) {
+    clear_run();
+
+    HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, 0, ul));
+    for (int l = 0; l < line_width; l++) {
+      MoveToEx(dc, x, y + l, null);
+      LineTo(dc, x + ulen * char_width, y + l);
+    }
+    oldpen = SelectObject(dc, oldpen);
+    DeleteObject(oldpen);
+  }
+
+ /* DEC Tech adjustments */
+  if (graph & 0x80) {  // DEC Technical rendering to be fixed
+    if ((graph & ~1) == 0x88)  // left square bracket corners
+      xt += line_width + 1;
+    else if ((graph & ~1) == 0x8A)  // right square bracket corners
+      xt -= line_width + 1;
+    else if (graph == 0x87)  // middle angle: don't display ╳, draw (below)
+      for (int i = 0; i < len; i++)
+        text[i] = ' ';
+    else if (graph == 0x80)  // square root base: rather draw (partially)
+      for (int i = 0; i < len; i++)
+        text[i] = 0x2502;
+  }
+
  /* Finally, draw the text */
-  SetBkMode(dc, OPAQUE);
-  uint overwropt = ETO_OPAQUE;
-  if (attr.attr & ATTR_ITALIC) {
+  uint overwropt;
+  if (ldisp2 || underlaid) {
     SetBkMode(dc, TRANSPARENT);
     overwropt = 0;
   }
-  trace_line(" TextOut:", text, len);
+  else {
+    SetBkMode(dc, OPAQUE);
+    overwropt = ETO_OPAQUE;
+  }
+  trace_line(" TextOut:");
   // The combining characters separate rendering trick *alone* 
   // makes some combining characters better (~#553, #295), 
   // others worse (#565); however, together with the 
@@ -1616,30 +2142,8 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
         if (combining_double && combiningdouble(text[i]))
           xx += char_width / 2;
         if (!termattrs_equal_fg(&textattr[i], &textattr[i - 1])) {
-          // determine colour to be used for combining characters;
-          // simplified version of the algorithm above
-          colour_i fgi = (textattr[i].attr & ATTR_FGMASK) >> ATTR_FGSHIFT;
-          if (term.rvideo) {
-            if (fgi >= 256)
-              fgi ^= 2;     // (BOLD_)?FG_COLOUR_I <-> (BOLD_)?BG_COLOUR_I
-          }
-          if (textattr[i].attr & ATTR_BOLD && cfg.bold_as_colour) {
-            if (fgi < 8) {
-              fgi |= 8;     // (BLACK|...|WHITE)_I -> BOLD_(BLACK|...|WHITE)_I
-            }
-            else if (fgi >= 256 && fgi != TRUE_COLOUR && !cfg.bold_as_font) {
-              fgi |= 1;     // (FG|BG)_COLOUR_I -> BOLD_(FG|BG)_COLOUR_I
-            }
-          }
-          colour fg = fgi >= TRUE_COLOUR ? textattr[i].truefg : colours[fgi];
-          if (textattr[i].attr & ATTR_DIM) {
-            fg = (fg & 0xFEFEFEFE) >> 1; // Halve the brightness.
-            if (!cfg.bold_as_colour || fgi >= 256)
-              fg += (bg & 0xFEFEFEFE) >> 1; // Blend with background.
-          }
-          if (textattr[i].attr & ATTR_INVISIBLE)
-            fg = bg;
-
+          // determine colour to be used for combining characters
+          colour fg = apply_attr_colour(textattr[i], ACM_SIMPLE).truefg;
           SetTextColor(dc, fg);
         }
         ulen = char1ulen(&text[i]);
@@ -1655,14 +2159,8 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
     }
   text_out_end();
 
-  int line_width = (3
-                    + (attr.attr & ATTR_BOLD ? 1 : 0)
-                    + (lattr >= LATTR_WIDE ? 2 : 0)
-                    + (lattr >= LATTR_TOP ? 2 : 0)
-                   ) * cell_height / 40;
-  if (line_width < 1)
-    line_width = 1;
-
+ /* Manual drawing of certain graphics */
+  // line_width already set above for DEC Tech adjustments
 #define dont_debug_vt100_line_drawing_chars
 #ifdef debug_vt100_line_drawing_chars
   fg = 0x00FF0000;
@@ -1685,6 +2183,89 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
 #endif
 
   if (graph & 0x80) {  // DEC Technical characters to be fixed
+    if (graph & 0x08) {
+      // square bracket corners already repositioned above
+    }
+    else {  // Sum segments to be (partially) drawn, square root base
+      int sum_width = line_width;
+      int y0 = (lattr == LATTR_BOT) ? y - cell_height : y;
+      int yoff = (cell_height - line_width) * 3 / 5;
+      if (lattr >= LATTR_TOP)
+        yoff *= 2;
+      int xoff = (char_width - line_width) / 2;
+      // 0x80 square root base
+      // sum segments:
+      // 0x81 upper left: add diagonal to bottom
+      // 0x82 lower left: add diagonal to top
+      // 0x85 upper right: add hook down
+      // 0x86 lower right: add hook up
+      // 0x87 middle right angle
+      int yt, yb;
+      int ycellb = y0 + (lattr >= LATTR_TOP ? 2 : 1) * cell_height;
+      if (graph & 1) {  // upper segment: downwards
+        yt = y0 + yoff;
+        yb = ycellb;
+      }
+      else {  // lower segment: upwards
+        yt = y0;
+        yb = y0 + yoff;
+      }
+      int xl = x + xoff;
+      int xr = xl;
+      if (graph <= 0x82) {  // diagonals
+        sum_width ++;
+        xl += line_width - 1;
+        xr = x + char_width - 1;
+        if (graph == 0x82) {
+          int xb = xl;
+          xl = xr;
+          xr = xb;
+        }
+      }
+      // adjustments with scaling pen:
+      xl ++; xr ++;
+      int x0 = x;
+      if (graph & 1) {  // upper segment: downwards
+        yt --;
+        yb --;
+      } else {  // lower segment: upwards
+        yt -= 1;
+        yb -= 1;
+      }
+      // special adjustments:
+      if (graph == 0x80) {  // square root base
+        xl --;
+      }
+      else if (graph == 0x87) {  // sum middle right angle
+      }
+      // draw:
+      //HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, sum_width, fg));
+      HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, line_width, fg));
+      sum_width = 1;  // now handled by pen width
+      for (int i = 0; i < len; i++) {
+        for (int l = 0; l < sum_width; l++) {
+          if (graph == 0x80) {  // square root base
+            MoveToEx(dc, xl + l, ycellb, null);
+            LineTo(dc, xl - (xl - x0) / 2 + l, yb + l);
+            LineTo(dc, x0, yb + l);
+          }
+          else if (graph == 0x87) {  // sum middle right angle
+            MoveToEx(dc, x0 + l, y0, null);
+            LineTo(dc, xl + l, yt);
+            LineTo(dc, x0 + l, yb);
+          }
+          else {
+            MoveToEx(dc, xl + l, yt, null);
+            LineTo(dc, xr + l, yb);
+          }
+        }
+        x0 += char_width;
+        xl += char_width;
+        xr += char_width;
+      }
+      oldpen = SelectObject(dc, oldpen);
+      DeleteObject(oldpen);
+    }
   }
   else if (graph >> 4) {  // VT100 horizontal lines ⎺⎻(─)⎼⎽
     HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, 0, fg));
@@ -1744,50 +2325,6 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
     DeleteObject(oldpen);
   }
 
- /* Manual underline */
-  colour ul = fg;
-  int uloff = ff->descent + (cell_height - ff->descent + 1) / 2;
-  if (lattr == LATTR_BOT)
-    uloff = ff->descent + (cell_height - ff->descent + 1) / 2;
-  uloff += line_width / 2;
-  if (uloff >= cell_height)
-    uloff = cell_height - 1;
-
-  if (cfg.underl_colour != (colour)-1)
-    ul = cfg.underl_colour;
-#ifdef debug_underline
-  if (cfg.underl_colour == (colour)-1)
-    ul = 0x802020E0;
-  if (lattr == LATTR_TOP)
-    ul = 0x80E0E020;
-  if (lattr == LATTR_BOT)
-    ul = 0x80E02020;
-#endif
-
- /* Underline */
-  if (lattr != LATTR_TOP &&
-      (force_manual_underline ||
-       (ff->und_mode == UND_LINE && (attr.attr & ATTR_UNDER)) ||
-       (attr.attr & ATTR_DOUBLYUND))) {
-    HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, 0, ul));
-    int gapfrom = 0, gapdone = 0;
-    if (attr.attr & ATTR_DOUBLYUND) {
-      if (line_width < 3)
-        line_width = 3;
-      int gap = line_width / 3;
-      gapfrom = (line_width - gap) / 2;
-      gapdone = line_width - gapfrom;
-    }
-    for (int l = 0; l < line_width; l++) {
-      if (l >= gapdone || l < gapfrom) {
-        MoveToEx(dc, x, y + uloff - l, null);
-        LineTo(dc, x + len * char_width, y + uloff - l);
-      }
-    }
-    oldpen = SelectObject(dc, oldpen);
-    DeleteObject(oldpen);
-  }
-
  /* Strikeout */
   if (attr.attr & ATTR_STRIKEOUT
       && (cfg.underl_manual || cfg.underl_colour != (colour)-1)) {
@@ -1795,18 +2332,7 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
     HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, 0, ul));
     for (int l = 0; l < line_width; l++) {
       MoveToEx(dc, x, y + soff + l, null);
-      LineTo(dc, x + len * char_width, y + soff + l);
-    }
-    oldpen = SelectObject(dc, oldpen);
-    DeleteObject(oldpen);
-  }
-
- /* Overline */
-  if (lattr != LATTR_BOT && attr.attr & ATTR_OVERL) {
-    HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, 0, ul));
-    for (int l = 0; l < line_width; l++) {
-      MoveToEx(dc, x, y + l, null);
-      LineTo(dc, x + len * char_width, y + l);
+      LineTo(dc, x + ulen * char_width, y + soff + l);
     }
     oldpen = SelectObject(dc, oldpen);
     DeleteObject(oldpen);
@@ -1864,6 +2390,7 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
   }
 }
 
+
 /* Check availability of characters in the current font.
  * Zeroes each of the characters in the input array that isn't available.
  */
@@ -1873,10 +2400,14 @@ win_check_glyphs(wchar *wcs, uint num)
   int findex = (term.curs.attr.attr & FONTFAM_MASK) >> ATTR_FONTFAM_SHIFT;
   struct fontfam * ff = &fontfamilies[findex];
 
-  HDC dc = GetDC(wnd);
   bool bold = (ff->bold_mode == BOLD_FONT) && (term.curs.attr.attr & ATTR_BOLD);
   bool italic = term.curs.attr.attr & ATTR_ITALIC;
-  SelectObject(dc, ff->fonts[(bold ? FONT_BOLD : FONT_NORMAL) | italic ? FONT_ITALIC : 0]);
+  HFONT f = ff->fonts[(bold ? FONT_BOLD : FONT_NORMAL) | italic ? FONT_ITALIC : 0];
+  if (!f)  // may not have been initialized
+    f = ff->fonts[FONT_NORMAL];
+
+  HDC dc = GetDC(wnd);
+  SelectObject(dc, f);
   ushort glyphs[num];
   GetGlyphIndicesW(dc, wcs, num, glyphs, true);
   for (size_t i = 0; i < num; i++) {
@@ -1920,11 +2451,20 @@ win_char_width(xchar c)
   if (c >= ' ' && c <= '~')  // don't width-check ASCII
     return 1;
 
+  bool bold = (ff->bold_mode == BOLD_FONT) && (term.curs.attr.attr & ATTR_BOLD);
+  bool italic = term.curs.attr.attr & ATTR_ITALIC;
+  int font4index = (bold ? FONT_BOLD : FONT_NORMAL) | italic ? FONT_ITALIC : 0;
+  HFONT f = ff->fonts[font4index];
+  if (!f) {  // may not have been initialized
+    f = ff->fonts[FONT_NORMAL];
+    font4index = FONT_NORMAL;
+  }
+
   HDC dc = GetDC(wnd);
 #ifdef debug_win_char_width
   bool ok0 = !!
 #endif
-  SelectObject(dc, ff->fonts[FONT_NORMAL]);
+  SelectObject(dc, f);
 #ifdef debug_win_char_width
   if (c == 0x2001)
     win_char_width(0x5555);
@@ -2024,18 +2564,8 @@ win_char_width(xchar c)
   }
 
   if (ambigwide(c) &&
-      (bidi_class(c) != L               // indicates not a letter
-      || (c >= 0x249C && c <= 0x24E9)   // parenthesized/circled letters
-      || (c >= 0x3248 && c <= 0x324F)   // Enclosed CJK Letters and Months
-      || (c >= 0x1F110 && c <= 0x1F12A) // Enclosed Alphanumeric Supplement
-      )
-      &&
-      !(  (c >= 0x2500 && c <= 0x2588)  // Box Drawing, Block Elements
-       || (c >= 0x2592 && c <= 0x2594)  // Block Elements
-       || (c >= 0x2160 && c <= 0x2179)  // Roman Numerals
-       )
 #ifdef check_ambig_non_letters
-#warning instead we now checkk all non-letters with some exclusions (above)
+#warning instead we now check all non-letters with some exclusions
       (c == 0x20AC  // €
       || (c >= 0x2100 && c <= 0x23FF)   // Letterlike, Number Forms, Arrows, Math Operators, Misc Technical
       || (c >= 0x2460 && c <= 0x24FF)   // Enclosed Alphanumerics
@@ -2044,8 +2574,36 @@ win_char_width(xchar c)
       || (c >= 0x2B00 && c <= 0x2BFF)   // Miscellaneous Symbols and Arrows
       || (c >= 0x1F100 && c <= 0x1F1FF) // Enclosed Alphanumeric Supplement
       )
+#else
+      // check all non-letters
+      (bidi_class(c) != L               // indicates not a letter
+      || (c >= 0x249C && c <= 0x24E9)   // parenthesized/circled letters
+      || (c >= 0x3248 && c <= 0x324F)   // Enclosed CJK Letters and Months
+      || (c >= 0x1F110 && c <= 0x1F12A) // Enclosed Alphanumeric Supplement
+      )
+      &&
+      // with some exceptions
+      !(  (c >= 0x2500 && c <= 0x2588)  // Box Drawing, Block Elements
+       || (c >= 0x2592 && c <= 0x2594)  // Block Elements
+       || (c >= 0x2160 && c <= 0x2179)  // Roman Numerals
+       //|| wcschr (W("‐‑‘’‚‛“”„‟‹›"), c) // #712 workaround; now caching
+       )
 #endif
      ) {
+    // look up c in charpropcache
+    struct charpropcache * cpfound = 0;
+    for (uint i = 0; i < ff->cpcachelen[font4index]; i++)
+      if (ff->cpcache[font4index][i].ch == c) {
+        if (ff->cpcache[font4index][i].width) {
+          ReleaseDC(wnd, dc);
+          return ff->cpcache[font4index][i].width;
+        }
+        else {
+          // cached (e.g. by win_check_glyphs) but not measured
+          cpfound = &ff->cpcache[font4index][i];
+        }
+      }
+
     int mbuf = act_char_width(c);
     // report char as wide if its measured width is more than 1½ cells
     int width = mbuf > cell_width ? 2 : 1;
@@ -2055,6 +2613,20 @@ win_char_width(xchar c)
       printf("measured %04X %dpx cell %dpx width %d\n", c, mbuf, cell_width, width);
     }
 # endif
+    // cache width
+    if (cpfound)
+      cpfound->width = width;
+    else {
+      // max size per cache 138739 as of Unicode 10.0;
+      // we should perhaps limit this...
+      struct charpropcache * newcpcache = renewn(ff->cpcache[font4index], ff->cpcachelen[font4index] + 1);
+      if (newcpcache) {
+        ff->cpcache[font4index] = newcpcache;
+        ff->cpcache[font4index][ff->cpcachelen[font4index]].ch = c;
+        ff->cpcache[font4index][ff->cpcachelen[font4index]].width = width;
+        ff->cpcachelen[font4index]++;
+      }
+    }
     return width;
   }
 #endif
@@ -2090,22 +2662,29 @@ win_combine_chars(wchar c, wchar cc)
     return 0;
 }
 
+
+// Colour settings
+
 void
 win_set_colour(colour_i i, colour c)
 {
   if (i >= COLOUR_NUM)
     return;
 
-static bool bold_colour_selected = false;
+  static bool bold_colour_selected = false;
 
   if (c == (colour)-1) {
     // ... reset to default ...
+    if (i == BOLD_COLOUR_I) {
+      colours[BOLD_COLOUR_I] = cfg.bold_colour;
+    }
+    else
     if (i == BOLD_FG_COLOUR_I) {
       bold_colour_selected = false;
       if (cfg.bold_colour != (colour)-1)
         colours[BOLD_FG_COLOUR_I] = cfg.bold_colour;
       else
-        colours[BOLD_FG_COLOUR_I] = brighten(colours[FG_COLOUR_I], colours[BG_COLOUR_I]);
+        colours[BOLD_FG_COLOUR_I] = brighten(colours[FG_COLOUR_I], colours[BG_COLOUR_I], true);
     }
     else if (i == FG_COLOUR_I)
       colours[i] = cfg.fg_colour;
@@ -2113,13 +2692,22 @@ static bool bold_colour_selected = false;
       colours[i] = cfg.bg_colour;
     else if (i == CURSOR_COLOUR_I)
       colours[i] = cfg.cursor_colour;
+    else if (i == SEL_COLOUR_I)
+      colours[i] = cfg.sel_bg_colour;
+    else if (i == SEL_TEXT_COLOUR_I)
+      colours[i] = cfg.sel_fg_colour;
 
     return;
   }
+
   colours[i] = c;
+  if (i < 16)
+    colours[i + ANSI0] = c;
+
 #ifdef debug_brighten
   printf("colours[%d] = %06X\n", i, c);
 #endif
+
   switch (i) {
     when FG_COLOUR_I:
       // should we make this conditional, 
@@ -2128,9 +2716,9 @@ static bool bold_colour_selected = false;
         if (cfg.bold_colour != (colour)-1)
           colours[BOLD_FG_COLOUR_I] = cfg.bold_colour;
         else {
-          colours[BOLD_FG_COLOUR_I] = brighten(c, colours[BG_COLOUR_I]);
+          colours[BOLD_FG_COLOUR_I] = brighten(c, colours[BG_COLOUR_I], true);
           // renew this too as brighten() may refer to contrast colour:
-          colours[BOLD_BG_COLOUR_I] = brighten(colours[BG_COLOUR_I], colours[FG_COLOUR_I]);
+          colours[BOLD_BG_COLOUR_I] = brighten(colours[BG_COLOUR_I], colours[FG_COLOUR_I], true);
         }
       }
     when BOLD_FG_COLOUR_I:
@@ -2140,9 +2728,9 @@ static bool bold_colour_selected = false;
         if (cfg.bold_colour != (colour)-1)
           colours[BOLD_FG_COLOUR_I] = cfg.bold_colour;
         else {
-          colours[BOLD_BG_COLOUR_I] = brighten(c, colours[FG_COLOUR_I]);
+          colours[BOLD_BG_COLOUR_I] = brighten(c, colours[FG_COLOUR_I], true);
           // renew this too as brighten() may refer to contrast colour:
-          colours[BOLD_FG_COLOUR_I] = brighten(colours[FG_COLOUR_I], colours[BG_COLOUR_I]);
+          colours[BOLD_FG_COLOUR_I] = brighten(colours[FG_COLOUR_I], colours[BG_COLOUR_I], true);
         }
       }
     when CURSOR_COLOUR_I: {
@@ -2160,8 +2748,11 @@ static bool bold_colour_selected = false;
   win_invalidate_all();
 }
 
-colour win_get_colour(colour_i i)
+colour
+win_get_colour(colour_i i)
 {
+  if (term.rvideo && CCL_DEFAULT(i))
+    return colours[i ^ 2];  // [BOLD]_FG_COLOUR_I  <-->  [BOLD]_BG_COLOUR_I
   return i < COLOUR_NUM ? colours[i] : 0;
 }
 
@@ -2175,6 +2766,9 @@ void
 win_reset_colours(void)
 {
   memcpy(colours, cfg.ansi_colours, sizeof cfg.ansi_colours);
+  // duplicate 16 ANSI colours to facilitate distinct handling (implemented)
+  // and also distinct colour values if desired
+  memcpy(&colours[ANSI0], cfg.ansi_colours, sizeof cfg.ansi_colours);
 
   // Colour cube
   colour_i i = 16;
@@ -2197,4 +2791,16 @@ win_reset_colours(void)
   win_set_colour(CURSOR_COLOUR_I, cfg.cursor_colour);
   if (cfg.ime_cursor_colour != DEFAULT_COLOUR)
     win_set_colour(IME_CURSOR_COLOUR_I, cfg.ime_cursor_colour);
+  win_set_colour(SEL_COLOUR_I, cfg.sel_bg_colour);
+  win_set_colour(SEL_TEXT_COLOUR_I, cfg.sel_fg_colour);
+  // Bold colour
+  win_set_colour(BOLD_COLOUR_I, (colour)-1);
+#if defined(debug_bold) || defined(debug_brighten)
+  string ci[] = {"FG_COLOUR_I", "BOLD_FG_COLOUR_I", "BG_COLOUR_I", "BOLD_BG_COLOUR_I", "CURSOR_TEXT_COLOUR_I", "CURSOR_COLOUR_I", "IME_CURSOR_COLOUR_I", "SEL_COLOUR_I", "SEL_TEXT_COLOUR_I", "BOLD_COLOUR_I"};
+  for (int i = FG_COLOUR_I; i < COLOUR_NUM; i++)
+    if (colours[i] == (colour)-1)
+      printf("colour %d ------ [%s]\n", i, ci[i - FG_COLOUR_I]);
+    else
+      printf("colour %d %06X [%s]\n", i, (int)colours[i], ci[i - FG_COLOUR_I]);
+#endif
 }

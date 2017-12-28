@@ -1,12 +1,13 @@
 // charset.c (part of mintty)
-// Copyright 2008-11 Andy Koppe
+// Copyright 2008-11 Andy Koppe, 2017 Thomas Wolff
 // Based on code from PuTTY-0.60 by Simon Tatham and team.
 // Licensed under the terms of the GNU General Public License v3 or later.
 
 #include "charset.h"
 
 #include "config.h"
-#include "child.h"  // child_update_charset
+#include "child.h"    // child_update_charset
+#include "winpriv.h"  // support_wsl
 
 #if HAS_LOCALES
 #include <locale.h>
@@ -260,9 +261,18 @@ update_mode(void)
 #if HAS_LOCALES
   bool use_default_locale = mode == CSM_DEFAULT && valid_default_locale;
   setlocale(LC_CTYPE,
-    mode == CSM_OEM ? "C.CP437" :
-    use_default_locale ? default_locale :
-    cs_ambig_wide ? "ja_JP.UTF-8" : "C.UTF-8"
+    mode == CSM_OEM ?
+              "C.CP437"
+            : use_default_locale ?
+              default_locale
+            : cs_ambig_wide ?
+# if CYGWIN_VERSION_API_MINOR >= 999999
+              "C.UTF-8@cjkwide"  // better solution once provided by cygwin
+# else
+              "ja_JP.UTF-8"
+# endif
+            :
+              "C.UTF-8"
   );
   use_locale = use_default_locale || mode == CSM_UTF8;
   if (use_locale)
@@ -318,6 +328,22 @@ update_locale(void)
 #if HAS_LOCALES
     cs_ambig_wide = font_ambig_wide;
   }
+  if (cfg.charwidth == 2 && !cs_ambig_wide) {
+    if (!support_wsl) {  // do not modify for WSL
+      // Attach "@cjkwide" to locale if running in ambiguous-wide mode
+      // with an ambig-narrow locale setting
+      string l = default_locale;
+      default_locale = asform("%s@cjkwide", l);
+      delete(l);
+//# if CYGWIN_VERSION_API_MINOR >= 999999
+      // indicate @cjkwide to locale lib
+      setlocale(LC_CTYPE, default_locale);
+//# endif
+      // in case it's not accepted, yet indicate @cjkwide to shell
+      setenv("LC_CTYPE", default_locale, true);
+    }
+    cs_ambig_wide = true;
+  }
 #endif
 
   update_mode();
@@ -346,12 +372,14 @@ cs_reconfig(void)
       asform("%s%s%s", cfg.locale, *cfg.charset ? "." : "", cfg.charset);
 #if HAS_LOCALES
     if (setlocale(LC_CTYPE, config_locale) &&
-        wcwidth(0x3B1) == 2 && !font_ambig_wide) {
-      // Attach "@cjknarrow" to locale if using an ambig-narrow font
-      // with an ambig-wide locale setting
-      string l = config_locale;
-      config_locale = asform("%s@cjknarrow", l);
-      delete(l);
+        !support_wsl) {  // set locale anyway, but do not modify for WSL
+      if (cfg.charwidth < 2 && wcwidth(0x3B1) == 2 && !font_ambig_wide) {
+        // Attach "@cjknarrow" to locale if running in ambiguous-narrow mode
+        // with an ambig-wide locale setting
+        string l = config_locale;
+        config_locale = asform("%s@cjknarrow", l);
+        delete(l);
+      }
     }
 #endif
   }
@@ -686,6 +714,17 @@ wcsncpy(wchar * s1, const wchar * s2, int len)
   return s1;
 }
 
+wchar *
+wcsncat(wchar * s1, const wchar * s2, int len)
+{
+  while (*s1)
+    s1++;
+  while (*s2 && len--)
+    *s1++ = *s2++;
+  *s1 = 0;
+  return s1;
+}
+
 #endif
 
 #if CYGWIN_VERSION_API_MINOR < 207 || defined(__midipix__) || defined(debug_wcs)
@@ -706,7 +745,7 @@ wcsdup(const wchar * s)
 */
 
 #ifdef __CYGWIN__
-#include <sys/cygwin.h>
+#include <sys/cygwin.h>  // cygwin_conv_path
 # if CYGWIN_VERSION_API_MINOR >= 181
 
 char *

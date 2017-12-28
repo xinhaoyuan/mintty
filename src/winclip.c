@@ -1,5 +1,5 @@
 // winclip.c (part of mintty)
-// Copyright 2008-12 Andy Koppe
+// Copyright 2008-12 Andy Koppe, 2017 Thomas Wolff
 // Adapted from code from PuTTY-0.60 by Simon Tatham and team.
 // Licensed under the terms of the GNU General Public License v3 or later.
 
@@ -14,7 +14,9 @@
 #include <wtypes.h>
 #include <objidl.h>
 #include <oleidl.h>
-#include <sys/cygwin.h>
+#ifdef __CYGWIN__
+#include <sys/cygwin.h>  // cygwin_internal
+#endif
 
 static DWORD WINAPI
 shell_exec_thread(void *data)
@@ -48,8 +50,10 @@ shell_exec_thread(void *data)
 
 static void
 shell_exec(wstring wpath)
+// frees wpath
 {
   CreateThread(0, 0, shell_exec_thread, (void *)wpath, 0, 0);
+  // this frees wpath via shell_exec_thread
 }
 
 #define dont_debug_wsl
@@ -97,72 +101,100 @@ ispathprefixw(wstring pref, wstring path)
   return false;
 }
 
+wchar *
+dewsl(wchar * wpath)
+{
+#ifdef debug_wsl
+  printf("open <%ls>\n", wpath);
+#endif
+  if (wcsncmp(wpath, W("/mnt/"), 5) == 0) {
+    wchar * unwsl = newn(wchar, wcslen(wpath) + 6);
+    wcscpy(unwsl, W("/cygdrive"));
+    wcscat(unwsl, wpath + 4);
+    delete(wpath);
+    wpath = unwsl;
+  }
+  else if (*wpath == '/' && *wsl_basepath) {
+    static wchar * wbase = 0;
+    if (!wbase) {
+      char * pbase = path_win_w_to_posix(wsl_basepath);
+      wbase = cs__mbstowcs(pbase);
+      free(pbase);
+    }
+
+    wchar * unwsl = newn(wchar, wcslen(wbase) + wcslen(wpath) + 1);
+    wcscpy(unwsl, wbase);
+    wcscat(unwsl, wpath);
+    delete(wpath);
+    wpath = unwsl;
+  }
+  else if (*wpath == '/') {  // prepend %LOCALAPPDATA%\lxss[\rootfs]
+    // deprecated case; for WSL, wsl_basepath should be set
+    char * appd = getenv("LOCALAPPDATA");
+    if (appd) {
+      wchar * wappd = cs__mbstowcs(appd);
+      appd = path_win_w_to_posix(wappd);
+      free(wappd);
+      wappd = cs__mbstowcs(appd);
+      free(appd);
+
+      bool rootfs_mount = true;
+      for (uint i = 0; i < lengthof(lxss_mounts); i++) {
+        if (ispathprefixw(lxss_mounts[i].w, wpath)) {
+          rootfs_mount = false;
+          break;
+        }
+      }
+
+      wchar * unwsl = newn(wchar, wcslen(wappd) + wcslen(wpath) + 13);
+      wcscpy(unwsl, wappd);
+      free(wappd);
+      wcscat(unwsl, W("/lxss"));
+      if (rootfs_mount)
+        wcscat(unwsl, W("/rootfs"));
+      wcscat(unwsl, wpath);
+      delete(wpath);
+      wpath = unwsl;
+    }
+  }
+  return wpath;
+}
+
 void
 win_open(wstring wpath)
+// frees wpath
 {
+  // unescape
+  int wl = wcslen(wpath);
+  if ((*wpath == '"' || *wpath == '\'') && wpath[wl - 1] == *wpath) {
+    // don't wpath++ (later delete!)
+    wchar * p0 = (wchar *)wpath;
+    for (int i = 0; i < wl - 2; i++)
+      p0[i] = p0[i + 1];
+    p0[wl - 2] = 0;
+  }
+  else {
+    wchar * p0 = (wchar *)wpath;
+    wchar * p1 = p0;
+    while (*p0) {
+      if (*p0 == '\\')
+        p0++;
+      if (*p0)
+        *p1++ = *p0++;
+    }
+    *p1 = 0;
+  }
+
   wstring p = wpath;
   while (iswalpha(*p)) p++;
   if (*wpath == '\\' || *p == ':' || wcsncmp(W("www."), wpath, 4) == 0) {
     // Looks like it's a Windows path or URI
-    shell_exec(wpath);
+    shell_exec(wpath); // frees wpath
   }
   else {
     // Need to convert POSIX path to Windows first
     if (support_wsl) {
-#ifdef debug_wsl
-      printf("open <%ls>\n", wpath);
-#endif
-      if (wcsncmp(wpath, W("/mnt/"), 5) == 0) {
-        wchar * unwsl = newn(wchar, wcslen(wpath) + 6);
-        wcscpy(unwsl, W("/cygdrive"));
-        wcscat(unwsl, wpath + 4);
-        delete(wpath);
-        wpath = unwsl;
-      }
-      else if (*wpath == '/' && *wsl_basepath) {
-        static wchar * wbase = 0;
-        if (!wbase) {
-          char * pbase = path_win_w_to_posix(wsl_basepath);
-          wbase = cs__mbstowcs(pbase);
-          free(pbase);
-        }
-
-        // prepend wsl_basepath "\\rootfs"
-        wchar * unwsl = newn(wchar, wcslen(wbase) + wcslen(wpath) + 8);
-        wcscpy(unwsl, wbase);
-        wcscat(unwsl, W("\\rootfs"));
-        wcscat(unwsl, wpath);
-        delete(wpath);
-        wpath = unwsl;
-      }
-      else if (*wpath == '/') {  // prepend %LOCALAPPDATA%\lxss[\rootfs]
-        char * appd = getenv("LOCALAPPDATA");
-        if (appd) {
-          wchar * wappd = cs__mbstowcs(appd);
-          appd = path_win_w_to_posix(wappd);
-          free(wappd);
-          wappd = cs__mbstowcs(appd);
-          free(appd);
-
-          bool rootfs_mount = true;
-          for (uint i = 0; i < lengthof(lxss_mounts); i++) {
-            if (ispathprefixw(lxss_mounts[i].w, wpath)) {
-              rootfs_mount = false;
-              break;
-            }
-          }
-
-          wchar * unwsl = newn(wchar, wcslen(wappd) + wcslen(wpath) + 13);
-          wcscpy(unwsl, wappd);
-          free(wappd);
-          wcscat(unwsl, W("/lxss"));
-          if (rootfs_mount)
-            wcscat(unwsl, W("/rootfs"));
-          wcscat(unwsl, wpath);
-          delete(wpath);
-          wpath = unwsl;
-        }
-      }
+      wpath = dewsl((wchar *)wpath);
     }
     wstring conv_wpath = child_conv_path(wpath);
 #ifdef debug_wsl
@@ -170,15 +202,62 @@ win_open(wstring wpath)
 #endif
     delete(wpath);
     if (conv_wpath)
-      shell_exec(conv_wpath);
+      shell_exec(conv_wpath); // frees conv_wpath
     else
       message_box(0, strerror(errno), null, MB_ICONERROR, null);
   }
 }
 
+// Convert RGB24 to xterm-256 8-bit value (always >= 16)
+// For simplicity, assume RGB space is perceptually uniform.
+// There are 5 places where one of two outputs needs to be chosen when the
+// input is the exact middle:
+// - The r/g/b channels and the gray value: the higher value output is chosen.
+// - If the gray and color have same distance from the input - color is chosen.
+static uchar
+rgb_to_x256(uchar r, uchar g, uchar b)
+{
+    // Calculate the nearest 0-based color index at 16 .. 231
+#   define v2ci(v) (v < 48 ? 0 : v < 115 ? 1 : (v - 35) / 40)
+    int ir = v2ci(r), ig = v2ci(g), ib = v2ci(b);   // 0..5 each
+#   define color_index() (36 * ir + 6 * ig + ib)  /* 0..215, lazy evaluation */
+
+    // Calculate the nearest 0-based gray index at 232 .. 255
+    int average = (r + g + b) / 3;
+    int gray_index = average > 238 ? 23 : (average - 3) / 10;  // 0..23
+
+    // Calculate the represented colors back from the index
+    static const int i2cv[6] = {0, 0x5f, 0x87, 0xaf, 0xd7, 0xff};
+    int cr = i2cv[ir], cg = i2cv[ig], cb = i2cv[ib];  // r/g/b, 0..255 each
+    int gv = 8 + 10 * gray_index;  // same value for r/g/b, 0..255
+
+    // Return the one which is nearer to the original input rgb value
+#   define dist_square(A,B,C, a,b,c) ((A-a)*(A-a) + (B-b)*(B-b) + (C-c)*(C-c))
+    int color_err = dist_square(cr, cg, cb, r, g, b);
+    int gray_err  = dist_square(gv, gv, gv, r, g, b);
+    return color_err <= gray_err ? 16 + color_index() : 232 + gray_index;
+}
+
+static cattrflags
+apply_attr_colour_rtf(cattr ca, attr_colour_mode mode, int * pfgi, int * pbgi)
+{
+  ca = apply_attr_colour(ca, mode);
+  *pfgi = (ca.attr & ATTR_FGMASK) >> ATTR_FGSHIFT;
+  *pbgi = (ca.attr & ATTR_BGMASK) >> ATTR_BGSHIFT;
+  // For ACM_RTF_GEN: COLOUR_NUM means "no colour" (-1)
+  if (*pfgi == COLOUR_NUM && mode == ACM_RTF_GEN) *pfgi = -1;
+  if (*pbgi == COLOUR_NUM && mode == ACM_RTF_GEN) *pbgi = -1;
+
+  if (CCL_TRUEC(*pfgi))
+    *pfgi = rgb_to_x256(red(ca.truefg), green(ca.truefg), blue(ca.truefg));
+  if (CCL_TRUEC(*pbgi))
+    *pbgi = rgb_to_x256(red(ca.truebg), green(ca.truebg), blue(ca.truebg));
+
+  return ca.attr;
+}
 
 void
-win_copy(const wchar *data, uint *attrs, int len)
+win_copy(const wchar *data, cattr *cattrs, int len)
 {
   HGLOBAL clipdata, clipdata2, clipdata3 = 0;
   int len2;
@@ -204,7 +283,7 @@ win_copy(const wchar *data, uint *attrs, int len)
   memcpy(lock, data, len * sizeof(wchar));
   WideCharToMultiByte(CP_ACP, 0, data, len, lock2, len2, null, null);
 
-  if (attrs && cfg.copy_as_rtf) {
+  if (cattrs && cfg.copy_as_rtf) {
     wchar unitab[256];
     char *rtf = null;
     uchar *tdata = (uchar *) lock2;
@@ -253,33 +332,7 @@ win_copy(const wchar *data, uint *attrs, int len)
     */
     memset(palette, 0, sizeof(palette));
     for (int i = 0; i < (len - 1); i++) {
-      uint attr = attrs[i];
-      fgcolour = (attr & ATTR_FGMASK) >> ATTR_FGSHIFT;
-      bgcolour = (attr & ATTR_BGMASK) >> ATTR_BGSHIFT;
-
-      if (attr & ATTR_REVERSE) {
-        int tmpcolour = fgcolour;     /* Swap foreground and background */
-        fgcolour = bgcolour;
-        bgcolour = tmpcolour;
-      }
-
-      if ((attr & ATTR_BOLD) && cfg.bold_as_colour) {
-        if (fgcolour < 8)     /* ANSI colours */
-          fgcolour += 8;
-        else if (fgcolour >= 256 && !cfg.bold_as_font)  /* Default colours */
-          fgcolour |= 1;
-      }
-
-      if (attr & ATTR_BLINK) {
-        if (bgcolour < 8)     /* ANSI colours */
-          bgcolour += 8;
-        else if (bgcolour >= 256)     /* Default colours */
-          bgcolour |= 1;
-      }
-
-      if (attr & ATTR_INVISIBLE)
-        fgcolour = bgcolour;
-
+      apply_attr_colour_rtf(cattrs[i], ACM_RTF_PALETTE, &fgcolour, &bgcolour);
       palette[fgcolour]++;
       palette[bgcolour]++;
     }
@@ -341,7 +394,7 @@ win_copy(const wchar *data, uint *attrs, int len)
       */
       if (tdata[tindex] != '\n') {
 
-        uint attr = attrs[uindex];
+        uint attr = cattrs[uindex].attr;
 
         if (rtfsize < rtflen + 64) {
           rtfsize = rtflen + 512;
@@ -351,56 +404,12 @@ win_copy(const wchar *data, uint *attrs, int len)
        /*
         * Determine foreground and background colours
         */
-        fgcolour = (attr & ATTR_FGMASK) >> ATTR_FGSHIFT;
-        bgcolour = (attr & ATTR_BGMASK) >> ATTR_BGSHIFT;
-
-        if (attr & ATTR_REVERSE) {
-          int tmpcolour = fgcolour;     /* Swap foreground and background */
-          fgcolour = bgcolour;
-          bgcolour = tmpcolour;
-        }
-
-        if ((attr & ATTR_BOLD) && cfg.bold_as_colour) {
-          if (fgcolour < 8)     /* ANSI colours */
-            fgcolour += 8;
-          else if (fgcolour >= 256 && !cfg.bold_as_font)  /* Default colours */
-            fgcolour |= 1;
-        }
-
-        if (attr & ATTR_BLINK) {
-          if (bgcolour < 8)     /* ANSI colours */
-            bgcolour += 8;
-          else if (bgcolour >= 256)     /* Default colours */
-            bgcolour |= 1;
-        }
-
-        attrBold = cfg.bold_as_font ? (attr & ATTR_BOLD) : 0;
+        attr = apply_attr_colour_rtf(cattrs[uindex], ACM_RTF_GEN, &fgcolour, &bgcolour);
+        attrBold = attr & ATTR_BOLD;
         attrUnder = attr & ATTR_UNDER;
         attrItalic = attr & ATTR_ITALIC;
         attrStrikeout = attr & ATTR_STRIKEOUT;
         attrHidden = attr & ATTR_INVISIBLE;
-
-       /*
-        * Reverse video
-        *   o  If video isn't reversed, ignore colour attributes for default
-        *      foregound or background.
-        *   o  Special case where bolded text is displayed using the default
-        *      foregound and background colours - force to bolded RTF.
-        */
-        if (!(attr & ATTR_REVERSE)) {
-          if (bgcolour >= 256)  /* Default color */
-            bgcolour = -1;      /* No coloring */
-
-          if (fgcolour >= 256) {        /* Default colour */
-            if (cfg.bold_as_colour && (fgcolour & 1) && bgcolour == -1)
-              attrBold = ATTR_BOLD;     /* Emphasize text with bold attribute */
-
-            fgcolour = -1;      /* No coloring */
-          }
-        }
-
-        if (attr & ATTR_INVISIBLE)
-          fgcolour = bgcolour;
 
        /*
         * Write RTF text attributes
@@ -560,6 +569,9 @@ paste_hdrop(HDROP drop)
     uint wfn_len = DragQueryFileW(drop, i, 0, 0);
     wchar wfn[wfn_len + 1];
     DragQueryFileW(drop, i, wfn, wfn_len + 1);
+#ifdef debug_dragndrop
+    printf("dropped file <%ls>\n", wfn);
+#endif
     char *fn = path_win_w_to_posix(wfn);
 
     bool has_tick = false, needs_quotes = false, needs_dollar = false;
@@ -587,24 +599,24 @@ paste_hdrop(HDROP drop)
         if (!wsl_root) {
           wsl_root = path_win_w_to_posix(wsl_basepath);
         }
-        // strip wsl_root "/rootfs"
+        // strip wsl_root
         int len = strlen(wsl_root);
-        if (strncmp(wsl_root, p, len) == 0
-            && strncmp(p + len, "/rootfs", 7) == 0
-           ) {
-          p += len + 7;
+        if (strncmp(wsl_root, p, len) == 0) {
+          p += len;
           if (!*p) {
             p--;
             *p = '/';
           }
         }
         else if (strncmp(p, "/cygdrive/", 10) == 0) {
+          // convert /cygdrive/X/path referring to mounted drive
           p += 5;
           strncpy(p, "/mnt", 4);
         }
       }
       else {
         // check for prefix %LOCALAPPDATA%\lxss
+        // deprecated case; for WSL, wsl_basepath should be set
         char * appd = getenv("LOCALAPPDATA");
         if (appd) {
           wchar * wappd = cs__mbstowcs(appd);
@@ -674,7 +686,7 @@ paste_hdrop(HDROP drop)
   }
   buf_pos--;  // Drop trailing space
 
-  if (*cfg.drop_commands) {
+  if (!support_wsl && *cfg.drop_commands) {
     // try to determine foreground program
     char * fg_prog = foreground_prog();
     if (fg_prog) {

@@ -10,6 +10,7 @@
 # Variables intended for setting on the make command line.
 # - RELEASE: release number for packaging
 # - VERSION_SUFFIX: suffix for version information
+# - WSLTTY_VERSION: wsltty version to be checked for updates
 # - TARGET: target triple for cross compiling
 #	values: i686-pc-cygwin, x86_64-pc-cygwin, i686-pc-msys, x86_64-pc-msys
 # - DEBUG: define to enable debug build
@@ -62,6 +63,9 @@ endif
 CPPFLAGS := -DTARGET=$(TARGET)
 ifdef VERSION_SUFFIX
 CPPFLAGS += -DVERSION_SUFFIX="$(VERSION_SUFFIX)"
+endif
+ifdef WSLTTY_VERSION
+CPPFLAGS += -DWSLTTY_VERSION="$(WSLTTY_VERSION)"
 endif
 
 ifndef RELEASE
@@ -168,8 +172,8 @@ rgb:	# /usr/share/X11/rgb.txt # X11 color names
 #		{255, 250, 250, "snow"},
 	sed -e 's,	, ,g' -e 's/ *\([0-9][0-9]*\) *\([0-9][0-9]*\) *\([0-9][0-9]*\) *\([^ ].*[^ ]\) */	{\1, \2, \3, "\4"},/' /usr/share/X11/rgb.txt > rgb.t
 
-combdata:	combining.t combdouble.t combined.t
-unidata:	$(combdata) ambiguous.t casefold.t bidiclasses.t wide.t
+combdata=combining.t combdouble.t combined.t
+unidata=$(combdata) ambiguous.t casefold.t bidiclasses.t wide.t
 
 clean-unicode:
 	rm -f $(unidata)

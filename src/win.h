@@ -24,8 +24,11 @@ extern void win_schedule_update(void);
 extern void do_update(void);
 
 extern void win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort lattr, bool has_rtl);
+
 extern void win_update_mouse(void);
 extern void win_capture_mouse(void);
+extern void win_get_locator_info(int *x, int *y, int *buttons, bool by_pixels);
+
 extern void win_bell(config *);
 
 extern void win_set_title(char *);
@@ -39,6 +42,8 @@ extern colour win_get_colour(colour_i);
 extern void win_set_colour(colour_i, colour);
 extern void win_reset_colours(void);
 extern colour win_get_sys_colour(bool fg);
+extern uint colour_dist(colour a, colour b);
+extern colour truecolour(cattr *, colour bg);
 
 extern void win_invalidate_all(void);
 
@@ -63,7 +68,7 @@ extern uint win_get_font_size(void);
 extern void win_check_glyphs(wchar *wcs, uint num);
 
 extern void win_open(wstring path);
-extern void win_copy(const wchar *data, uint *attrs, int len);
+extern void win_copy(const wchar *data, cattr *cattrs, int len);
 extern void win_paste(void);
 
 extern void win_set_timer(void_fn cb, uint ticks);
@@ -86,5 +91,15 @@ extern int win_char_width(xchar);
 extern wchar win_combine_chars(wchar bc, wchar cc);
 
 extern wchar win_linedraw_char(int i);
+
+typedef enum {
+  ACM_TERM = 1,        /* actual terminal rendering */
+  ACM_RTF_PALETTE = 2, /* winclip - rtf palette setup stage */
+  ACM_RTF_GEN = 4,     /* winclip - rtf generation stage */
+  ACM_SIMPLE = 8,      /* simplified (bold, [rvideo,] dim, invisible) */
+  ACM_VBELL_BG = 16,   /* visual-bell background highlight */
+} attr_colour_mode;
+
+extern cattr apply_attr_colour(cattr a, attr_colour_mode mode);
 
 #endif

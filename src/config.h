@@ -47,6 +47,7 @@ typedef struct {
   // Looks
   colour fg_colour, bold_colour, bg_colour, cursor_colour, underl_colour;
   bool underl_manual;
+  colour sel_fg_colour, sel_bg_colour;
   colour search_fg_colour, search_bg_colour, search_current_colour;
   wstring theme_file;
   string colour_scheme;
@@ -58,7 +59,7 @@ typedef struct {
   int even_line_highlight_delta;
   // Text
   font_spec font;
-  font_spec fontfams[10];
+  font_spec fontfams[11];
   wstring font_sample;
   bool show_hidden_fonts;
   char font_smoothing;
@@ -73,6 +74,7 @@ typedef struct {
   bool backspace_sends_bs;
   bool delete_sends_del;
   bool ctrl_alt_is_altgr;
+  bool old_altgr_detection;
   bool clip_shortcuts;
   bool window_shortcuts;
   bool switch_shortcuts;
@@ -140,11 +142,19 @@ typedef struct {
   // "Hidden"
   int bidi;
   bool disable_alternate_screen;
+  char charwidth;
   wstring app_id;
   wstring app_name;
   wstring app_launch_cmd;
   wstring drop_commands;
   wstring user_commands;
+  wstring session_commands;
+  string menu_mouse;
+  string menu_ctrlmouse;
+  string menu_altmouse;
+  string menu_menu;
+  string menu_ctrlmenu;
+  int geom_sync;
   int col_spacing, row_spacing;
   int padding;
   bool handle_dpichanged;
@@ -154,8 +164,11 @@ typedef struct {
   colour ime_cursor_colour;
   colour ansi_colours[16];
   wstring sixel_clip_char;
+  bool short_long_opts;
+  bool bold_as_special;
   // Legacy
   bool use_system_colours;
+  bool old_bold;
 } config;
 
 extern string config_dir;
@@ -173,5 +186,6 @@ extern void remember_arg(string);
 extern void finish_config(void);
 extern void copy_config(char * tag, config * dst, const config * src);
 extern void apply_config(bool save);
+extern wchar * getregstr(HKEY key, wstring subkey, wstring attribute);
 
 #endif
