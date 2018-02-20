@@ -1247,9 +1247,15 @@ _trace_line(char * tag, cattr attr, ushort lattr, wchar * text, int len)
   for (int i = 0; i < len; i++)
     if (text[i] != ' ') show = true;
   if (show) {
-    printf("%s %04X %08llX", tag, lattr, attr.attr);
-    for (int i = 0; i < len; i++) printf(" %04X", text[i]);
-    printf("\n");
+    if (*tag != ' ') {
+      wchar t[len + 1]; wcsncpy(t, text, len); t[len] = 0;
+      printf("%s %04X %08llX <%ls>\n", tag, lattr, attr.attr, t);
+    }
+    else {
+      printf("%s %04X %08llX", tag, lattr, attr.attr);
+      for (int i = 0; i < len; i++) printf(" %04X", text[i]);
+      printf("\n");
+    }
   }
 }
 #define trace_line(tag) _trace_line(tag, attr, lattr, text, len)
@@ -1692,6 +1698,7 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
   bool clearpad = lattr & LATTR_CLEARPAD;
   trace_line("win_text:");
 
+  bool ldisp1 = !!(lattr & LATTR_DISP1);
   bool ldisp2 = !!(lattr & LATTR_DISP2);
   lattr &= LATTR_MODE;
 
@@ -1890,23 +1897,33 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
  /* Array with offsets between neighbouring characters */
   int dxs[len];
   int dx = combining ? 0 : char_width;
-  for (int i = 0; i < len; i++)
-    dxs[i] = dx;
+  for (int i = 0; i < len; i++) {
+    if (is_high_surrogate(text[i]))
+      // This does not have the expected effect so we keep splitting up 
+      // non-BMP characters into single character chunks for now (term.c)
+      dxs[i] = 0;
+    else
+      dxs[i] = dx;
+  }
 
+ /* Character cells length */
   int ulen = 0;
   for (int i = 0; i < len; i++) {
     ulen++;
     if (char1ulen(&text[i]) == 2)
       i++;  // skip low surrogate;
   }
+
+ /* Painting box */
   int width = char_width * (combining ? 1 : ulen);
   RECT box = {
     .top = y, .bottom = y + cell_height,
     .left = x, .right = min(x + width, cell_width * term.cols + PADDING)
   };
-  if (attr.attr & ATTR_ITALIC) {
+  RECT box0 = box;
+  if (ldisp2) {  // e.g. attr.attr & ATTR_ITALIC
     box.right += cell_width;
-    //box.left -= cell_width;
+    box.left -= cell_width;
   }
   if (clearpad)
     box.right += PADDING;
@@ -1919,6 +1936,12 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
   use_uniscribe = cfg.font_render == FR_UNISCRIBE && !has_rtl;
   if (combining_double)
     use_uniscribe = false;
+#ifdef no_Uniscribe_for_ASCII_only_chunks
+  // this "optimization" was intended to avoid a performance penalty 
+  // for Uniscribe when there is no need for Uniscribe;
+  // however, even for ASCII-only chunks, 
+  // Uniscribe effectively applies ligatures (Fira Code, #601), 
+  // and testing again, there is hardly a penalty observable anymore
   if (use_uniscribe) {
     use_uniscribe = false;
     for (int i = 0; i < len; i++)
@@ -1927,6 +1950,7 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
         break;
       }
   }
+#endif
 
  /* Begin text output */
   int yt = y + (ff->row_spacing / 2) - (lattr == LATTR_BOT ? cell_height : 0);
@@ -1987,7 +2011,7 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
   bool underlaid = false;
   void clear_run() {
     if (!underlaid) {
-      ExtTextOutW(dc, xt, yt, eto_options | ETO_OPAQUE, &box, W(" "), 1, dxs);
+      ExtTextOutW(dc, xt, yt, eto_options | ETO_OPAQUE, &box0, W(" "), 1, dxs);
 
       underlaid = true;
     }
@@ -2072,6 +2096,13 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
     }
     oldpen = SelectObject(dc, oldpen);
     DeleteObject(oldpen);
+  }
+
+ /* Background for overhang overlay */
+  if (ldisp1) {
+    if (!underlaid)
+      clear_run();
+    return;
   }
 
  /* DEC Tech adjustments */
@@ -2673,79 +2704,87 @@ win_set_colour(colour_i i, colour c)
 
   static bool bold_colour_selected = false;
 
+  bool changed_something = false;
+  void cc(colour_i i, colour c)
+  {
+    if (c != colours[i]) {
+      colours[i] = c;
+      changed_something = true;
+    }
+  }
+
   if (c == (colour)-1) {
     // ... reset to default ...
     if (i == BOLD_COLOUR_I) {
-      colours[BOLD_COLOUR_I] = cfg.bold_colour;
+      cc(BOLD_COLOUR_I, cfg.bold_colour);
     }
     else
     if (i == BOLD_FG_COLOUR_I) {
       bold_colour_selected = false;
       if (cfg.bold_colour != (colour)-1)
-        colours[BOLD_FG_COLOUR_I] = cfg.bold_colour;
+        cc(BOLD_FG_COLOUR_I, cfg.bold_colour);
       else
-        colours[BOLD_FG_COLOUR_I] = brighten(colours[FG_COLOUR_I], colours[BG_COLOUR_I], true);
+        cc(BOLD_FG_COLOUR_I, brighten(colours[FG_COLOUR_I], colours[BG_COLOUR_I], true));
     }
     else if (i == FG_COLOUR_I)
-      colours[i] = cfg.fg_colour;
+      cc(i, cfg.fg_colour);
     else if (i == BG_COLOUR_I)
-      colours[i] = cfg.bg_colour;
+      cc(i, cfg.bg_colour);
     else if (i == CURSOR_COLOUR_I)
-      colours[i] = cfg.cursor_colour;
+      cc(i, cfg.cursor_colour);
     else if (i == SEL_COLOUR_I)
-      colours[i] = cfg.sel_bg_colour;
+      cc(i, cfg.sel_bg_colour);
     else if (i == SEL_TEXT_COLOUR_I)
-      colours[i] = cfg.sel_fg_colour;
-
-    return;
+      cc(i, cfg.sel_fg_colour);
   }
-
-  colours[i] = c;
-  if (i < 16)
-    colours[i + ANSI0] = c;
-
+  else {
+    cc(i, c);
+    if (i < 16)
+      cc(i + ANSI0, c);
 #ifdef debug_brighten
-  printf("colours[%d] = %06X\n", i, c);
+    printf("colours[%d] = %06X\n", i, c);
 #endif
 
-  switch (i) {
-    when FG_COLOUR_I:
-      // should we make this conditional, 
-      // unless bold colour has been set explicitly?
-      if (!bold_colour_selected) {
-        if (cfg.bold_colour != (colour)-1)
-          colours[BOLD_FG_COLOUR_I] = cfg.bold_colour;
-        else {
-          colours[BOLD_FG_COLOUR_I] = brighten(c, colours[BG_COLOUR_I], true);
-          // renew this too as brighten() may refer to contrast colour:
-          colours[BOLD_BG_COLOUR_I] = brighten(colours[BG_COLOUR_I], colours[FG_COLOUR_I], true);
+    switch (i) {
+      when FG_COLOUR_I:
+        // should we make this conditional, 
+        // unless bold colour has been set explicitly?
+        if (!bold_colour_selected) {
+          if (cfg.bold_colour != (colour)-1)
+            cc(BOLD_FG_COLOUR_I, cfg.bold_colour);
+          else {
+            cc(BOLD_FG_COLOUR_I, brighten(c, colours[BG_COLOUR_I], true));
+            // renew this too as brighten() may refer to contrast colour:
+            cc(BOLD_BG_COLOUR_I, brighten(colours[BG_COLOUR_I], colours[FG_COLOUR_I], true));
+          }
         }
-      }
-    when BOLD_FG_COLOUR_I:
-      bold_colour_selected = true;
-    when BG_COLOUR_I:
-      if (!bold_colour_selected) {
-        if (cfg.bold_colour != (colour)-1)
-          colours[BOLD_FG_COLOUR_I] = cfg.bold_colour;
-        else {
-          colours[BOLD_BG_COLOUR_I] = brighten(c, colours[FG_COLOUR_I], true);
-          // renew this too as brighten() may refer to contrast colour:
-          colours[BOLD_FG_COLOUR_I] = brighten(colours[FG_COLOUR_I], colours[BG_COLOUR_I], true);
+      when BOLD_FG_COLOUR_I:
+        bold_colour_selected = true;
+      when BG_COLOUR_I:
+        if (!bold_colour_selected) {
+          if (cfg.bold_colour != (colour)-1)
+            cc(BOLD_FG_COLOUR_I, cfg.bold_colour);
+          else {
+            cc(BOLD_BG_COLOUR_I, brighten(c, colours[FG_COLOUR_I], true));
+            // renew this too as brighten() may refer to contrast colour:
+            cc(BOLD_FG_COLOUR_I, brighten(colours[FG_COLOUR_I], colours[BG_COLOUR_I], true));
+          }
         }
+      when CURSOR_COLOUR_I: {
+        // Set the colour of text under the cursor to whichever of foreground
+        // and background colour is further away from the cursor colour.
+        colour fg = colours[FG_COLOUR_I], bg = colours[BG_COLOUR_I];
+        cc(CURSOR_TEXT_COLOUR_I, colour_dist(c, fg) > colour_dist(c, bg) ? fg : bg);
+        cc(IME_CURSOR_COLOUR_I, c);
       }
-    when CURSOR_COLOUR_I: {
-      // Set the colour of text under the cursor to whichever of foreground
-      // and background colour is further away from the cursor colour.
-      colour fg = colours[FG_COLOUR_I], bg = colours[BG_COLOUR_I];
-      colours[CURSOR_TEXT_COLOUR_I] =
-        colour_dist(c, fg) > colour_dist(c, bg) ? fg : bg;
-      colours[IME_CURSOR_COLOUR_I] = c;
+      otherwise:
+        break;
     }
-    otherwise:
-      break;
   }
+
   // Redraw everything.
-  win_invalidate_all();
+  if (changed_something)
+    win_invalidate_all();
 }
 
 colour

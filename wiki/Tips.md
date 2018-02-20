@@ -1,5 +1,4 @@
 
-
 ## Configuring mintty ##
 
 Mintty supports a number of common places to look for and save its 
@@ -23,13 +22,13 @@ for various installations of mintty (e.g. cygwin 32/64 Bit, MSYS, Git Bash).
 
 The Cygwin [setup.exe](http://cygwin.com/setup.exe) package for mintty 
 installs a shortcut in the Windows start menu under _All Programs/Cygwin_.
-It starts mintty with a '-' (i.e. a single dash) as its only argument, 
-which tells it to invoke the user's default shell as a login shell.
+It starts mintty with a ‘-’ (i.e. a single dash) as its only argument, 
+which tells it to invoke the user’s default shell as a login shell.
 
 Shortcuts are also a convenient way to start mintty with additional options and different commands. 
 For example, shortcuts for access to remote machines can be created by 
 invoking **[ssh](http://www.openssh.com)**. The command simply needs 
-to be appended to the target field of the shortcut's properties:
+to be appended to the target field of the shortcut’s properties:
 
 > Target: `C:\Cygwin\bin\mintty.exe /bin/ssh server`
 
@@ -89,10 +88,15 @@ To help reproduce the installation manually, for users of cygwin or msys2:
 Replace `X:\cygwin64` with your cygwin or msys2 root directory path 
 and `Linux_Distribution` with your preferred distribution. The suitable 
 icon location for each respective distribution is not easily found; the 
-standalone package would find that for you.
-Instead of `-`, you may add an explicit invocation target like 
-`/bin/wslbridge -t -C~ /bin/bash -l` to select your favourite shell, 
-ask for a login shell (`-l`) or set a start directory (`-C`) if desired.
+standalone package would set that up for you in the shortcuts. For other 
+invocation (cygwin or Windows command line), mintty finds the suitable 
+WSL icon itself.
+
+At the end of the `mintty --WSL` invocation line, you may add an explicit 
+WSL shell invocation like `/bin/bash -l` to select your favourite shell or 
+ask for a login shell (`-l`), or set a start directory (`-C`, before any 
+shell command) if desired.
+
 If no start directory is otherwise selected, the “Start in:” directory 
 of the shortcut may be set to `%USERPROFILE%`.
 
@@ -102,9 +106,9 @@ On Windows 7, mintty may also be used as a terminal for the
 Subsystem for UNIX-based applications (SUA), also known as Interix.
 For the mintty session launcher, this can be configured for the 
 available shells as follows (concatened with ‘;’ separator for multiple targets):
-* `SessionCommands=Interix Korn Shell:winpty 'C:\Windows\posix.exe' /u /c /bin/ksh -l`
-* `SessionCommands=Interix SVR-5 Korn Shell:winpty 'C:\Windows\posix.exe' /u /p /svr-5/bin/ksh /c -ksh`
-* `SessionCommands=Interix C Shell:winpty 'C:\Windows\posix.exe' /u /c /bin/csh -l`
+* `SessionCommands=Interix Korn Shell:/bin/winpty C:\Windows\posix.exe /u /c /bin/ksh -l`
+* `SessionCommands=Interix SVR-5 Korn Shell:/bin/winpty posix /u /p /svr-5/bin/ksh /c -ksh`
+* `SessionCommands=Interix C Shell:/bin/winpty posix /u /c /bin/csh -l`
 
 For a desktop or start menu shortcut, the respective target command would 
 look like `X:\cygwin\bin\mintty.exe winpty` …
@@ -114,7 +118,7 @@ look like `X:\cygwin\bin\mintty.exe winpty` …
 
 ## Starting mintty from a batch file ##
 
-In order to start mintty from a batch file it needs to be invoked through the **[start](http://technet.microsoft.com/en-us/library/cc770297.aspx)** command. This avoids the batch file's console window staying open while mintty is running. For example:
+In order to start mintty from a batch file it needs to be invoked through the **[start](http://technet.microsoft.com/en-us/library/cc770297.aspx)** command. This avoids the batch file’s console window staying open while mintty is running. For example:
 
 ```
 start mintty -
@@ -125,19 +129,24 @@ The console window for the batch file will still show up briefly, however. This 
 
 ## Starting in a particular directory ##
 
-The working directory for a mintty session can be set in the _Start In_ field of a shortcut, 
+The working directory for a mintty session can be set in the 
+_Start In_ field of a shortcut, 
 or by changing directory in an invoking script, or with option `--dir`.
-Note, however, that Cygwin's _/etc/profile_ script for login shells automatically changes to the user's home directory.
+Note, however, that Cygwin’s _/etc/profile_ script for login shells automatically changes to the user’s home directory.
 The profile script can be told not to do this by setting a variable called _CHERE\_INVOKING_, like this:
 
 ```
 mintty /bin/env CHERE_INVOKING=1 /bin/bash -l
 ```
 
+Note: If mintty is run from a shortcut with empty _Start In_ field and the 
+effective start directory is within the Windows system folder, mintty changes 
+it in order to avoid failure when creating a log file.
+
 
 ## Creating a folder context menu entry for mintty ##
 
-Cygwin's **chere** package can be used to create folder context menu entries in Explorer, which allow a shell to be opened with the working directory set to the selected folder.
+Cygwin’s **chere** package can be used to create folder context menu entries in Explorer, which allow a shell to be opened with the working directory set to the selected folder.
 
 The following command will create an entry called _Bash Prompt Here_ for the current user that will invoke bash running in mintty. See the chere manual (_man chere_) for all the options.
 
@@ -189,7 +198,7 @@ and occurs likewise in all other pty-based terminals (e.g. xterm).
 
 ## Terminal line settings ##
 
-Terminal line settings can be viewed or changed with the **[stty](http://www.opengroup.org/onlinepubs/9699919799/utilities/stty.html)** utility, which is installed as part of Cygwin's core utilities package. Among other things, it can set the control characters used for generating signals or editing an input line.
+Terminal line settings can be viewed or changed with the **[stty](http://www.opengroup.org/onlinepubs/9699919799/utilities/stty.html)** utility, which is installed as part of Cygwin’s core utilities package. Among other things, it can set the control characters used for generating signals or editing an input line.
 
 See the stty manual for all the details, but here are a few examples. The commands can be included in shell startup files to make them permanent.
 
@@ -276,11 +285,11 @@ let &t_te.="\e[0 q"
 
 ## Avoiding escape timeout issues in vim ##
 
-It's a historical flaw of Unix terminals that the keycode of the escape key, i.e. the escape character, also appears at the start of many other keycodes. This means that on seeing an escape character, an application cannot be sure whether to treat it as an escape key press or whether to expect more characters to complete a longer keycode.
+It’s a historical flaw of Unix terminals that the keycode of the escape key, i.e. the escape character, also appears at the start of many other keycodes. This means that on seeing an escape character, an application cannot be sure whether to treat it as an escape key press or whether to expect more characters to complete a longer keycode.
 
 Therefore they tend to employ a timeout to decide. The delay on the escape key can be annoying though, particularly with the mode-dependent cursor above enabled.  The timeout approach can also fail on slow connections or a heavily loaded machine.
 
-Mintty's “application escape key mode” can be used to avoid this by switching the escape key to an unambiguous keycode. Add the following to _~/.vimrc_ to employ it in vim:
+Mintty’s “application escape key mode” can be used to avoid this by switching the escape key to an unambiguous keycode. Add the following to _~/.vimrc_ to employ it in vim:
 
 ```
 let &t_ti.="\e[?7727h"
@@ -466,7 +475,7 @@ selected using the new Apply button in the font selection menu.
 
 Fonts not listed in the menu can be configured with the Font setting.
 
-The old font selection and menu format can be chosen with setting OldFontMenu.
+The old font selection and menu format can be chosen with setting `FontMenu=1`.
 
 If you are missing certain characters, e.g. as used for the popular “Powerline” plugin,
 the reason may be that specifically designed characters are being addressed 
@@ -589,6 +598,7 @@ Mintty supports a maximum of usual and unusual text attributes:
 | 48;5;P                 | 49                | background palette colour     |
 | 38;2;R;G;B             | 39                | foreground true colour        |
 | 48;2;R;G;B             | 49                | background true colour        |
+| 51, 52                 | 54                | emoji style                   |
 | _any_                  | 0                 |                               |
 
 Note: The control sequences for Fraktur (“Gothic”) font are described 
@@ -607,6 +617,65 @@ purpose are default and ANSI foreground colours, palette and true-colour
 foreground colours, dim mode and manual bold mode (BoldAsFont=false); 
 background colours and inverse mode are ignored.
 <img align=top src=https://github.com/mintty/mintty/wiki/mintty-coloured-combinings.png>
+
+
+## Emojis ##
+
+Mintty supports display of emojis as defined by Unicode using 
+emoji presentation, emoji style variation and emoji sequences.
+
+The option `Emojis` can choose among sets of emoji graphics if 
+deployed in a mintty configuration directory.
+With this option, mintty emoji support is enabled and the emoji graphics style is chosen. 
+Mintty will match output for valid emoji sequences, 
+emoji style selectors and emoji presentation forms.
+
+For characters with default text style but optional emoji graphics,
+emoji style can be selected with the “framed” or “encircled” text attribute.
+
+Note that it may be useful to set `Charwidth=unicode` in addition.
+
+Emojis are displayed in the rectangular character cell group determined 
+by the cumulated width of the emoji sequence characters. The option 
+`EmojiPlacement` can adjust the location of emoji graphis within that area.
+
+### Installing emoji resources ###
+
+Mintty does not bundle actual emoji graphics with its package.
+You will have to download and deploy them yourself.
+
+Emoji data can be found at the following sources:
+<img align=right src=https://github.com/mintty/mintty/wiki/mintty-emojis.png>
+* [EmojiOne](https://www.emojione.com/)
+  * Free Download for your own use, PNG Files, download e.g. 128x128px zip
+  * Deploy the preferred subdirectory (e.g. 128) as `emojione`
+* [Noto Emoji font](https://github.com/googlei18n/noto-emoji), subdirectory `png/128`
+  * “Clone or download” the repository or download a release archive
+  * Deploy subdirectory noto-emoji/png/128 as `noto`
+* [Unicode.org](http://www.unicode.org/emoji/charts-11.0/) Full Emoji List (~50MB)
+  * Download the [Full Emoji List](http://www.unicode.org/emoji/charts-11.0/full-emoji-list.html) (with all emoji data embedded)
+  * Use the [extraction script `getemojis`](getemojis) to extract emoji data (call it without parameters for instructions)
+  * Deploy the desired subdirectories (e.g. `apple`)
+  * Includes apple, emojione, facebook, google, twitter, samsung, windows emojis (and some limited low-resolution sets that we shall ignore)
+* [Emoji data and images](https://github.com/iamcal/emoji-data)
+  * “Clone or download” the repository or download a release archive
+  * Deploy subdirectories `img-*` as appropriate (e.g. img-apple-64 as `apple`)
+  * Includes apple, emojione-2D, facebook, facebook messenger (discontinued), google, twitter emojis
+
+To “Clone” with limited download volume, use the command `git clone --depth 1`.
+To download only the desired subdirectory from `github.com`, use `subversion`, 
+for example:
+  * `svn export https://github.com/googlei18n/noto-emoji/trunk/png/128 noto`
+  * `svn export https://github.com/iamcal/emoji-data/trunk/img-apple-160 apple`
+
+“Deploy” above means move, link, copy or hard-link the respective subdirectory 
+into mintty configuration resource subdirectory `emojis`, e.g.
+* `mv noto-emoji/png/128 ~/.config/mintty/emojis/noto`
+* `ln -s "$PWD"/noto-emoji/png/128 ~/.config/mintty/emojis/noto`
+* `cp -rl noto-emoji/png/128 ~/.config/mintty/emojis/noto`
+Use your preferred configuration directory, e.g.
+* `cp -rl noto-emoji/png/128 "$APPDATA"/mintty/emojis/noto`
+* `cp -rl noto-emoji/png/128 /usr/share/mintty/emojis/noto`
 
 
 ## Passing arguments from an environment with different character set ##
@@ -781,5 +850,5 @@ UserCommands=Kill foreground process:kill -9 $MINTTY_PID
 To install mintty outside a cygwin environment, follow a few rules:
 * Find out which libraries (dlls from the cygwin /bin directory) mintty needs in addition to cygwin1.dll and install them all, or:
 * Compile mintty statically.
-* Call the directory in which to install mintty and libraries 'bin'.
+* Call the directory in which to install mintty and libraries ‘bin’.
 

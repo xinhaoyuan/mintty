@@ -1,3 +1,47 @@
+  * Workaround for ConEmu WM_MOUSEACTIVATE bug (#724).
+  * Skip refresh after colour setting if nothing changed (e.g. by prompt).
+  * Support of emoji style text attribute, reusing "framed" or "encircled".
+
+### 2.8.4 (10 Feb 2018) ###
+
+Character handling and rendering
+  * Emoji support (mintty/wsltty#82, #600, ~#671, ~#430).
+  * Fixed double-width handling within right-to-left text.
+
+Window handling
+  * Ctrl+Alt+mouse-click/drag moves the window (#729).
+  * Apply Virtual Tab position catching also on Alt+F2 (#699).
+  * Workaround for Windows failing to consider the taskbar properly when maximizing with no or frame-only border (#732).
+  * Workaround for caption-less window exceeding borders (#733) on Windows 10.
+
+Mouse handling
+  * More selective suppression of mouse action on focus-click (mintty/wsltty#88, #717).
+  * Fixed mouse function in search bar (#85), broken since 2.8.2 (#717).
+
+Desktop integration
+  * Support for taskbar "Tasks" list ("jump list") (#290).
+  * Session launcher icons (#699).
+
+Configuration
+  * Options Emojis, EmojiPlacement to configure emojis style and display.
+  * Option TaskCommands to configure a taskbar icon task list ("jump list").
+  * Limit tweaking of empty shortcut start dir to Start menu case (#737).
+
+### 2.8.3 (8 Jan 2018) ###
+
+Character rendering
+  * Fixed DEC REP for (self-drawn) VT100 graphics and non-BMP (~#634).
+  * Tweaked output handling for ligature support (#601).
+  * Support left cell overhang (for italics).
+  * Fixed italic garbage (#725).
+
+Configuration
+  * Handling empty working directory (if started from Windows shortcut) for log file.
+
+Window handling
+  * Session switcher restores window only if it was iconic (mintty/wsltty#80).
+  * Workaround for ConEmu focus incompatibility (#724).
+
 ### 2.8.2 (17 Dec 2017) ###
 
 Window and session control

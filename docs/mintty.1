@@ -60,7 +60,7 @@ colour schemes. However, \fB-o ThemeFile=\fIFILENAME\fP may be preferable.
 .TP
 \fB--configdir\fP \fIDIRNAME\fP
 Use the given directory to check for resource subdirectories 
-(\fIthemes\fP, \fIsounds\fP, \fIlang\fP);
+(\fIthemes\fP, \fIsounds\fP, \fIlang\fP, \fIemojis\fP, \fIicon\fP);
 also read settings from the configuration file \fIDIRNAME\fP/\fBconfig\fP, 
 in addition to the default config files, and save configuration changes here.
 
@@ -185,6 +185,8 @@ This feature is only available on the command line.
 \fB-B\fP, \fB--Border\fP \fBframe\fP|\fBvoid\fP
 Suppress window title, display only a frame or no border.
 This feature is only available on the command line.
+Note that frame border operations are also disabled.
+However, a window move can also be done with Ctrl+Alt+click-drag.
 
 .TP
 \fB-u\fP, \fB--utmp\fP
@@ -648,6 +650,8 @@ An overview of all the keyboard shortcuts.
 \(en \fBCtrl+Tab\fP: Next window
 .br
 \(en \fBCtrl+Shift+Tab\fP: Previous window
+.br
+\(en \fBCtrl+Alt+mouse-click/drag\fP: Move window
 
 Multi-monitor selection support: Alt+F2 will only spawn a new window 
 after F2 has been released. While F2 is being held, the target monitor 
@@ -728,7 +732,7 @@ provide visible feedback for the changes.
 
 .SS Embedding graphics in terminal output
 
-The new support of the SIXEL feature facilitates a range of applications 
+The SIXEL graphics support feature facilitates a range of applications 
 that integrate graphic images in the terminal, animated graphics, and even 
 video and interactive gaming applications.
 
@@ -736,6 +740,15 @@ An example of the benefit of this feature is the output of `gnuplot`
 with the command
 .br
 GNUTERM=sixel gnuplot -e "splot [x=-3:3] [y=-3:3] sin(x) * cos(y)"
+
+.SS Emoji display support
+
+Mintty supports display of emojis as defined by Unicode using 
+emoji presentation, emoji style variation and emoji sequences.
+The option \fBEmojis\fP can choose among sets of emoji graphics if 
+deployed in a mintty configuration directory.
+See the Tips wiki page \fIhttps://github.com/mintty/mintty/wiki/Tips#emojis\fP 
+about deployment of emoji graphics for mintty.
 
 .SS Diagnostic support
 
@@ -799,7 +812,7 @@ command-line.)
 .br
 Unicode-enabled settings: BellFile, ThemeFile, Title, ExitTitle, Icon, Log, 
 Language, Font, Font1..., FontSample, Printer, Answerback, SixelClipChars, 
-Class, AppID, AppName, AppLaunchCmd, DropCommands, UserCommands, SessionCommands.
+Class, AppID, AppName, AppLaunchCmd, DropCommands, UserCommands, SessionCommands, TaskCommands.
 
 Be careful when running multiple instances of mintty. If options are saved 
 from different instances, or the config file is edited manually, 
@@ -1328,6 +1341,8 @@ Additional row padding.
 \fINote:\fP Mintty adjusts row spacing according to the font metrics, to 
 compensate for tight or tall spacing of some fonts (e.g. Courier, Consolas, FreeMono, Monaco).
 The RowSpacing value is added to that.
+.br
+(Corresponds roughly to the xterm resource \fBscaleHeight\fP.)
 
 .TP
 \fB\fP(ColSpacing=0)
@@ -1410,7 +1425,7 @@ mintty adds a few items here. Select \fILanguage=en\fP to
 Terminal emulation settings.
 
 .TP
-\fBType\fP (Term=xterm)
+\fBTerminal type\fP (Term=xterm)
 The terminal type.  This determines the setting of the TERM environment variable
 at mintty startup.
 Choices available from the dropdown list are \fBxterm\fP, \fBxterm-256color\fP,
@@ -1430,6 +1445,9 @@ applications what features they can use.
 The \fBxterm-256color\fP setting enables 256-color mode in some applications,
 but may not be recognised at all by others, which is why plain \fBxterm\fP
 is the default.
+
+(Corresponds roughly to the combined xterm resources 
+\fBdecTerminalID\fP, \fBtermName\fP, \fBkeyboardType\fP.)
 
 .TP
 \fBAnswerback\fP (Answerback=)
@@ -1588,10 +1606,13 @@ pattern; note that this is likely to fail if a placeholder expands with
 "/" (%D).
 
 If the log file name is a relative path name, it is relative from the 
-working directory mintty was started in. If mintty was started from a 
-Windows shortcut (desktop/start menu) with no working directory 
-("Start in:") specified, mintty changes to the user's home directory 
-first, except in WSL support mode where %LOCALAPPDATA%/Temp is used.
+working directory mintty was started in. To avoid failure to create a 
+log file (especially when starting from the Start menu), the following 
+tweak is applied: If mintty was started from a Windows shortcut with 
+no working directory ("Start in:") specified and the effective start 
+directory is within the Windows system directory hierarchy, 
+mintty changes to the user's home directory first, 
+except in WSL support mode where %LOCALAPPDATA%/Temp is used.
 
 Note: If the requested log file exists already, mintty does not overwrite it 
 but reports an error. To configure logging in the config file, use some 
@@ -1667,6 +1688,58 @@ likely based on a more up-to-date Unicode version.
 \(en \fBambig-wide\fP Use built-in width properties, 
 with ambiguous-width characters assumed to be wide.
 (Corresponds to the xterm resource \fBcjkWidth\fP.)
+
+\fIWarning:\fP With this option, actual width properties as rendered 
+on the screen and width assumptions of the \fBwcwidth\fP function will be 
+inconsistent for the impacted characters, which may confuse 
+screen applications (such as editors) that rely on \fBwcwidth\fP information.
+
+.TP
+\fBEmoji support\fP (Emojis=none)
+With this option, mintty emoji support is enabled and the emojis style 
+is chosen. Mintty will match output for valid emoji sequences, 
+presentation forms and emoji style selectors.
+(Note that it may be useful to set \fBCharwidth=unicode\fP in addition.)
+
+Supported styles are:
+.br
+\(en \fBnone\fP Emoji support disabled; symbols are taken from the font.
+.br
+\(en \fBemojione\fP Use EmojiOne graphics.
+.br
+\(en \fBnoto\fP Use graphics from the Noto Emoji font.
+.br
+\(en \fBapple\fP Use Apple emoji graphics.
+.br
+\(en \fBgoogle\fP Use Google emoji graphics.
+.br
+\(en \fBtwitter\fP Use Twitter emoji graphics.
+.br
+\(en \fBfacebook\fP Use Facebook emoji graphics.
+.br
+\(en \fBsamsung\fP Use Samsung emoji graphics.
+.br
+\(en \fBwindows\fP Use Windows emoji graphics.
+
+Note that all style options only work if the respective emoji graphics repository 
+is deployed in a mintty resource directory, subdirectory \fIemojis\fP.
+See the Tips wiki page \fIhttps://github.com/mintty/mintty/wiki/Tips#emojis\fP 
+for details.
+
+.TP
+\fBEmoji placement\fP (EmojiPlacement=stretch)
+Emojis are displayed in the rectangular character cell group determined 
+by the cumulated width of the emoji sequence characters. The following 
+options are provided to tune their display:
+.br
+\(en \fBstretch\fP Emojis are scaled to fit in their display area.
+.br
+\(en \fBalign\fP Emojis are aligned in their display area.
+.br
+\(en \fBmiddle\fP Emojis are centered in their display area.
+.br
+\(en \fBfull\fP Emojis are full-size with original aspect ratio;
+note that they may overlap into the next character(s).
 
 .TP
 \fBBidirectional rendering\fP (Bidi=2)
@@ -2022,7 +2095,7 @@ Examples:
 This setting lists mintty invocation parameters for the session launcher.
 The value is a series of semicolon-separated, colon-combined 
 pairs of session launch names (used as menu item labels) and 
-configuration parameter lists; when selecting one of the launch names, 
+invocation parameter lists; when selecting one of the launch names, 
 mintty is invoked with the respective parameters.
 (If a semicolon shall be embedded into any of the command patterns, 
 a non-whitespace control character (i.e. none of \fB^I^J^K^L^M\fP) can be 
@@ -2039,6 +2112,41 @@ Examples:
 \(en \fBSessionCommands=big:-w max;Ubuntu:--WSL=Ubuntu;mybox:ssh mybox\fP
 .br
 \(en \fBSessionCommands=mycolours:-C ~/.minttyrc.mycolours\fP
+
+\fINote:\fP Control characters need to be embedded verbatim; there is no escape notation.
+
+.TP
+\fBTaskbar commands\fP (TaskCommands=)
+This setting lists mintty invocation parameters for the "Tasks" list in the 
+taskbar icon, also known as "jump list".
+The value is a series of semicolon-separated, colon-combined 
+pairs of task names and invocation parameter lists; 
+when selecting one of the tasks from the taskbar icon, 
+mintty is invoked with the respective parameters.
+(If a semicolon shall be embedded into any of the command patterns, 
+a non-whitespace control character (i.e. none of \fB^I^J^K^L^M\fP) can be 
+specified as an alternative separator by starting the whole setting with it.)
+
+\fINote:\fP This feature only works in combination with a parameter 
+\fB-o AppID=...\fP. If the taskbar icon is "pinned" to the taskbar, 
+the task list is retained with it.
+
+\fINote:\fP Task names are subject to localization if they are 
+added to the localization file of the selected UI localization language 
+(in subdirectory \fIlang\fP of a mintty resource directory).
+
+\fINote:\fP If the parameter list contains "--WSL", mintty will try to 
+determine a suitable WSL distribution icon for the jump list, or use the 
+WSLtty default icon from the mintty resource subdirectory \fIicon\fP, 
+or from the WSLtty package if installed.
+
+\fINote:\fP This is an experimental feature, with an experimental configuration format.
+
+Examples:
+.br
+\(en \fBTaskCommands=big:-w max;Ubuntu:--WSL=Ubuntu;mybox:ssh mybox\fP
+.br
+\(en \fBTaskCommands=mycolours:-C ~/.minttyrc.mycolours\fP
 
 \fINote:\fP Control characters need to be embedded verbatim; there is no escape notation.
 
@@ -2087,7 +2195,7 @@ operation within the Virtual Tabs feature:
 .br
 \(en \fB3\fP: sync. also when window is minimized
 .br
-\(en \fB4\fP: sync. also when window is started
+\(en \fB4\fP: sync. also when window is started separately
 
 .SH LIMITATIONS
 

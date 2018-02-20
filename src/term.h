@@ -122,6 +122,9 @@ enum {
   ATTR_WIDE       = 0x40000000u,
   ATTR_NARROW     = 0x80000000u,
   ATTR_EXPAND     = 0x0000000100000000u,
+  ATTR_FRAMED     = 0x0010000000000000u,
+
+  TATTR_EMOJI     = 0x1000000000000000u,
 
   GRAPH_MASK      = 0x0000FF0000000000u,
   ATTR_GRAPH_SHIFT = 40,
@@ -147,11 +150,9 @@ enum {
                     | DATTR_STARTRUN
   // unassigned bits:
   //                0x0000000800000000u
-  //                0x0010000000000000u
   //                0x0020000000000000u
   //                0x0040000000000000u
   //                0x0080000000000000u
-  //                0x1000000000000000u
   //                0x2000000000000000u
   //                0x4000000000000000u
 };
