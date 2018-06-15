@@ -48,11 +48,13 @@ typedef struct {
 
 typedef struct {
   // Looks
-  colour fg_colour, bold_colour, bg_colour, cursor_colour, underl_colour;
+  colour fg_colour, bold_colour, bg_colour, cursor_colour;
+  colour underl_colour, hover_colour;
   bool underl_manual;
   colour sel_fg_colour, sel_bg_colour;
   colour search_fg_colour, search_bg_colour, search_current_colour;
   wstring theme_file;
+  wstring background;
   string colour_scheme;
   char transparency;
   bool blurred;
@@ -145,6 +147,7 @@ typedef struct {
   // "Hidden"
   int bidi;
   bool disable_alternate_screen;
+  bool input_clears_selection;
   char charwidth;
   char emojis;
   char emoji_placement;
@@ -163,7 +166,7 @@ typedef struct {
   int geom_sync;
   int col_spacing, row_spacing;
   int padding;
-  bool handle_dpichanged;
+  int handle_dpichanged;
   int check_version_update;
   string word_chars;
   string word_chars_excl;
@@ -172,6 +175,7 @@ typedef struct {
   wstring sixel_clip_char;
   bool short_long_opts;
   bool bold_as_special;
+  int selection_show_size;
   // Legacy
   bool use_system_colours;
   bool old_bold;

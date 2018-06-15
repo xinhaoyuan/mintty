@@ -1,5 +1,5 @@
 // winmain.c (part of mintty)
-// Copyright 2008-13 Andy Koppe, 2015-2017 Thomas Wolff
+// Copyright 2008-13 Andy Koppe, 2015-2018 Thomas Wolff
 // Based on code from PuTTY-0.60 by Simon Tatham and team.
 // Licensed under the terms of the GNU General Public License v3 or later.
 
@@ -65,9 +65,7 @@ ATOM class_atom;
 static char **main_argv;
 static int main_argc;
 static bool invoked_from_shortcut = false;
-#if CYGWIN_VERSION_DLL_MAJOR >= 1005
 static bool invoked_with_appid = false;
-#endif
 
 
 //filled by win_adjust_borders:
@@ -80,9 +78,11 @@ static int extra_width, extra_height, norm_extra_width, norm_extra_height;
 bool win_is_fullscreen;
 static bool go_fullscr_on_max;
 static bool resizing;
+static bool moving = false;
 static bool disable_poschange = true;
 static int zoom_token = 0;  // for heuristic handling of Shift zoom (#467, #476)
 static bool default_size_token = false;
+bool clipboard_token = false;
 
 // Inter-window actions
 enum {
@@ -198,10 +198,20 @@ load_library_func(string lib, string func)
 
 #define dont_debug_dpi
 
-bool per_monitor_dpi_aware = false;
+#define DPI_UNAWARE 0
+#define DPI_AWAREV1 1
+#define DPI_AWAREV2 2
+int per_monitor_dpi_aware = DPI_UNAWARE;  // dpi_awareness
 uint dpi = 96;
+// DPI handling V2
+static bool is_in_dpi_change = false;
 
+#ifndef WM_DPICHANGED
 #define WM_DPICHANGED 0x02E0
+#endif
+#ifndef WM_GETDPISCALEDSIZE
+#define WM_GETDPISCALEDSIZE 0x02E4
+#endif
 const int Process_System_DPI_Aware = 1;
 const int Process_Per_Monitor_DPI_Aware = 2;
 static HRESULT (WINAPI * pGetProcessDpiAwareness)(HANDLE hprocess, int * value) = 0;
@@ -212,6 +222,7 @@ DECLARE_HANDLE(DPI_AWARENESS_CONTEXT);
 #define DPI_AWARENESS_CONTEXT_UNAWARE           ((DPI_AWARENESS_CONTEXT)-1)
 #define DPI_AWARENESS_CONTEXT_SYSTEM_AWARE      ((DPI_AWARENESS_CONTEXT)-2)
 #define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE ((DPI_AWARENESS_CONTEXT)-3)
+#define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((DPI_AWARENESS_CONTEXT)-4)
 static DPI_AWARENESS_CONTEXT (WINAPI * pSetThreadDpiAwarenessContext)(DPI_AWARENESS_CONTEXT dpic) = 0;
 static HRESULT (WINAPI * pEnableNonClientDpiScaling)(HWND win) = 0;
 static BOOL (WINAPI * pAdjustWindowRectExForDpi)(LPRECT lpRect, DWORD dwStyle, BOOL bMenu, DWORD dwExStyle, UINT dpi) = 0;
@@ -269,20 +280,15 @@ set_dpi_auto_scaling(bool on)
 #endif
 }
 
-static bool
+static int
 set_per_monitor_dpi_aware(void)
 {
-#if 0
- /* this was added under the assumption it might be needed 
-    for EnableNonClientDpiScaling to work (as described) 
-    but it's not needed, so we'll leave it
- */
-  if (pSetThreadDpiAwarenessContext) {
-    if (pSetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE))
-      return true;
-  }
-#endif
-  if (pSetProcessDpiAwareness && pGetProcessDpiAwareness) {
+  // DPI handling V2: make EnableNonClientDpiScaling work, at last
+  if (pSetThreadDpiAwarenessContext &&
+      pSetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
+    return DPI_AWAREV2;
+  else if (cfg.handle_dpichanged == 1 &&
+           pSetProcessDpiAwareness && pGetProcessDpiAwareness) {
     HRESULT hr = pSetProcessDpiAwareness(Process_Per_Monitor_DPI_Aware);
     // E_ACCESSDENIED:
     // The DPI awareness is already set, either by calling this API previously
@@ -291,10 +297,11 @@ set_per_monitor_dpi_aware(void)
       pSetProcessDpiAwareness(Process_System_DPI_Aware);
 
     int awareness = 0;
-    return SUCCEEDED(pGetProcessDpiAwareness(NULL, &awareness)) &&
-      awareness == Process_Per_Monitor_DPI_Aware;
+    if (SUCCEEDED(pGetProcessDpiAwareness(NULL, &awareness)) &&
+        awareness == Process_Per_Monitor_DPI_Aware)
+      return DPI_AWAREV1;
   }
-  return false;
+  return DPI_UNAWARE;
 }
 
 void
@@ -310,9 +317,39 @@ win_set_timer(void (*cb)(void), uint ticks)
 
 static struct tabinfo {
   unsigned long tag;
+  HWND wnd;
   wchar * title;
 } * tabinfo = 0;
 int ntabinfo = 0;
+
+static HWND
+get_prev_tab(bool all)
+{
+  HWND prev = 0;
+  for (int w = 0; w < ntabinfo; w++)
+    if (tabinfo[w].wnd != wnd) {
+      if (all || !IsIconic(tabinfo[w].wnd))
+        prev = tabinfo[w].wnd;
+    }
+    else if (prev)
+      return prev;
+  return prev;
+}
+
+static HWND
+get_next_tab(bool all)
+{
+  HWND next = 0;
+  for (int w = ntabinfo - 1; w >= 0; w--)
+    if (tabinfo[w].wnd != wnd) {
+      if (all || !IsIconic(tabinfo[w].wnd)) {
+        next = tabinfo[w].wnd;
+      }
+    }
+    else if (next)
+      return next;
+  return next;
+}
 
 static void
 clear_tabinfo()
@@ -328,12 +365,13 @@ clear_tabinfo()
 }
 
 static void
-add_tabinfo(unsigned long tag, wchar * title)
+add_tabinfo(unsigned long tag, HWND wnd, wchar * title)
 {
   struct tabinfo * newtabinfo = renewn(tabinfo, ntabinfo + 1);
   if (newtabinfo) {
     tabinfo = newtabinfo;
     tabinfo[ntabinfo].tag = tag;
+    tabinfo[ntabinfo].wnd = wnd;
     tabinfo[ntabinfo].title = wcsdup(title);
     ntabinfo++;
   }
@@ -396,7 +434,7 @@ refresh_tab_titles(bool trace)
         FILETIME cr_time, dummy;
         if (GetProcessTimes(ph, &cr_time, &dummy, &dummy, &dummy)) {
           unsigned long long crtime = ((unsigned long long)cr_time.dwHighDateTime << 32) | cr_time.dwLowDateTime;
-          add_tabinfo(crtime, title);
+          add_tabinfo(crtime, curr_wnd, title);
           if (trace) {
 #ifdef debug_tabbar
             SYSTEMTIME start_time;
@@ -411,7 +449,7 @@ refresh_tab_titles(bool trace)
         CloseHandle(ph);
       }
       else
-        add_tabinfo((unsigned long)curr_wnd, title);
+        add_tabinfo((unsigned long)curr_wnd, curr_wnd, title);
 
     }
     return true;
@@ -420,6 +458,10 @@ refresh_tab_titles(bool trace)
   clear_tabinfo();
   EnumWindows(wnd_enum_tabs, 0);
   sort_tabinfo();
+#if defined(debug_tabbar) || defined(debug_win_switch)
+  for (int w = 0; w < ntabinfo; w++)
+    printf("[%d] %p eq %d iconic %d <%ls>\n", w, tabinfo[w].wnd, tabinfo[w].wnd == wnd, IsIconic(tabinfo[w].wnd), tabinfo[w].title);
+#endif
 }
 
 /*
@@ -459,8 +501,14 @@ win_set_title(char *title)
   if (title_settable) {
     wchar wtitle[strlen(title) + 1];
     if (cs_mbstowcs(wtitle, title, lengthof(wtitle)) >= 0) {
-      SetWindowTextW(wnd, wtitle);
-      update_tab_titles();
+      // check current title to suppress unnecessary update_tab_titles()
+      int len = GetWindowTextLengthW(wnd);
+      wchar oldtitle[len + 1];
+      GetWindowTextW(wnd, oldtitle, len + 1);
+      if (0 != wcscmp(wtitle, oldtitle)) {
+        SetWindowTextW(wnd, wtitle);
+        update_tab_titles();
+      }
     }
   }
 }
@@ -581,9 +629,12 @@ win_to_top(HWND top_wnd)
     ShowWindow(top_wnd, SW_RESTORE);
 }
 
-static HWND first_wnd, last_wnd;
-
 #define dont_debug_sessions 1
+
+#ifdef old_win_switch
+static HWND first_wnd, last_wnd;
+static HWND prev_wnd, next_wnd;
+static bool wnd_passed;
 
 static BOOL CALLBACK
 wnd_enum_proc(HWND curr_wnd, LPARAM unused(lp))
@@ -602,18 +653,29 @@ wnd_enum_proc(HWND curr_wnd, LPARAM unused(lp))
            curr_wnd, title);
   }
 #endif
-  if (curr_wnd != wnd && !IsIconic(curr_wnd)) {
+  if (curr_wnd == wnd)
+    wnd_passed = true;
+  else if (!IsIconic(curr_wnd)) {
     WINDOWINFO curr_wnd_info;
     curr_wnd_info.cbSize = sizeof(WINDOWINFO);
     GetWindowInfo(curr_wnd, &curr_wnd_info);
     if (class_atom == curr_wnd_info.atomWindowType) {
       first_wnd = first_wnd ?: curr_wnd;
       last_wnd = curr_wnd;
+      if (!wnd_passed)
+        prev_wnd = curr_wnd;
+      else
+        if (!next_wnd)
+          next_wnd = curr_wnd;
     }
   }
   return true;
 }
+#endif
 
+/*
+   Cycle mintty windows. Skip iconized windows, unless second parameter true.
+ */
 void
 win_switch(bool back, bool alternate)
 {
@@ -621,17 +683,29 @@ win_switch(bool back, bool alternate)
   // but do it below, not here (wsltty#47)
   //SetWindowPos(wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 
+#ifdef old_win_switch
+  (void)get_next_tab; (void)get_prev_tab;
+
 #if defined(debug_sessions) && debug_sessions > 1
-  first_wnd = 0, last_wnd = 0;
+  first_wnd = 0, last_wnd = 0, prev_wnd = 0, next_wnd = 0, wnd_passed = false;
   EnumChildWindows(0, wnd_enum_proc, 1);
-  first_wnd = 0, last_wnd = 0;
+  first_wnd = 0, last_wnd = 0, prev_wnd = 0, next_wnd = 0, wnd_passed = false;
   EnumDesktopWindows(0, wnd_enum_proc, 8);
 #endif
 
-  first_wnd = 0, last_wnd = 0;
+  first_wnd = 0, last_wnd = 0, prev_wnd = 0, next_wnd = 0, wnd_passed = false;
   EnumWindows(wnd_enum_proc, 0);
+  if (!prev_wnd)
+    prev_wnd = last_wnd;
+  if (!next_wnd)
+    next_wnd = first_wnd;
+
   if (first_wnd) {
     if (back)
+      first_wnd = prev_wnd;
+    else if (true)
+      first_wnd = next_wnd;
+    else if (back)
       first_wnd = last_wnd;
     else {
       // avoid being pushed behind other windows (#652)
@@ -641,6 +715,10 @@ win_switch(bool back, bool alternate)
     }
     win_to_top(first_wnd);
   }
+#else
+  refresh_tab_titles(false);
+  win_to_top(back ? get_prev_tab(alternate) : get_next_tab(alternate));
+#endif
 }
 
 
@@ -1208,22 +1286,30 @@ win_set_geom(int y, int x, int height, int width)
 static void
 win_fix_position(void)
 {
+  // DPI handling V2
+  if (is_in_dpi_change)
+    // window position needs no correction during DPI change, 
+    // avoid position flickering (#695)
+    return;
+
   RECT wr;
   GetWindowRect(wnd, &wr);
   MONITORINFO mi;
   get_my_monitor_info(&mi);
   RECT ar = mi.rcWork;
-  WINDOWINFO winfo;
-  winfo.cbSize = sizeof(WINDOWINFO);
-  GetWindowInfo(wnd, &winfo);
 
   // Correct edges. Top and left win if the window is too big.
   wr.top -= max(0, wr.bottom - ar.bottom);
   wr.top = max(wr.top, ar.top);
   wr.left -= max(0, wr.right - ar.right);
   wr.left = max(wr.left, ar.left);
+#ifdef workaround_629
   // attempt to workaround left gap (#629); does not seem to work anymore
-  //wr.left = max(wr.left, (int)(ar.left - winfo.cxWindowBorders));
+  WINDOWINFO winfo;
+  winfo.cbSize = sizeof(WINDOWINFO);
+  GetWindowInfo(wnd, &winfo);
+  wr.left = max(wr.left, (int)(ar.left - winfo.cxWindowBorders));
+#endif
 
   SetWindowPos(wnd, 0, wr.left, wr.top, 0, 0,
                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -1350,9 +1436,10 @@ win_bell(config * conf)
 }
 
 void
-win_invalidate_all(void)
+win_invalidate_all(bool clearbg)
 {
   InvalidateRect(wnd, null, true);
+  win_flush_background(clearbg);
 }
 
 
@@ -1468,7 +1555,7 @@ win_adapt_term_size(bool sync_size_with_font, bool scale_font_with_size)
     win_fix_position();
     trace_winsize("win_adapt_term_size > win_fix_position");
 
-    win_invalidate_all();
+    win_invalidate_all(false);
     return;
   }
 
@@ -1533,7 +1620,7 @@ win_adapt_term_size(bool sync_size_with_font, bool scale_font_with_size)
     struct winsize ws = {rows, cols, cols * cell_width, rows * cell_height};
     child_resize(&ws);
   }
-  win_invalidate_all();
+  win_invalidate_all(false);
 
   win_update_search();
   term_schedule_search_update();
@@ -1626,19 +1713,38 @@ win_update_transparency(bool opaque)
 }
 
 void
-win_update_scrollbar(void)
+win_update_scrollbar(bool inner)
 {
   int scrollbar = term.show_scrollbar ? cfg.scrollbar : 0;
+
   LONG style = GetWindowLong(wnd, GWL_STYLE);
   SetWindowLong(wnd, GWL_STYLE,
                 scrollbar ? style | WS_VSCROLL : style & ~WS_VSCROLL);
+
+  default_size_token = true;  // prevent font zooming after Ctrl+Shift+O
   LONG exstyle = GetWindowLong(wnd, GWL_EXSTYLE);
   SetWindowLong(wnd, GWL_EXSTYLE,
                 scrollbar < 0 ? exstyle | WS_EX_LEFTSCROLLBAR
                               : exstyle & ~WS_EX_LEFTSCROLLBAR);
-  SetWindowPos(wnd, null, 0, 0, 0, 0,
-               SWP_NOACTIVATE | SWP_NOMOVE |
-               SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+
+  default_size_token = true;  // prevent font zooming after Ctrl+Shift+O
+  if (inner || IsZoomed(wnd))
+    SetWindowPos(wnd, null, 0, 0, 0, 0,
+                 SWP_NOACTIVATE | SWP_NOMOVE |
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+  else {
+    RECT wr;
+    GetWindowRect(wnd, &wr);
+    if (scrollbar && !(style & WS_VSCROLL))
+      wr.right += GetSystemMetrics(SM_CXVSCROLL);
+    else if (!scrollbar && (style & WS_VSCROLL))
+      wr.right -= GetSystemMetrics(SM_CXVSCROLL);
+    SetWindowPos(wnd, null, 0, 0, wr.right - wr.left, wr.bottom - wr.top,
+                 SWP_NOACTIVATE | SWP_NOMOVE |
+                 SWP_NOZORDER | SWP_FRAMECHANGED);
+  }
+
+  win_fix_position();
 }
 
 void
@@ -1663,7 +1769,7 @@ font_cs_reconfig(bool font_changed)
     trace_resize((" (font_cs_reconfig -> win_adapt_term_size)\n"));
     win_adapt_term_size(true, false);
   }
-  win_update_scrollbar();
+  win_update_scrollbar(true); // assume "inner", shouldn't change anyway
   win_update_transparency(cfg.opaque_when_focused);
   win_update_mouse();
 
@@ -1964,8 +2070,8 @@ static struct {
         when IDM_TOGLOG: toggle_logging();
         when IDM_TOGCHARINFO: toggle_charinfo();
         when IDM_PASTE: win_paste();
-        when IDM_SELALL: term_select_all(); win_update();
-        when IDM_RESET: winimgs_clear(); term_reset(true); win_update();
+        when IDM_SELALL: term_select_all(); win_update(false);
+        when IDM_RESET: winimgs_clear(); term_reset(true); win_update(false);
         when IDM_DEFSIZE:
           default_size();
         when IDM_DEFSIZE_ZOOM:
@@ -1982,6 +2088,9 @@ static struct {
           else {
             default_size();
           }
+        when IDM_SCROLLBAR:
+          term.show_scrollbar = !term.show_scrollbar;
+          win_update_scrollbar(false);
         when IDM_FULLSCREEN or IDM_FULLSCREEN_ZOOM:
           if ((wp & ~0xF) == IDM_FULLSCREEN_ZOOM)
             zoom_token = 4;  // override cfg.zoom_font_with_window == 0
@@ -2064,6 +2173,19 @@ static struct {
       // and typing a key; insert the key and prevent the beep
       child_sendw(&(wchar){wp}, 1);
       return MNC_CLOSE << 16;
+
+#ifndef WM_CLIPBOARDUPDATE
+#define WM_CLIPBOARDUPDATE 0x031D
+#endif
+    // Try to clear selection when clipboard content is updated (#742)
+    when WM_CLIPBOARDUPDATE:
+      if (clipboard_token)
+        clipboard_token = false;
+      else {
+        term.selected = false;
+        win_update(false);
+      }
+      return 0;
 
 #ifdef catch_lang_change
     // this is rubbish; only the initial change would be captured anyway;
@@ -2156,7 +2278,7 @@ static struct {
       term_set_focus(true, false);
       CreateCaret(wnd, caretbm, 0, 0);
       //flash_taskbar(false);  /* stop; not needed when leaving search bar */
-      win_update();
+      win_update(false);
       ShowCaret(wnd);
       zoom_token = -4;
 
@@ -2164,7 +2286,7 @@ static struct {
       win_show_mouse();
       term_set_focus(false, false);
       DestroyCaret();
-      win_update();
+      win_update(false);
 
     when WM_INITMENU:
       // win_update_menus is already called before calling TrackPopupMenu
@@ -2177,6 +2299,7 @@ static struct {
     when WM_MOVING:
       trace_resize(("# WM_MOVING VK_SHIFT %02X\n", (uchar)GetKeyState(VK_SHIFT)));
       zoom_token = -4;
+      moving = true;
 
     when WM_ENTERSIZEMOVE:
       trace_resize(("# WM_ENTERSIZEMOVE VK_SHIFT %02X\n", (uchar)GetKeyState(VK_SHIFT)));
@@ -2271,6 +2394,14 @@ static struct {
       win_synctabs(2);
     }
 
+    when WM_MOVE:
+      // enable coupled moving of window tabs on Win+Shift moving;
+      // (#600#issuecomment-366643426, if SessionGeomSync ≥ 2);
+      // avoid mutual repositioning (endless flickering)
+      if (!moving)
+        win_synctabs(2);
+      moving = false;
+
     when WM_WINDOWPOSCHANGED: {
       if (disable_poschange)
         // avoid premature Window size adaptation (#649?)
@@ -2278,79 +2409,113 @@ static struct {
 
 #     define WP ((WINDOWPOS *) lp)
       trace_resize(("# WM_WINDOWPOSCHANGED (resizing %d) %d %d @ %d %d\n", resizing, WP->cy, WP->cx, WP->y, WP->x));
-      bool dpi_changed = true;
-      if (per_monitor_dpi_aware && cfg.handle_dpichanged && pGetDpiForMonitor) {
-        HMONITOR mon = MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST);
-        uint x, y;
-        pGetDpiForMonitor(mon, 0, &x, &y);  // MDT_EFFECTIVE_DPI
+      if (per_monitor_dpi_aware == DPI_AWAREV1) {
+        // not necessary for DPI handling V2
+        bool dpi_changed = true;
+        if (cfg.handle_dpichanged && pGetDpiForMonitor) {
+          HMONITOR mon = MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST);
+          uint x, y;
+          pGetDpiForMonitor(mon, 0, &x, &y);  // MDT_EFFECTIVE_DPI
 #ifdef debug_dpi
-        printf("WM_WINDOWPOSCHANGED %d -> %d (aware %d handle %d)\n", dpi, y, per_monitor_dpi_aware, cfg.handle_dpichanged);
+          printf("WM_WINDOWPOSCHANGED %d -> %d (aware %d handle %d)\n", dpi, y, per_monitor_dpi_aware, cfg.handle_dpichanged);
 #endif
-        if (y != dpi) {
-          dpi = y;
+          if (y != dpi) {
+            dpi = y;
+          }
+          else
+            dpi_changed = false;
         }
-        else
-          dpi_changed = false;
-      }
 
-      if (dpi_changed && per_monitor_dpi_aware && cfg.handle_dpichanged) {
-        // remaining glitch:
-        // start mintty -p @1; move it to other monitor;
-        // columns will be less
-        //win_init_fonts(cfg.font.size);
-        font_cs_reconfig(true);
-        win_adapt_term_size(true, false);
+        if (dpi_changed && cfg.handle_dpichanged) {
+          // remaining glitch:
+          // start mintty -p @1; move it to other monitor;
+          // columns will be less
+          //win_init_fonts(cfg.font.size);
+          font_cs_reconfig(true);
+          win_adapt_term_size(true, false);
+        }
       }
     }
 
+    when WM_GETDPISCALEDSIZE:
+      // here we could adjust the RECT passed to WM_DPICHANGED ...
+
     when WM_DPICHANGED: {
-#ifdef handle_dpi_on_dpichanged
-      bool dpi_changed = true;
-      if (per_monitor_dpi_aware && cfg.handle_dpichanged && pGetDpiForMonitor) {
-        HMONITOR mon = MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST);
-        uint x, y;
-        pGetDpiForMonitor(mon, 0, &x, &y);  // MDT_EFFECTIVE_DPI
+      if (!cfg.handle_dpichanged) {
 #ifdef debug_dpi
-        printf("WM_DPICHANGED %d -> %d (aware %d handle %d)\n", dpi, y, per_monitor_dpi_aware, cfg.handle_dpichanged);
+        printf("WM_DPICHANGED (unhandled) %d (aware %d handle %d)\n", dpi, per_monitor_dpi_aware, cfg.handle_dpichanged);
 #endif
-        if (y != dpi) {
-          dpi = y;
-        }
-        else
-          dpi_changed = false;
+        break;
       }
+
+      if (per_monitor_dpi_aware == DPI_AWAREV2) {
+        is_in_dpi_change = true;
+
+        UINT new_dpi = LOWORD(wp);
+        LPRECT r = (LPRECT) lp;
+
 #ifdef debug_dpi
-      else
-        printf("WM_DPICHANGED (aware %d handle %d)\n", per_monitor_dpi_aware, cfg.handle_dpichanged);
+        printf("WM_DPICHANGED %d -> %d (handled) (aware %d handle %d)\n", dpi, new_dpi, per_monitor_dpi_aware, cfg.handle_dpichanged);
+#endif
+        dpi = new_dpi;
+
+        SetWindowPos(wnd, 0, r->left, r->top, r->right - r->left, r->bottom - r->top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+
+        font_cs_reconfig(true);
+
+        is_in_dpi_change = false;
+        return 0;
+      } else if (per_monitor_dpi_aware == DPI_AWAREV1) {
+#ifdef handle_dpi_on_dpichanged
+        bool dpi_changed = true;
+        if (pGetDpiForMonitor) {
+          HMONITOR mon = MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST);
+          uint x, y;
+          pGetDpiForMonitor(mon, 0, &x, &y);  // MDT_EFFECTIVE_DPI
+#ifdef debug_dpi
+          printf("WM_DPICHANGED handled: %d -> %d DPI (aware %d)\n", dpi, y, per_monitor_dpi_aware);
+#endif
+          if (y != dpi) {
+            dpi = y;
+          }
+          else
+            dpi_changed = false;
+        }
+#ifdef debug_dpi
+        else
+          printf("WM_DPICHANGED (unavailable)\n");
 #endif
 
-      if (dpi_changed && per_monitor_dpi_aware && cfg.handle_dpichanged) {
-        // this RECT is adjusted with respect to the monitor dpi already,
-        // so we don't need to consider GetDpiForMonitor
-        LPRECT r = (LPRECT) lp;
-        // try to stabilize font size roundtrip; 
-        // heuristic tweak of window size to compensate for 
-        // font scaling rounding errors that would continuously 
-        // decrease the window size if moving between monitors repeatedly
-        long width = (r->right - r->left) * 20 / 19;
-        long height = (r->bottom - r->top) * 20 / 19;
-        SetWindowPos(wnd, 0, r->left, r->top, width, height,
-                     SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
-        int y = term.rows, x = term.cols;
-        win_adapt_term_size(false, true);
-        //?win_init_fonts(cfg.font.size);
-        // try to stabilize terminal size roundtrip
-        if (term.rows != y || term.cols != x) {
-          // win_fix_position also clips the window to desktop size
-          win_set_chars(y, x);
-        }
+        if (dpi_changed) {
+          // this RECT is adjusted with respect to the monitor dpi already,
+          // so we don't need to consider GetDpiForMonitor
+          LPRECT r = (LPRECT) lp;
+          // try to stabilize font size roundtrip; 
+          // heuristic tweak of window size to compensate for 
+          // font scaling rounding errors that would continuously 
+          // decrease the window size if moving between monitors repeatedly
+          long width = (r->right - r->left) * 20 / 19;
+          long height = (r->bottom - r->top) * 20 / 19;
+          SetWindowPos(wnd, 0, r->left, r->top, width, height,
+                       SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
+          int y = term.rows, x = term.cols;
+          win_adapt_term_size(false, true);
+          //?win_init_fonts(cfg.font.size);
+          // try to stabilize terminal size roundtrip
+          if (term.rows != y || term.cols != x) {
+            // win_fix_position also clips the window to desktop size
+            win_set_chars(y, x);
+          }
 #ifdef debug_dpi
-        printf("SM_CXVSCROLL %d\n", GetSystemMetrics(SM_CXVSCROLL));
+          printf("SM_CXVSCROLL %d\n", GetSystemMetrics(SM_CXVSCROLL));
 #endif
-        return 0;
+          return 0;
+        }
+        break;
+#endif // handle_dpi_on_dpichanged
       }
       break;
-#endif
     }
 
     when WM_NCHITTEST: {
@@ -2542,6 +2707,12 @@ exit_mintty(void)
 
 
 #if CYGWIN_VERSION_DLL_MAJOR >= 1005
+typedef void * * voidrefref;
+#else
+typedef void * voidrefref;
+#define STARTF_TITLEISLINKNAME 0x00000800
+#define STARTF_TITLEISAPPID 0x00001000
+#endif
 
 #include <shlobj.h>
 
@@ -2555,12 +2726,12 @@ get_shortcut_icon_location(wchar * iconfile, bool * wdpresent)
     return 0;
 
   hres = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER,
-                          &IID_IShellLinkW, (void **) &shell_link);
+                          &IID_IShellLinkW, (voidrefref) &shell_link);
   if (!SUCCEEDED(hres))
     return 0;
 
   hres = shell_link->lpVtbl->QueryInterface(shell_link, &IID_IPersistFile,
-                                            (void **) &persist_file);
+                                            (voidrefref) &persist_file);
   if (!SUCCEEDED(hres)) {
     shell_link->lpVtbl->Release(shell_link);
     return 0;
@@ -2627,6 +2798,25 @@ get_shortcut_icon_location(wchar * iconfile, bool * wdpresent)
       hres = shell_link->lpVtbl->GetWorkingDirectory(shell_link, wil, MAX_PATH);
       *wdpresent = SUCCEEDED(hres) && *wil;
     }
+#ifdef use_shortcut_description
+    // also retrieve shortcut description:
+    static wchar * shortcut = 0;
+    uint sdlen = 55;
+    wchar * sd = newn(wchar, sdlen + 1);
+    do {
+      // Note: this is the "Comment:" field, not the shortcut name
+      hres = shell_link->lpVtbl->GetDescription(shell_link, sd, sdlen);
+      if (hres != S_OK)
+        break;
+      if (wcslen(sd) < sdlen - 1) {
+        shortcut = wcsdup(sd);
+        break;
+      }
+      sdlen += 55;
+      sd = renewn(sd, sdlen + 1);
+    } while (true);
+    delete(sd);
+#endif
   }
   iconex:
 
@@ -2638,8 +2828,6 @@ get_shortcut_icon_location(wchar * iconfile, bool * wdpresent)
 
   return result;
 }
-
-#endif
 
 
 #if CYGWIN_VERSION_API_MINOR >= 74
@@ -3228,18 +3416,61 @@ main(int argc, char *argv[])
   GetStartupInfoW(&sui);
   cfg.window = sui.dwFlags & STARTF_USESHOWWINDOW ? sui.wShowWindow : SW_SHOW;
   cfg.x = cfg.y = CW_USEDEFAULT;
-#if CYGWIN_VERSION_DLL_MAJOR >= 1005
   invoked_from_shortcut = sui.dwFlags & STARTF_TITLEISLINKNAME;
   invoked_with_appid = sui.dwFlags & STARTF_TITLEISAPPID;
   // shortcut or AppId would be found in sui.lpTitle
 # ifdef debuglog
   fprintf(mtlog, "shortcut %d %ls\n", invoked_from_shortcut, sui.lpTitle);
 # endif
+
+  // Options triggered via wsl*.exe
+#if CYGWIN_VERSION_API_MINOR >= 74
+  char * exename = *argv;
+  const char * exebasename = strrchr(exename, '/');
+  if (exebasename)
+    exebasename ++;
+  else
+    exebasename = exename;
+  if (0 == strncmp(exebasename, "wsl", 3)) {
+    char * exearg = strchr(exebasename, '-');
+    if (exearg)
+      exearg ++;
+    int err = select_WSL(exearg);
+    if (err)
+      option_error(__("WSL distribution '%s' not found"), exearg ?: _("(Default)"), err);
+  }
 #endif
 
   // Load config files
   // try global config file
   load_config("/etc/minttyrc", true);
+#ifdef WSLTTY_APPX
+  char * getlocalappdata(void)
+  {
+    // get appx-redirected system dir, as investigated by Biswapriyo Nath
+#ifndef KF_FLAG_FORCE_APP_DATA_REDIRECTION
+#define KF_FLAG_FORCE_APP_DATA_REDIRECTION 0x00080000
+#endif
+    HMODULE shell = load_sys_library("shell32.dll");
+    HRESULT (WINAPI *pSHGetKnownFolderPath)(GUID, DWORD, HANDLE, wchar**) =
+      (void *)GetProcAddress(shell, "SHGetKnownFolderPath");
+    if (!pSHGetKnownFolderPath)
+      return 0;
+    wchar * lappdata;
+    long hres = pSHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_FORCE_APP_DATA_REDIRECTION, 0, &lappdata);
+    if (hres)
+      return 0;
+    else
+      return path_win_w_to_posix(lappdata);
+  }
+  // try Windows APPX local config location (wsltty.appx#3)
+  char * lappdata = getlocalappdata();
+  if (lappdata && *lappdata) {
+    string rc_file = asform("%s/.minttyrc", lappdata);
+    load_config(rc_file, 2);
+    delete(rc_file);
+  }
+#endif
   // try Windows config location (#201)
   char * appdata = getenv("APPDATA");
   if (appdata && *appdata) {
@@ -3247,14 +3478,16 @@ main(int argc, char *argv[])
     load_config(rc_file, true);
     delete(rc_file);
   }
-  // try XDG config base directory default location (#525)
-  string rc_file = asform("%s/.config/mintty/config", home);
-  load_config(rc_file, true);
-  delete(rc_file);
-  // try home config file
-  rc_file = asform("%s/.minttyrc", home);
-  load_config(rc_file, 2);
-  delete(rc_file);
+  if (!support_wsl) {
+    // try XDG config base directory default location (#525)
+    string rc_file = asform("%s/.config/mintty/config", home);
+    load_config(rc_file, true);
+    delete(rc_file);
+    // try home config file
+    rc_file = asform("%s/.minttyrc", home);
+    load_config(rc_file, 2);
+    delete(rc_file);
+  }
 
   if (getenv("MINTTY_ICON")) {
     //cfg.icon = strdup(getenv("MINTTY_ICON"));
@@ -3263,7 +3496,6 @@ main(int argc, char *argv[])
     unsetenv("MINTTY_ICON");
   }
 
-#if CYGWIN_VERSION_DLL_MAJOR >= 1005
   bool wdpresent = true;
   if (invoked_from_shortcut) {
     wchar * icon = get_shortcut_icon_location(sui.lpTitle, &wdpresent);
@@ -3275,7 +3507,6 @@ main(int argc, char *argv[])
       icon_is_from_shortcut = true;
     }
   }
-#endif
 
   for (;;) {
     int opt = cfg.short_long_opts
@@ -3300,18 +3531,26 @@ main(int argc, char *argv[])
       when '~':
         start_home = true;
         chdir(home);
-      when '':
-        if (chdir(optarg) < 0) {
+      when '': {
+        int res = chdir(optarg);
+        if (res == 0)
+          setenv("PWD", optarg, true);  // avoid softlink resolution
+        else {
           if (*optarg == '"' || *optarg == '\'')
             if (optarg[strlen(optarg) - 1] == optarg[0]) {
               // strip off embedding quotes as provided when started 
               // from Windows context menu by registry entry
               char * dir = strdup(&optarg[1]);
               dir[strlen(dir) - 1] = '\0';
-              chdir(dir);
+              res = chdir(dir);
+              if (res == 0)
+                setenv("PWD", optarg, true);  // avoid softlink resolution
               free(dir);
             }
         }
+        if (res == 0)
+          setenv("CHERE_INVOKING", "mintty", true);
+      }
       when '':
         if (config_dir)
           option_error(__("Duplicate option '%s'"), "configdir", 0);
@@ -3497,28 +3736,12 @@ main(int argc, char *argv[])
     }
   }
 
-  char * exename = *argv;
-  const char * exebasename = strrchr(exename, '/');
-  if (exebasename)
-    exebasename ++;
-  else
-    exebasename = exename;
-  if (0 == strncmp(exebasename, "wsl", 3)) {
-    char * exearg = strchr(exebasename, '-');
-    if (exearg)
-      exearg ++;
-    int err = select_WSL(exearg);
-    if (err)
-      option_error(__("WSL distribution '%s' not found"), exearg ?: _("(Default)"), err);
-  }
-
   copy_config("main after -o", &file_cfg, &cfg);
   if (*cfg.colour_scheme)
     load_scheme(cfg.colour_scheme);
   else if (*cfg.theme_file)
     load_theme(cfg.theme_file);
 
-#if CYGWIN_VERSION_DLL_MAJOR >= 1005
   if (!wdpresent) {  // shortcut start directory is empty
     WCHAR cd[MAX_PATH + 1];
     WCHAR wd[MAX_PATH + 1];
@@ -3526,6 +3749,9 @@ main(int argc, char *argv[])
     GetSystemDirectoryW(wd, MAX_PATH);		// C:\WINDOWS\system32
     //GetSystemWindowsDirectoryW(wd, MAX_PATH);	// C:\WINDOWS
     int l = wcslen(wd);
+#if CYGWIN_VERSION_API_MINOR < 206
+#define wcsncasecmp wcsncmp
+#endif
     if (0 == wcsncasecmp(cd, wd, l)) {
       // current directory is within Windows system directory
       // and shortcut start directory is empty
@@ -3537,7 +3763,6 @@ main(int argc, char *argv[])
         chdir(home);
     }
   }
-#endif
 
   finish_config();
 
@@ -3603,11 +3828,16 @@ main(int argc, char *argv[])
       //argc--;
       //argc++; // for "-l"
     }
-    char ** new_argv = newn(char *, argc + 2 + 4 + start_home);
+#ifdef WSLTTY_APPX
+    char ** new_argv = newn(char *, argc + 10 + start_home);
+#else
+    char ** new_argv = newn(char *, argc + 8 + start_home);
+#endif
     char ** pargv = new_argv;
     if (login_dash) {
       *pargv++ = "-wslbridge";
 #ifdef wslbridge_supports_l
+#warning redundant option wslbridge -l not needed
       *pargv++ = "-l";
 #endif
     }
@@ -3618,8 +3848,58 @@ main(int argc, char *argv[])
       *pargv++ = wsl_guid;
     }
     *pargv++ = "-t";
+    *pargv++ = "-e";
+    *pargv++ = "APPDATA";
     if (start_home)
       *pargv++ = "-C~";
+
+#ifdef WSLTTY_APPX
+    // provide wslbridge-backend in a reachable place for invocation
+    bool copyfile(char * fn, char * tn, bool overwrite)
+    {
+#ifdef copyfile_posix
+      int f = open(fn, O_BINARY | O_RDONLY);
+      if (!f)
+        return false;
+      int t = open(tn, O_CREAT | O_WRONLY | O_BINARY |
+                   (overwrite ? O_TRUNC : O_EXCL), 0755);
+      if (!t) {
+        close(f);
+        return false;
+      }
+
+      char buf[1024];
+      int len;
+      bool res = true;
+      while ((len = read(t, buf, sizeof buf)) >= 0)
+        if (write(t, buf, len) < 0) {
+          res = false;
+          break;
+        }
+      close(f);
+      close(t);
+      return res;
+#else
+      wchar * src = path_posix_to_win_w(fn);
+      wchar * dst = path_posix_to_win_w(tn);
+      bool ok = CopyFileW(src, dst, !overwrite);
+      free(dst);
+      free(src);
+      return ok;
+#endif
+    }
+    if (lappdata && *lappdata) {
+      char * wslbridge_backend = asform("%s/wslbridge-backend", lappdata);
+
+      bool ok = copyfile("/bin/wslbridge-backend", wslbridge_backend, true);
+      (void)ok;
+
+      *pargv++ = "--backend";
+      *pargv++ = wslbridge_backend;
+      // don't free(wslbridge_backend);
+    }
+#endif
+
     while (*argv)
       *pargv++ = *argv++;
     *pargv = 0;
@@ -3628,6 +3908,7 @@ main(int argc, char *argv[])
     while (*new_argv)
       printf("<%s>\n", *new_argv++);
 #endif
+
     // prevent HOME from being propagated back to Windows applications 
     // if called from WSL (mintty/wsltty#76)
     unsetenv("HOME");
@@ -4080,6 +4361,13 @@ main(int argc, char *argv[])
   // Finally show the window.
   ShowWindow(wnd, show_cmd);
   SetFocus(wnd);
+
+  // Set up clipboard notifications.
+  HRESULT (WINAPI * pAddClipboardFormatListener)(HWND) =
+    load_library_func("user32.dll", "AddClipboardFormatListener");
+  if (pAddClipboardFormatListener) {
+    pAddClipboardFormatListener(wnd);
+  }
 
   win_synctabs(4);
   update_tab_titles();

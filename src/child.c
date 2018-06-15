@@ -35,9 +35,13 @@ int forkpty(int *, char *, struct termios *, struct winsize *);
 #include <winuser.h>
 #endif
 
+// exit code to use for failure of `exec` (changed from 255, see #745)
+// http://www.tldp.org/LDP/abs/html/exitcodes.html
+#define mexit 126
+
 bool clone_size_token = true;
 
-static string child_dir = null;
+string child_dir = null;
 
 static pid_t pid;
 static bool killed;
@@ -312,7 +316,7 @@ child_create(char *argv[], struct winsize *winp)
     usleep(200000);
 #endif
 
-    exit(255);
+    exit(mexit);
   }
   else { // Parent process.
 #ifdef __midipix__
@@ -394,7 +398,7 @@ child_proc(void)
         if (killed || cfg.hold == HOLD_NEVER)
           exit_mintty();
         else if (cfg.hold == HOLD_START) {
-          if (WIFSIGNALED(status) || WEXITSTATUS(status) != 255)
+          if (WIFSIGNALED(status) || WEXITSTATUS(status) != mexit)
             exit_mintty();
         }
         else if (cfg.hold == HOLD_ERROR) {
@@ -417,7 +421,7 @@ child_proc(void)
           int code = WEXITSTATUS(status);
           if (code == 0)
             err = false;
-          if ((code || cfg.exit_write) && cfg.hold != HOLD_START)
+          if ((code || cfg.exit_write) /*&& cfg.hold != HOLD_START*/)
             //__ %1$s: client command (e.g. shell) terminated, %2$i: exit code
             asprintf(&s, _("%s: Exit %i"), cmd, code);
         }
@@ -504,17 +508,17 @@ child_is_parent(void)
 {
   if (!pid)
     return false;
-  DIR *d = opendir("/proc");
+  DIR * d = opendir("/proc");
   if (!d)
     return false;
   bool res = false;
-  struct dirent *e;
-  char fn[18] = "/proc/";
+  struct dirent * e;
   while ((e = readdir(d))) {
-    char *pn = e->d_name;
+    char * pn = e->d_name;
     if (isdigit((uchar)*pn) && strlen(pn) <= 6) {
-      snprintf(fn + 6, 12, "%s/ppid", pn);
-      FILE *f = fopen(fn, "r");
+      char * fn = asform("/proc/%s/ppid", pn);
+      FILE * f = fopen(fn, "r");
+      free(fn);
       if (!f)
         continue;
       pid_t ppid = 0;
@@ -599,7 +603,7 @@ foreground_pid()
   return (pty_fd >= 0) ? tcgetpgrp(pty_fd) : 0;
 }
 
-static char *
+char *
 foreground_cwd()
 {
   // if working dir is communicated interactively, use it
@@ -816,8 +820,11 @@ setup_sync()
   }
 }
 
+/*
+  Called from Alt+F2 (or session launcher via child_launch).
+ */
 void
-child_fork(int argc, char *argv[], int moni)
+do_child_fork(int argc, char *argv[], int moni, bool launch)
 {
   setup_sync();
 
@@ -843,7 +850,7 @@ child_fork(int argc, char *argv[], int moni)
 
     clone = fork();
     if (clone < 0) {
-      exit(255);
+      exit(mexit);
     }
     if (clone > 0) {  // new parent / previous child
       exit(0);  // exit and make the grandchild a daemon
@@ -873,7 +880,9 @@ child_fork(int argc, char *argv[], int moni)
       }
 
       chdir(set_dir);
-      setenv("PWD", set_dir, true);
+      setenv("PWD", set_dir, true);  // avoid softlink resolution
+      if (!launch)
+        setenv("CHERE_INVOKING", "mintty", true);
 
       if (support_wsl)
         delete(set_dir);
@@ -936,11 +945,23 @@ child_fork(int argc, char *argv[], int moni)
     }
     execvp(path, argv);
 #endif
-    exit(255);
+    exit(mexit);
   }
   reset_fork_mode();
 }
 
+/*
+  Called from Alt+F2.
+ */
+void
+child_fork(int argc, char *argv[], int moni)
+{
+  do_child_fork(argc, argv, moni, false);
+}
+
+/*
+  Called from session launcher.
+ */
 void
 child_launch(int n, int argc, char * argv[], int moni)
 {
@@ -978,7 +999,7 @@ child_launch(int n, int argc, char * argv[], int moni)
           }
         }
         new_argv[argc] = 0;
-        child_fork(argc, new_argv, moni);
+        do_child_fork(argc, new_argv, moni, true);
         free(new_argv);
         break;
       }

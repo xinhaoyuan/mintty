@@ -315,13 +315,32 @@ the application expects other key sequences than mintty sends.
 that case, the current behaviour is compatible with xterm.)
 
 
-## Using Ctrl+Tab to switch session in GNU Screen ##
+## Using Ctrl+Tab to switch window pane in terminal multiplexers ##
 
-The _Ctrl+Tab_ and _Ctrl+Shift+Tab_ key combinations can be used to switch session in **[GNU Screen](http://www.gnu.org/software/screen)**. In order to do do, their use as shortcuts for switching mintty windows needs to be disabled on the _Keys_ page of the options, and their keycodes need to be mapped in _~/.screenrc_:
+The _Ctrl+Tab_ and _Ctrl+Shift+Tab_ key combinations can be used to 
+switch windows/panes/tabs in a terminal multiplexer session.
+In order to do so, their use as shortcuts for switching mintty windows 
+needs to be disabled on the _Keys_ page of the options, 
+and their keycodes need to be mapped as shown below.
+
+### Switch window in GNU Screen ###
+
+For **[GNU Screen](http://www.gnu.org/software/screen)**, in _~/.screenrc_:
 
 ```
 bindkey "^[[1;5I" next
 bindkey "^[[1;6I" prev
+```
+
+### Switch pane in tmux ###
+
+For **[tmux](https://tmux.github.io/)**, in _~/.tmux.conf_:
+
+```
+set -s user-keys[0] "\e[1;5I"
+set -s user-keys[1] "\e[1;6I"
+bind-key -n User0 next-window
+bind-key -n User1 previous-window
 ```
 
 
@@ -392,6 +411,8 @@ Different notations are accepted for colour specifications:
 * ```rrr,ggg,bbb``` (256 decimal values)
 * ```rgb:RR/GG/BB``` (256 hex values)
 * ```rgb:RRRR/GGGG/BBBB``` (65536 hex values)
+* ```cmy:C.C/M.M/Y.Y``` (float values between 0 and 1)
+* ```cmyk:C.C/M.M/Y.Y/K.K``` (float values between 0 and 1)
 * _color-name_ (using X11 color names, e.g. ```echo -ne '\e]10;bisque2\a'```)
 
 
@@ -570,14 +591,20 @@ to adjust line spacing.
 
 ## Text attributes and rendering ##
 
-Mintty supports a maximum of usual and unusual text attributes:
+Mintty supports a maximum of usual and unusual text attributes.
+For underline styles and colour values, colon-separated 
+ISO/IEC 8613-6 sub-parameters are supported.
 
 | **start `^[[...m`**    | **end `^[[...m`** | **attribute**                 |
 |:-----------------------|:------------------|:------------------------------|
 | 1                      | 22                | bold                          |
 | 2                      | 22                | dim                           |
 | 3                      | 23                | italic                        |
-| 4                      | 24                | underline                     |
+| 4 _or_ 4:1             | 24 _or_ 4:0       | solid underline               |
+| 4:2                    | 24 _or_ 4:0       | double underline              |
+| 4:3                    | 24 _or_ 4:0       | wavy underline                |
+| 4:4                    | 24 _or_ 4:0       | dotted underline              |
+| 4:5                    | 24 _or_ 4:0       | dashed underline              |
 | 5                      | 25                | blinking                      |
 | 6                      | 25                | rapidly blinking              |
 | 7                      | 27                | inverse                       |
@@ -587,18 +614,28 @@ Mintty supports a maximum of usual and unusual text attributes:
 | 12                     | 10                | alternative font 2            |
 | ...                    | 10                | alternative fonts 3...8       |
 | 19                     | 10                | alternative font 9            |
-| 20                     | 23, 10            | Fraktur/Blackletter font      |
-| 21                     | 24                | doubly underline              |
+| 20                     | 23 _or_ 10        | Fraktur/Blackletter font      |
+| 21 _or_ 4:2            | 24 _or_ 4:0       | double underline              |
 | 53                     | 55                | overline                      |
 | 30...37                | 39                | foreground ANSI colour        |
 | 90...97                | 39                | foreground bright ANSI colour |
 | 40...47                | 49                | background ANSI colour        |
 | 100...107              | 49                | background bright ANSI colour |
-| 38;5;P                 | 39                | foreground palette colour     |
-| 48;5;P                 | 49                | background palette colour     |
+| 38;5;P _or_ 38:5:P     | 39                | foreground palette colour     |
+| 48;5;P _or_ 48:5:P     | 49                | background palette colour     |
 | 38;2;R;G;B             | 39                | foreground true colour        |
 | 48;2;R;G;B             | 49                | background true colour        |
-| 51, 52                 | 54                | emoji style                   |
+| 38:2::R:G:B            | 39                | foreground RGB true colour    |
+| 48:2::R:G:B            | 49                | background RGB true colour    |
+| 38:3:F:C:M:Y           | 39                | foreground CMY colour (*)     |
+| 48:3:F:C:M:Y           | 49                | background CMY colour (*)     |
+| 38:4:F:C:M:Y:K         | 39                | foreground CMYK colour (*)    |
+| 48:4:F:C:M:Y:K         | 49                | background CMYK colour (*)    |
+| 51 _or_ 52             | 54                | emoji style (*)               |
+| 58:5:P                 | 59                | underline palette colour      |
+| 58:2::R:G:B            | 59                | underline RGB colour          |
+| 58:3:F:C:M:Y           | 59                | underline CMY colour (*)      |
+| 58:4:F:C:M:Y:K         | 59                | underline CMYK colour (*)     |
 | _any_                  | 0                 |                               |
 
 Note: The control sequences for Fraktur (“Gothic”) font are described 
@@ -609,6 +646,13 @@ Note: The control sequence for alternative font 1 overrides the identical
 control sequence to select the VGA character set. Configuring alternative 
 font 1 is therefore discouraged. See the mintty manual page about how 
 to configure alternative fonts.
+
+Note: RGB colour values are scaled to a maximum of 255 (=100%).
+CMY(K) colour values are scaled to a maximum of the given parameter F (=100%).
+
+Note: The emoji style attribute sets the display preference for a number 
+of characters that have emojis but would be displayed with text style 
+by default (e.g. decimal digits).
 
 As a fancy add-on feature for text attributes, mintty supports distinct 
 colour attributes for combining characters, so a combined character 
@@ -673,9 +717,23 @@ into mintty configuration resource subdirectory `emojis`, e.g.
 * `mv noto-emoji/png/128 ~/.config/mintty/emojis/noto`
 * `ln -s "$PWD"/noto-emoji/png/128 ~/.config/mintty/emojis/noto`
 * `cp -rl noto-emoji/png/128 ~/.config/mintty/emojis/noto`
+
 Use your preferred configuration directory, e.g.
 * `cp -rl noto-emoji/png/128 "$APPDATA"/mintty/emojis/noto`
 * `cp -rl noto-emoji/png/128 /usr/share/mintty/emojis/noto`
+
+
+## Searching in the text and scrollback buffer ##
+
+With the `Search` menu command or Alt+F3, a search bar is opened.
+Matching is case-insensitive and ignores combining characters.
+Matches are highlighted in the scrollback buffer.
+The appearance of the search bar and the matching highlight colours can be 
+customized.
+
+Another search feature (Shift+cursor-left/right) skips to the 
+previous/next prompt line if these are marked with scroll marker escape 
+sequences, see the [[CtrlSeqs]] wiki page.
 
 
 ## Passing arguments from an environment with different character set ##
@@ -821,6 +879,7 @@ Diagnostic display of current character information can be toggled
 from the extended context menu (Ctrl+right-click).
 * _Unicode character codes_ at the current cursor position will then be displayed in the window title bar. (Note that mintty may precompose a combining character sequence into a combined character which is then displayed.)
 * _Unicode character names_ will be included in the display if the **unicode-ucd** package is installed in `/usr/share` (or the file `charnames.txt` generated by the mintty script `src/mknames` is installed in the mintty resource subfolder `info`).
+* _Emoji sequence “short names”_ will be indicated if Emojis display is enabled.
 Note that the “normal” window title setting sequence 
 and the character information output simply overwrite each other.
 

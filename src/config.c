@@ -1,5 +1,5 @@
 // config.c (part of mintty)
-// Copyright 2008-13 Andy Koppe, 2015-2016 Thomas Wolff
+// Copyright 2008-13 Andy Koppe, 2015-2017 Thomas Wolff
 // Based on code from PuTTY-0.60 by Simon Tatham and team.
 // Licensed under the terms of the GNU General Public License v3 or later.
 
@@ -40,12 +40,14 @@ const config default_cfg = {
   .cursor_colour = 0xBFBFBF,
   .underl_colour = (colour)-1,
   .underl_manual = false,
+  .hover_colour = (colour)-1,
   .sel_fg_colour = (colour)-1,
   .sel_bg_colour = (colour)-1,
   .search_fg_colour = 0x000000,
   .search_bg_colour = 0x00DDDD,
   .search_current_colour = 0x0099DD,
   .theme_file = W(""),
+  .background = W(""),
   .colour_scheme = "",
   .transparency = 0,
   .blurred = false,
@@ -146,6 +148,7 @@ const config default_cfg = {
   // "Hidden"
   .bidi = 2,
   .disable_alternate_screen = false,
+  .input_clears_selection = true,
   .charwidth = 0,
   .emojis = 0,
   .emoji_placement = 0,
@@ -172,6 +175,7 @@ const config default_cfg = {
   .use_system_colours = false,
   .short_long_opts = false,
   .bold_as_special = false,
+  .selection_show_size = false,
   .old_bold = false,
   .ime_cursor_colour = DEFAULT_COLOUR,
   .ansi_colours = {
@@ -225,6 +229,7 @@ options[] = {
   {"BoldColour", OPT_COLOUR, offcfg(bold_colour)},
   {"CursorColour", OPT_COLOUR, offcfg(cursor_colour)},
   {"UnderlineColour", OPT_COLOUR, offcfg(underl_colour)},
+  {"HoverColour", OPT_COLOUR, offcfg(hover_colour)},
   {"UnderlineManual", OPT_BOOL, offcfg(underl_manual)},
   {"HighlightBackgroundColour", OPT_COLOUR, offcfg(sel_bg_colour)},
   {"HighlightForegroundColour", OPT_COLOUR, offcfg(sel_fg_colour)},
@@ -232,6 +237,7 @@ options[] = {
   {"SearchBackgroundColour", OPT_COLOUR, offcfg(search_bg_colour)},
   {"SearchCurrentColour", OPT_COLOUR, offcfg(search_current_colour)},
   {"ThemeFile", OPT_WSTRING, offcfg(theme_file)},
+  {"Background", OPT_WSTRING, offcfg(background)},
   {"ColourScheme", OPT_STRING, offcfg(colour_scheme)},
   {"Transparency", OPT_TRANS, offcfg(transparency)},
 #ifdef support_blurred
@@ -293,9 +299,7 @@ options[] = {
   {"AltFnShortcuts", OPT_BOOL, offcfg(alt_fn_shortcuts)},
   {"CtrlShiftShortcuts", OPT_BOOL, offcfg(ctrl_shift_shortcuts)},
   {"CtrlExchangeShift", OPT_BOOL, offcfg(ctrl_exchange_shift)},
-#ifdef support_disable_ctrl_controls_663
-  {"CtrlControls", OPT_BOOL | OPT_LEGACY, offcfg(ctrl_controls)},
-#endif
+  {"CtrlControls", OPT_BOOL, offcfg(ctrl_controls)},
   {"ComposeKey", OPT_MOD, offcfg(compose_key)},
   {"Key_PrintScreen", OPT_STRING, offcfg(key_prtscreen)},
   {"Key_Pause", OPT_STRING, offcfg(key_pause)},
@@ -363,6 +367,7 @@ options[] = {
   // "Hidden"
   {"Bidi", OPT_INT, offcfg(bidi)},
   {"NoAltScreen", OPT_BOOL, offcfg(disable_alternate_screen)},
+  {"ClearSelectionOnInput", OPT_BOOL, offcfg(input_clears_selection)},
   {"Charwidth", OPT_CHARWIDTH, offcfg(charwidth)},
   {"Emojis", OPT_EMOJIS, offcfg(emojis)},
   {"EmojiPlacement", OPT_EMOJI_PLACEMENT, offcfg(emoji_placement)},
@@ -391,6 +396,7 @@ options[] = {
   {"OldBold", OPT_BOOL, offcfg(old_bold)},
   {"ShortLongOpts", OPT_BOOL, offcfg(short_long_opts)},
   {"BoldAsRainbowSparkles", OPT_BOOL, offcfg(bold_as_special)},
+  {"SelectionShowSize", OPT_INT, offcfg(selection_show_size)},
 
   // ANSI colours
   {"Black", OPT_COLOUR, offcfg(ansi_colours[BLACK_I])},
@@ -661,18 +667,32 @@ bool
 parse_colour(string s, colour *cp)
 {
   uint r, g, b;
-  if (sscanf(s, "%u,%u,%u%c", &r, &g, &b, &(char){0}) == 3)
+  float c, m, y, k = 0;
+  if (sscanf(s, "%u,%u,%u", &r, &g, &b) == 3)
     ;
-  else if (sscanf(s, "#%2x%2x%2x%c", &r, &g, &b, &(char){0}) == 3)
+  else if (sscanf(s, "#%2x%2x%2x", &r, &g, &b) == 3)
     ;
-  else if (sscanf(s, "rgb:%2x/%2x/%2x%c", &r, &g, &b, &(char){0}) == 3)
+  else if (sscanf(s, "rgb:%2x/%2x/%2x", &r, &g, &b) == 3)
     ;
-  else if (sscanf(s, "rgb:%4x/%4x/%4x%c", &r, &g, &b, &(char){0}) == 3)
-    r >>=8, g >>= 8, b >>= 8;
+  else if (sscanf(s, "rgb:%4x/%4x/%4x", &r, &g, &b) == 3)
+    r >>= 8, g >>= 8, b >>= 8;
+  else if (sscanf(s, "cmy:%f/%f/%f", &c, &m, &y) == 3
+        || sscanf(s, "cmyk:%f/%f/%f/%f", &c, &m, &y, &k) == 4
+          )
+    if (c >= 0 && c <= 1 && m >= 0 && m <= 1 && y >= 0 && y <= 1 && k >= 0 && k <= 1) {
+      r = (1 - c) * (1 - k) * 255;
+      g = (1 - m) * (1 - k) * 255;
+      b = (1 - y) * (1 - k) * 255;
+    }
+    else
+      return false;
   else {
     int coli = -1;
+    int len = strlen(s);
+    while (len && s[len - 1] == ' ')
+      len--;
     for (uint i = 0; i < lengthof(xcolours); i++)
-      if (!strcasecmp(s, xcolours[i].name)) {
+      if (0 == strncasecmp(s, xcolours[i].name, len)) {
         r = xcolours[i].r;
         g = xcolours[i].g;
         b = xcolours[i].b;

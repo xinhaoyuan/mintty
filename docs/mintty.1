@@ -33,8 +33,12 @@ variable.
 If that is not set, it reads the user's default shell setting from
 \fI/etc/passwd\fP.
 As a last resort, it falls back to \fI/bin/sh\fP.
+
 If a single dash is specified instead of a program name, the shell is invoked
 as a login shell.
+
+Invocation by a name of \fBwsl*\fP\fI[-distro]\fP 
+implies a \fB--WSL\fP\fI[=distro]\fP parameter.
 
 .SH OPTIONS
 
@@ -100,11 +104,9 @@ comma-separated index can be used to select a particular icon in a file with
 multiple icons.
 
 \fINote:\fP About interaction problems of icon, shortcut, and the Windows taskbar:
-In a Windows desktop shortcut, to achieve consistent icon behaviour, 
-the same icon should be specified in the shortcut properties (Change Icon...) 
-and the mintty command line (Target:),
-or (beginning 2.2.3) no icon should be specified on the command line as 
-mintty will then take the icon from the invoking shortcut, 
+In a Windows desktop shortcut, it is suggested not to use this option in the 
+Target command line, as mintty will detect and use the icon 
+from the invoking shortcut (Change Icon...), 
 also resolving a leading Windows environment variable (like %SystemRoot%).
 
 .TP
@@ -194,7 +196,7 @@ Create a utmp entry.
 
 .TP
 \fB-w\fP, \fB--window\fP \fBnormal\fP|\fBmin\fP|\fBmax\fP|\fBfull\fP|\fBhide\fP
-Set the initial window state: normal, minimised, maximised, full screen,
+Set the initial window state: normal, minimized, maximized, full screen,
 or hidden.
 
 .TP
@@ -228,7 +230,7 @@ With values "s" or "o", mintty reports the position and size of the window
 when it exits. This can be used to manage last window positions and reopen 
 mintty windows accordingly.
 Reporting mode is "s" or "o" to choose short or long option syntax for the 
-restored (i.e. neither maximised nor minimised) geometry; 
+restored (i.e. neither maximized nor minimized) geometry; 
 min/max/fullscreen information is added.
 
 With value "m", mintty reports the system's monitor configuration 
@@ -380,7 +382,7 @@ By default, selected text is automatically copied to the clipboard.
 This can be disabled on the \fBMouse\fP page of the options dialog.
 Selected text can also be copied manually using either the \fBCopy\fP menu
 command, the \fBCtrl+Ins\fP or \fBCtrl+Shift+C\fP keyboard shortcuts 
-(\fBCtrl+C\fP with option CtrlExchangeShift=yes), 
+(\fBCtrl+C\fP with option \fBCtrlExchangeShift=yes\fP), 
 or the middle mouse button combined with \fBShift\fP.
 
 The selected region is copied as "rich text" as well as normal text,
@@ -392,11 +394,17 @@ menu.
 
 The clipboard contents can be pasted using either the \fBPaste\fP menu command,
 the \fBShift+Ins\fP or \fBCtrl+Shift+V\fP keyboard shortcuts 
-(\fBCtrl+V\fP with option CtrlExchangeShift=yes), 
+(\fBCtrl+V\fP with option \fBCtrlExchangeShift=yes\fP), 
 or the middle mouse button.
 Not only text but also files and directories can be pasted,
 whereby the latter are inserted as Cygwin file names.
 Shell quoting is added to file names that contain spaces or special characters.
+
+Selection highlighting is cleared on input by default. This can be disabled
+with option \fBClearSelectionOnInput=false\fP.
+
+The current selection size can optionally been indicated with a popup, 
+enabled with option \fBSelectionShowSize\fP.
 
 .SS Drag & drop
 
@@ -407,7 +415,7 @@ They are inserted in the same way as if they were pasted from the clipboard.
 
 Files, directories, URLs and web addresses beginning with "www." can be 
 opened either by holding \fBCtrl\fP while left-clicking on them (or 
-double-clicking, if and as enabled by option OpeningClicks), or by 
+double-clicking, if and as enabled by option \fBOpeningClicks\fP), or by 
 selecting them and choosing the \fBOpen\fP command from the context menu.
 Embedded spaces are considered if escaped with a backslash; for 
 selected pathnames, also embedding quote marks are considered.
@@ -415,7 +423,18 @@ selected pathnames, also embedding quote marks are considered.
 A relative pathname is interpreted as relative to the current working 
 directory of the terminal foreground process if that can be determined, 
 overridden by the working directory interactively communicated by the 
-respective control sequence.
+respective control sequence (OSC 7).
+
+\fINote:\fP While application mouse modes are enabled (as used by many 
+screen oriented applications), \fBCtrl+Shift+click\fP can be used to 
+override it.
+
+.TP
+\fBHovering files, directories and URLs\fP
+The file names and links subject to opening are indicated by underlining 
+when mouse-hovering over them (i.e. when moving the mouse) while the 
+Control key is pressed. The colour used for hovering underlines 
+can be configured with \fBHoverColour\fP.
 
 .SS Font zoom
 
@@ -489,8 +508,9 @@ page-by-page.
 
 .SS Searching in the text and scrollback buffer
 
-Alt-F3 opens a search bar with an input field for a search string. Matches are 
-highlighted in the scrollback buffer. Enter/Shift+Enter find the next/previous 
+The \fBSearch\fP menu command and \fBAlt+F3\fP shorcut open a search bar 
+with an input field for a search string. Matches are highlighted in the 
+scrollback buffer. \fBEnter\fP/\fBShift+Enter\fP find the next/previous 
 position of the match and scrolls the scrollback buffer accordingly.
 The appearance of the search bar and the matching highlight colours can be 
 customized.
@@ -515,8 +535,9 @@ For example, this allows to refer to past commands while editing a file.
 
 .SS Switching session
 
-The \fBCtrl+Tab\fP and \fBCtrl+Shift+Tab\fP shortcuts can be used to switch
-between mintty windows.  Minimised windows are skipped.
+The \fBCtrl+Tab\fP and \fBCtrl+Shift+Tab\fP shortcuts can be used to 
+cycle through mintty windows.
+Minimized windows are skipped unless both \fBCtrl\fP keys are used.
 
 .SS Virtual Tabs
 
@@ -647,9 +668,13 @@ An overview of all the keyboard shortcuts.
 .br
 \(en \fBAlt+Space\fP: Window menu
 .br
-\(en \fBCtrl+Tab\fP: Next window
+\(en \fBCtrl+Tab\fP: Next visible window (as sorted by creation time)
 .br
-\(en \fBCtrl+Shift+Tab\fP: Previous window
+\(en \fBCtrl+Shift+Tab\fP: Previous visible window (as sorted by creation time)
+.br
+\(en \fBCtrl+Ctrl+Tab\fP: Next window (as sorted by creation time)
+.br
+\(en \fBCtrl+Ctrl+Shift+Tab\fP: Previous window (as sorted by creation time)
 .br
 \(en \fBCtrl+Alt+mouse-click/drag\fP: Move window
 
@@ -769,6 +794,8 @@ from the extended context menu.
 .br
 \fIUnicode character names\fP will be included in the display if the \fBunicode-ucd\fP package is installed in \fI/usr/share\fP (or the file \fIcharnames.txt\fP generated by the mintty script \fIsrc/mknames\fP is installed in the mintty resource subfolder \fIinfo\fP).
 .br
+\fIEmoji sequence "short names"\fP will be indicated if Emojis display is enabled.
+.br
 Note that the "normal" window title setting sequence 
 and the character information output simply overwrite each other.
 
@@ -821,9 +848,9 @@ options can obviously be overwritten; if older mintty versions are run
 may even get dropped from the configuration file; mintty versions since 
 261 preserve unknown options and comment lines.
 
-Additional resource files are used for colour schemes (option ThemeFile, 
-subdirectory \fIthemes\fP), wave files (option BellFile, subdirectory \fIsounds\fP), 
-and localization translation files (option Language, subdirectory \fIlang\fP) 
+Additional resource files are used for colour schemes (option \fBThemeFile\fP, 
+subdirectory \fIthemes\fP), wave files (option \fBBellFile\fP, subdirectory \fIsounds\fP), 
+and localization translation files (option \fBLanguage\fP, subdirectory \fIlang\fP) 
 within the mintty resource directories \fI/usr/share/mintty\fP, 
 \fI$APPDATA/mintty\fP, \fI~/.config/mintty\fP, \fI~/.mintty\fP, 
 or as specified with command line option \fB--configdir\fP.
@@ -847,16 +874,19 @@ Clicking on one of the buttons here opens the colour selection dialog.
 In the settings (config file or command-line options), colours are 
 represented as comma-separated RGB triples with decimal 8-bit values 
 ranging from 0 to 255. X-style hexadecimal colour specifications such 
-as #RRGGBB, rgb:RR/GG/BB or rgb:RRRR/GGGG/BBBB can be used as well.
+as #RRGGBB, rgb:RR/GG/BB or rgb:RRRR/GGGG/BBBB, 
+cmy:C.C/M.M/Y.Y or cmyk:C.C/M.M/Y.Y/K.K can be used as well.
 Also X11 color names are supported.
 .br
-\(en \fBForeground\fP (ForegroundColour=191,191,191)
+\(en \fBForeground text colour\fP (ForegroundColour=191,191,191)
 .br
-\(en \fBBackground\fP (BackgroundColour=0,0,0)
+\(en \fBBackground colour\fP (BackgroundColour=0,0,0)
 .br
-\(en \fBCursor\fP (CursorColour=191,191,191)
+\(en \fBCursor colour\fP (CursorColour=191,191,191)
 .br
-\(en \fBUnderline, Strikeout, Overline\fP (UnderlineColour=-1)
+\(en \fBUnderline, Strikeout, Overline colour\fP (UnderlineColour=-1)
+.br
+\(en \fBCtrl+mouse-move hovering colour\fP (HoverColour=-1)
 
 \(en \fBTheme\fP (ThemeFile=): 
 The popup menu offers theme files as stored in a resource subdirectory 
@@ -1021,7 +1051,7 @@ See \fBBold Behaviour\fP for an overview.
 \fBBold substitution colour\fP (BoldColour=)
 This hidden option sets a colour to be used to render the bold attribute of 
 text that would otherwise have the default foreground colour, overriding 
-other bold rendering; it is only applied if option BoldAsColour is true.
+other bold rendering; it is only applied if option \fBBoldAsColour\fP is true.
 The bold substitution colour can also be set, modified, enabled or disabled 
 with the respective xterm OSC control sequences.
 .br
@@ -1191,8 +1221,8 @@ showing the window menu and toggling full screen mode.
 
 .TP
 \fBSwitch window shortcuts\fP (SwitchShortcuts=yes)
-Checkbox for enabling the \fBCtrl+Tab\fP and \fBCtrl+Shift+Tab\fP shortcuts
-for switching between mintty windows.
+Checkbox for enabling the \fBCtrl+Tab\fP shortcuts 
+for switching between mintty windows cyclically.
 
 .TP
 \fBZoom shortcuts\fP (ZoomShortcuts=yes)
@@ -1457,6 +1487,8 @@ By default, this is empty.
 .TP
 \fBAlternate screen\fP (NoAltScreen=false)
 With this setting, the alternate screen can be disabled.
+(Corresponds to the xterm resource \fBtiteInhibit\fP, 
+switchable by an escape sequence.)
 
 .TP
 \fBApply old wraparound behaviour\fP (OldWrapModes=false)
@@ -1644,9 +1676,9 @@ This setting determines how the terminal window should be shown at startup:
 .br
 \(en \fBnormal\fP (default)
 .br
-\(en \fBmin\fP (minimised)
+\(en \fBmin\fP (minimized)
 .br
-\(en \fBmax\fP (maximised)
+\(en \fBmax\fP (maximized)
 .br
 \(en \fBfull\fP (full screen)
 .br
@@ -1669,6 +1701,15 @@ distinguish different mintty windows.  The name defaults to "mintty".
 The following settings appear neither in the options dialog nor as command line
 options, which means they can only be set in config files or using the
 \fB--option\fP or \fB-o\fP command line option.
+
+.TP
+\fBClear selection highlighting on input\fP (ClearSelectionOnInput=true)
+When this is disabled, keyboard input or pasting does not clear selection highlighting.
+
+.TP
+\fBSelection size indication\fP (SelectionShowSize=0)
+The current selection size can optionally been indicated with a popup, 
+with a value between 1 and 12, setting the popup position by clock hour.
 
 .TP
 \fBSingle-dash long options\fP (ShortLongOpts=false)
@@ -1876,7 +1917,8 @@ These are the 16 ANSI colour settings along with their default values.
 Colours are represented as comma-separated RGB triples with decimal 8-bit values
 ranging from 0 to 255. 
 X-style hexadecimal colour specifications such as #RRGGBB, 
-rgb:RR/GG/BB or rgb:RRRR/GGGG/BBBB can be used as well. 
+rgb:RR/GG/BB or rgb:RRRR/GGGG/BBBB, 
+cmy:C.C/M.M/Y.Y or cmyk:C.C/M.M/Y.Y/K.K can be used as well.
 Also X11 color names are supported.
 .br
 \(en \fBBlack\fP=0,0,0
@@ -1944,6 +1986,21 @@ The highlighting colours of search matches can be configured.
 \(en \fBSearchCurrentColour\fP=\fIbright yellow\fP
 
 .TP
+\fBBackground image or texture\fP (Background=)
+With this option, an image can be chosen as background.
+With an image file name, absolute (with an optional \fB~\fP prefix) 
+or relative to the current terminal foreground process, 
+the option either uses the image as a background picture, scaled to 
+the terminal size (optional prefix \fB_\fP to the filename), 
+or as a tiled background texture (prefix \fB*\fP to the filename).
+The background can be changed with an OSC 11 escape sequence, using 
+a filename prefixed with either \fB_\fP or \fB*\fP instead of a colour.
+
+If the background filename is followed by a comma and a number between 1 and 254, 
+the background image will be dimmed towards the background colour;
+with a value of 255, the alpha transparency values of the image will be used.
+
+.TP
 \fBScrollback search bar\fP (SearchBar=)
 This string option can customize the order of items in the search bar.
 Use x (close button), </> (previous/next buttons), s (search string) to 
@@ -1986,11 +2043,13 @@ window zooming by the Shift key is disabled,
 except for the keyboard zoom functions Shift+Alt+Enter/F11 and the Shift+menu function.
 
 .TP
-\fBHandling of DPI changes\fP (HandleDPI=true)
+\fBHandling of DPI changes\fP (HandleDPI=1)
 By default, in Windows 10, when the window is moved to another monitor 
 that has a different DPI value ("scaling factor") configured, this is 
 considered to compensate by appropriate scaling.
-This option can be set to false to suppress DPI adjustments.
+This option can be set to 0/false to suppress DPI adjustments,
+or to 2 to require DPI handling mode 2 and only enable DPI handling if
+this recently fixed Windows DPI handling mode is available.
 
 .TP
 \fBCheck availability of mintty version update\fP (CheckVersionUpdate=900)
@@ -2154,9 +2213,9 @@ Examples:
 \fBMenu contents\fP
 These settings allow to customize the context menu as opened in various ways.
 .br
-\(en \fBMouse\fP (MenuMouse=b); the normal mouse-click context menu
+\(en \fBMouse\fP (MenuMouse=b); the normal mouse-right-click context menu
 .br
-\(en \fBCtrl+Mouse\fP (MenuCtrlMouse=e|ls); the Ctrl+mouse-click menu
+\(en \fBCtrl+Mouse\fP (MenuCtrlMouse=e|ls); the Ctrl+right-click menu
 .br
 \(en \fBMouse button 5\fP (MenuMouse5=ls); the mouse button 5 menu
 .br
@@ -2168,13 +2227,17 @@ Menu contents can be configured by a sequence of characters with the following m
 .br
 \(en \fBb\fP: basic context menu
 .br
-\(en \fBe\fP: extended context menu
+\(en \fBx\fP: extended context menu without user commands
 .br
-\(en \fB|\fP: vertical separator, adding a new column
+\(en \fBe\fP: extended context menu with user commands (if configured)
+.br
+\(en \fBu\fP: user commands
 .br
 \(en \fBl\fP: session launcher
 .br
 \(en \fBs\fP: session switcher (Virtual Tabs)
+.br
+\(en \fB|\fP: vertical separator, adding a new column
 .br
 \(en \fBT\fP: the menu is opened at the text cursor position
 .br
@@ -2239,7 +2302,7 @@ Additional information can be found on the wiki on the mintty project page
 
 .SH LICENSE
 
-Copyright (C) 2013 Andy Koppe (C) 2016 Thomas Wolff
+Copyright (C) 2013 Andy Koppe (C) 2018 Thomas Wolff
 
 Mintty is released under the terms of the the \fIGNU General Public License\fP
 version 3.

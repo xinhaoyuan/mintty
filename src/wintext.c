@@ -1,5 +1,5 @@
 // wintext.c (part of mintty)
-// Copyright 2008-13 Andy Koppe
+// Copyright 2008-13 Andy Koppe, 2015-2018 Thomas Wolff
 // Adapted from code from PuTTY-0.60 by Simon Tatham and team.
 // Licensed under the terms of the GNU General Public License v3 or later.
 
@@ -854,52 +854,10 @@ win_zoom_font(int zoom, bool sync_size_with_font)
   win_set_font_size(zoom ? max(1, abs(font_size) + zoom) : 0, sync_size_with_font);
 }
 
+
 static HDC dc;
 static enum { UPDATE_IDLE, UPDATE_BLOCKED, UPDATE_PENDING } update_state;
 static bool ime_open;
-
-void
-win_paint(void)
-{
-  PAINTSTRUCT p;
-  dc = BeginPaint(wnd, &p);
-
-  term_invalidate(
-    (p.rcPaint.left - PADDING) / cell_width,
-    (p.rcPaint.top - PADDING) / cell_height,
-    (p.rcPaint.right - PADDING - 1) / cell_width,
-    (p.rcPaint.bottom - PADDING - 1) / cell_height
-  );
-
-  if (update_state != UPDATE_PENDING) {
-    term_paint();
-    winimg_paint();
-  }
-
-  if (p.fErase || p.rcPaint.left < PADDING ||
-      p.rcPaint.top < PADDING ||
-      p.rcPaint.right >= PADDING + cell_width * term.cols ||
-      p.rcPaint.bottom >= PADDING + cell_height * term.rows) {
-    colour bg_colour = colours[term.rvideo ? FG_COLOUR_I : BG_COLOUR_I];
-    HBRUSH oldbrush = SelectObject(dc, CreateSolidBrush(bg_colour));
-    HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, 0, bg_colour));
-
-    IntersectClipRect(dc, p.rcPaint.left, p.rcPaint.top, p.rcPaint.right,
-                      p.rcPaint.bottom);
-
-    ExcludeClipRect(dc, PADDING, PADDING,
-                    PADDING + cell_width * term.cols,
-                    PADDING + cell_height * term.rows);
-
-    Rectangle(dc, p.rcPaint.left, p.rcPaint.top,
-                  p.rcPaint.right, p.rcPaint.bottom);
-
-    DeleteObject(SelectObject(dc, oldbrush));
-    DeleteObject(SelectObject(dc, oldpen));
-  }
-
-  EndPaint(wnd, &p);
-}
 
 #define dont_debug_cursor 1
 
@@ -1015,7 +973,13 @@ show_curchar_info(char tag)
     static char * prev = null;
     if (!prev || 0 != strcmp(cs, prev)) {
       //printf("[%c]%s\n", tag, cs);
-      SetWindowTextA(wnd, cs);
+      if (nonascii(cs)) {
+        wchar * wcs = cs__utftowcs(cs);
+        SetWindowTextW(wnd, wcs);
+        free(wcs);
+      }
+      else
+        SetWindowTextA(wnd, cs);
     }
     if (prev)
       free(prev);
@@ -1023,15 +987,29 @@ show_curchar_info(char tag)
   }
 
   void show_char_info(termchar * cpoi) {
+    char * cs = 0;
+
     // return if base character same as previous and no combining chars
     if (cpoi == pp && cpoi && cpoi->chr == prev.chr && !cpoi->cc_next)
       return;
 
-    char * cs = strdup("");
+#define dont_debug_emojis
+
+    if (cfg.emojis && (cpoi->attr.attr & TATTR_EMOJI)) {
+      if (cpoi == pp)
+        return;
+      cs = get_emoji_description(cpoi);
+#ifdef debug_emojis
+      printf("Emoji sequence: %s\n", cs);
+#endif
+    }
 
     pp = cpoi;
-    if (cpoi) {
+
+    if (!cs && cpoi) {
       prev = *cpoi;
+
+      cs = strdup("");
 
       char * cn = strdup("");
 
@@ -1153,14 +1131,82 @@ do_update(void)
   win_set_timer(do_update, 16);
 }
 
+static void
+sel_update(bool update_sel_tip)
+{
+  static bool selection_tip_active = false;
+  //printf("sel_update tok %d sel %d act %d\n", tip_token, term.selected, selection_tip_active);
+  if (term.selected && update_sel_tip) {
+    int cols, rows;
+    if (term.sel_rect) {
+      rows = abs(term.sel_end.y - term.sel_start.y) + 1;
+      cols = abs(term.sel_end.x - term.sel_start.x);
+    }
+    else {
+      rows = term.sel_end.y - term.sel_start.y + 1;
+      if (rows == 1)
+        cols = term.sel_end.x - term.sel_start.x;
+      else
+        cols = term.cols;
+    }
+    RECT wr;
+    GetWindowRect(wnd, &wr);
+    int x = wr.left
+          + PADDING + last_pos.x * cell_width;
+    int y = wr.top + GetSystemMetrics(SM_CYCAPTION)
+          + PADDING + last_pos.y * cell_height;
+#ifdef debug_selection_show_size 
+    cfg.selection_show_size = cfg.selection_show_size % 12 + 1;
+#endif
+    int w = 15, h = 18;
+    int dx = 0, dy = 0;
+    switch (cfg.selection_show_size) {
+      when  1: dx += cell_width + w / 4;
+               dy -= h * 2 / 3;
+      when  2: dx += cell_width + w / 3;
+               dy += cell_height / 3 - h / 2;
+      when  3: dx += cell_width + w / 2;
+               dy += cell_height / 2 - h / 3;
+      when  4: dx += cell_width + w / 3;
+               dy += cell_height * 2 / 3;
+      when  5: dx += cell_width + w / 4;
+               dy += cell_height;
+      when  6: dx += cell_width / 2 - w / 2;
+               dy += cell_height + h / 3;
+      when  7: dx -= w + w / 4;
+               dy += cell_height;
+      when  8: dx -= w + w / 3;
+               dy += cell_height * 2 / 3;
+      when  9: dx -= w + w / 2;
+               dy += cell_height / 2 - h / 3;
+      when 10: dx -= w + w / 3;
+               dy += cell_height / 3 - h / 2;
+      when 11: dx -= w + w / 4;
+               dy -= h * 2 / 3;
+      when 12: dx += cell_width / 2 - w / 2;
+               dy -= h;
+      otherwise: return;
+    }
+    win_show_tip(x + dx, y + dy, cols, rows);
+    selection_tip_active = true;
+    //printf("selection_show_size %d -> %d %d\n", cfg.selection_show_size, dx, dy);
+  }
+  else if (!term.selected && selection_tip_active) {
+    win_destroy_tip();
+    selection_tip_active = false;
+  }
+}
+
 void
-win_update(void)
+win_update(bool update_sel_tip)
 {
   trace_resize(("----- win_update\n"));
   if (update_state == UPDATE_IDLE)
     do_update();
   else
     update_state = UPDATE_PENDING;
+
+  sel_update(update_sel_tip);
 }
 
 void
@@ -1232,10 +1278,476 @@ win_set_ime_open(bool open)
   if (open != ime_open) {
     ime_open = open;
     term.cursor_invalid = true;
-    win_update();
+    win_update(false);
   }
 }
 
+
+/*
+   Background texture/image.
+ */
+
+static bool tiled = false;
+static int alpha = -1;
+static LONG w = 0, h = 0;
+static HBRUSH bgbrush_bmp = 0;
+
+static BOOL (WINAPI *pAlphaBlend)(HDC, int, int, int, int, HDC, int, int, int, int, BLENDFUNCTION) = 0;
+
+static HBITMAP
+alpha_blend_bg(int alpha, HDC dc, HBITMAP hbm, int bw, int bh, colour bg)
+{
+  // load GDI function
+  if (!pAlphaBlend) {
+    pAlphaBlend = load_library_func("msimg32.dll", "AlphaBlend");
+  }
+  if (!pAlphaBlend)
+    return hbm;
+
+  // take size from hbm if not passed explicitly
+  if (!bw || !bh) {
+    BITMAP bm0;
+    if (!GetObject(hbm, sizeof(BITMAP), &bm0))
+      return hbm;
+    bw = bm0.bmWidth;
+    bh = bm0.bmHeight;
+  }
+
+  // prepare source memory DC and select the source bitmap into it
+  HDC dc0 = CreateCompatibleDC(dc);
+  HBITMAP oldhbm0 = SelectObject(dc0, hbm);
+
+  // prepare destination memory DC, 
+  // create and select the destination bitmap into it
+  HDC dc1 = CreateCompatibleDC(dc);
+  HBITMAP hbm1 = CreateCompatibleBitmap(dc0, bw, bh);
+  HBITMAP oldhbm1 = SelectObject(dc1, hbm1);
+
+  HBRUSH bgb = CreateSolidBrush(bg);
+  FillRect(dc1, &(RECT){0, 0, bw, bh}, bgb);
+  DeleteObject(bgb);
+
+  BYTE alphafmt = alpha == 255 ? AC_SRC_ALPHA : 0;
+  BLENDFUNCTION bf = (BLENDFUNCTION) {AC_SRC_OVER, 0, alpha, alphafmt};
+  int ok = pAlphaBlend(dc1, 0, 0, bw, bh, dc0, 0, 0, bw, bh, bf);
+
+  // release everything
+  SelectObject(dc1, oldhbm1);
+  SelectObject(dc0, oldhbm0);
+  DeleteDC(dc1);
+  DeleteDC(dc0);
+
+  if (ok) {
+    DeleteObject(hbm);
+    return hbm1;
+  }
+  else
+    return hbm;
+}
+
+#if CYGWIN_VERSION_API_MINOR >= 74
+
+#include <w32api/wtypes.h>
+#include <w32api/gdiplus/gdiplus.h>
+#include <w32api/gdiplus/gdiplusflat.h>
+
+static GpBrush * bgbrush_img = 0;
+static GpGraphics * bg_graphics = 0;
+
+#define dont_debug_gdiplus
+
+#ifdef debug_gdiplus
+static void
+gpcheck(char * tag, GpStatus s)
+{
+  static char * gps[] = {
+    "Ok",
+    "GenericError",
+    "InvalidParameter",
+    "OutOfMemory",
+    "ObjectBusy",
+    "InsufficientBuffer",
+    "NotImplemented",
+    "Win32Error",
+    "WrongState",
+    "Aborted",
+    "FileNotFound",
+    "ValueOverflow",
+    "AccessDenied",
+    "UnknownImageFormat",
+    "FontFamilyNotFound",
+    "FontStyleNotFound",
+    "NotTrueTypeFont",
+    "UnsupportedGdiplusVersion",
+    "GdiplusNotInitialized",
+    "PropertyNotFound",
+    "PropertyNotSupported",
+    "ProfileNotFound",
+  };
+  if (s)
+    printf("[%s] %d %s\n", tag, s, s >= 0 && s < lengthof(gps) ? gps[s] : "?");
+}
+#else
+#define gpcheck(tag, s)	(void)s
+#endif
+
+static void
+drop_background_image_brush(void)
+{
+  if (bgbrush_img) {
+    GpStatus s = GdipDeleteBrush(bgbrush_img);
+    gpcheck("delete brush", s);
+    bgbrush_img = 0;
+  }
+}
+
+static void
+load_background_image_brush(HDC dc, wstring fn)
+{
+  GpStatus s;
+
+  drop_background_image_brush();
+
+  static GdiplusStartupInput gi = (GdiplusStartupInput){1, NULL, FALSE, FALSE};
+  static ULONG_PTR gis = 0;
+  if (!gis) {
+    s = GdiplusStartup(&gis, &gi, NULL);
+    gpcheck("startup", s);
+  }
+
+  // try to provide a GDI brush from a GDI+ image
+  // (because a GDI brush is much more efficient than a GDI+ brush)
+  GpBitmap * gbm = 0;
+  s = GdipCreateBitmapFromFile(fn, &gbm);
+  gpcheck("bitmap from file", s);
+
+  if (s == Ok && gbm) {
+    HBITMAP hbm = 0;
+    s = GdipCreateHBITMAPFromBitmap(gbm, &hbm, 0);
+    gpcheck("convert bitmap", s);
+
+    if (!tiled) {
+      // scale the bitmap; 
+      // wtf is this a complex task @ braindamaged Windows API
+      // https://www.experts-exchange.com/questions/28594399/Whats-the-best-way-to-scale-a-windows-bitmap.html
+
+      uint bw, bh;
+      GpStatus stsz = GdipGetImageWidth(gbm, &bw);
+      gpcheck("get size", s);
+      if (stsz == Ok) {
+        stsz = GdipGetImageHeight(gbm, &bh);
+        gpcheck("get size", s);
+      }
+
+      s = GdipDisposeImage(gbm);
+      gpcheck("dispose bitmap", s);
+      gbm = 0;
+
+      if (stsz != Ok) {
+        BITMAP bm0;
+        if (!GetObject(hbm, sizeof(BITMAP), &bm0))
+          return;
+        bw = bm0.bmWidth;
+        bh = bm0.bmHeight;
+      }
+
+      // prepare source memory DC and select the source bitmap into it
+      HDC dc0 = CreateCompatibleDC(dc);
+      HBITMAP oldhbm0 = SelectObject(dc0, hbm);
+
+      // prepare destination memory DC, 
+      // create and select the destination bitmap into it
+      HDC dc1 = CreateCompatibleDC(dc);
+      HBITMAP hbm1 = CreateCompatibleBitmap(dc0, w, h);
+      HBITMAP oldhbm1 = SelectObject(dc1, hbm1);
+
+      if (alpha >= 0 && !pAlphaBlend) {
+        pAlphaBlend = load_library_func("msimg32.dll", "AlphaBlend");
+      }
+
+      if (alpha < 0 || !pAlphaBlend) {
+        // set half-tone stretch-blit mode for scaling quality
+        SetStretchBltMode(dc1, HALFTONE);
+        // draw the bitmap scaled into the destination memory DC
+        StretchBlt(dc1, 0, 0, w, h, dc0, 0, 0, bw, bh, SRCCOPY);
+
+        DeleteObject(hbm);
+        hbm = hbm1;
+      }
+      else {
+        HBRUSH oldbrush = SelectObject(dc1, CreateSolidBrush(win_get_colour(BG_COLOUR_I)));
+        Rectangle(dc1, 0, 0, w, h);
+        DeleteObject(SelectObject(dc1, oldbrush));
+
+        BYTE alphafmt = alpha == 255 ? AC_SRC_ALPHA : 0;
+        BLENDFUNCTION bf = (BLENDFUNCTION) {AC_SRC_OVER, 0, alpha, alphafmt};
+        if (pAlphaBlend(dc1, 0, 0, w, h, dc0, 0, 0, bw, bh, bf)) {
+          DeleteObject(hbm);
+          hbm = hbm1;
+        }
+      }
+
+      // release everything
+      SelectObject(dc1, oldhbm1);
+      SelectObject(dc0, oldhbm0);
+      DeleteDC(dc1);
+      DeleteDC(dc0);
+    }
+    else {  // tiled
+      if (alpha >= 0) {
+        uint bw = 0, bh = 0;
+        s = GdipGetImageWidth(gbm, &bw);
+        gpcheck("get size", s);
+        s = GdipGetImageHeight(gbm, &bh);
+        gpcheck("get size", s);
+        hbm = alpha_blend_bg(alpha, dc, hbm, bw, bh, win_get_colour(BG_COLOUR_I));
+      }
+
+      s = GdipDisposeImage(gbm);
+      gpcheck("dispose bitmap", s);
+      gbm = 0;
+    }
+
+    // now we have the (scaled or to-be-tiled) bitmap in 'hbm'
+    if (hbm) {
+      bgbrush_bmp = CreatePatternBrush(hbm);
+      DeleteObject(hbm);
+      if (bgbrush_bmp) {
+        RECT cr;
+        GetClientRect(wnd, &cr);
+        FillRect(dc, &cr, bgbrush_bmp);
+        drop_background_image_brush();
+        return;
+      }
+    }
+  }
+
+#ifdef use_gdiplus_brush_fallback
+  DWORD win_version = GetVersion();
+  win_version = ((win_version & 0xff) << 8) | ((win_version >> 8) & 0xff);
+  if (win_version > 0x0601)  // not Windows 7 or XP
+    return;
+
+  // creating a GDI brush failed,
+  // try to provide a GDI+ brush (does not work on Windows 10)
+  GpImage * img = 0;
+  s = GdipLoadImageFromFile(fn, &img);
+  gpcheck("load image", s);
+
+  GpTexture * gt = 0;
+  s = GdipCreateTexture(img, WrapModeTile, &gt);
+  gpcheck("texture", s);
+  if (!tiled) {
+    uint iw, ih;
+    s = GdipGetImageWidth(img, &iw);
+    gpcheck("width", s);
+    s = GdipGetImageHeight(img, &ih);
+    gpcheck("height", s);
+    s = GdipScaleTextureTransform(gt, (float)w / iw, (float)h / ih, 0);
+    gpcheck("scale", s);
+  }
+  s = GdipDisposeImage(img);
+  gpcheck("dispose img", s);
+
+  bgbrush_img = gt;
+#endif
+}
+
+static bool
+fill_rect(HDC dc, RECT * boxp, GpBrush * br)
+{
+  GpStatus s, sbrush = -1;
+#ifdef debug_gdiplus
+  static int nfills = 0;
+  nfills ++;
+#endif
+
+  void fill(void)
+  {
+    sbrush = GdipFillRectangleI(bg_graphics, br, boxp->left, boxp->top, boxp->right - boxp->left, boxp->bottom - boxp->top);
+    gpcheck("fill", sbrush);
+  }
+
+  if (bg_graphics) {
+    fill();
+  }
+  if (sbrush != Ok) {
+    if (bg_graphics) {
+      s = GdipDeleteGraphics(bg_graphics);
+      gpcheck("delete graphics", s);
+      bg_graphics = 0;
+    }
+#ifdef debug_gdiplus
+    printf("creating graphics, failure rate 1/%d\n", nfills);
+    nfills = 0;
+#endif
+    s = GdipCreateFromHDC(dc, &bg_graphics);
+    gpcheck("create graphics", s);
+    fill();
+  }
+
+  return sbrush == Ok;
+}
+
+#endif
+
+void
+win_flush_background(bool clearbg)
+{
+#ifdef debug_gdiplus
+  printf("flush background bmp %d img %d gr %d (tiled %d)\n", !!bgbrush_bmp, !!bgbrush_img, !!bg_graphics, tiled);
+#endif
+  w = 0; h = 0;
+  tiled = false;
+  if (clearbg) {
+    alpha = -1;
+    // TODO: save redundant image reloading (and brush creation)
+  }
+
+  if (bgbrush_bmp) {
+    DeleteObject(bgbrush_bmp);
+    bgbrush_bmp = 0;
+  }
+#if CYGWIN_VERSION_API_MINOR >= 74
+  drop_background_image_brush();
+  GpStatus s;
+  if (bg_graphics) {
+    s = GdipDeleteGraphics(bg_graphics);
+    bg_graphics = 0;
+    gpcheck("delete graphics", s);
+  }
+#endif
+}
+
+static void
+load_background_brush(HDC dc)
+{
+  // we could try to hook into win_adapt_term_size to update the full 
+  // screen background and reload the background on demand, 
+  // but let's rather handle this autonomously here
+  RECT cr;
+  GetClientRect(wnd, &cr);
+#ifdef debug_gdiplus
+  //printf("loading brush <%ls> %d %d %d %d (tiled %d)\n", cfg.background, cr.left, cr.top, cr.right - cr.left, cr.bottom - cr.top, tiled);
+#endif
+  if (cr.right - cr.left == w && cr.bottom - cr.top == h)
+    return;  // keep brush
+
+  if (tiled)
+    return;  // do not scale tiled brush
+
+  // remember terminal screen size
+  w = cr.right - cr.left;
+  h = cr.bottom - cr.top;
+
+  // adjust paint screen size
+  if (win_search_visible())
+    cr.bottom -= SEARCHBAR_HEIGHT;
+
+  wchar * bgfn = (wchar *)cfg.background;
+  if (*bgfn == '*') {
+    tiled = true;
+    bgfn++;
+  }
+  else if (*bgfn == '_') {
+    bgfn++;
+  }
+  char * bf = cs__wcstombs(bgfn);
+  if (!strncmp("~/", bf, 2)) {
+    char * bfexp = asform("%s/%s", home, bf + 2);
+    free(bf);
+    bf = bfexp;
+  }
+  else if (*bf != '/') {
+    char * bfexp = asform("%s/%s", foreground_cwd(), bf);
+    free(bf);
+    bf = bfexp;
+  }
+  // try to extract an alpha value from file spec
+  char * salpha = strchr(bf, ',');
+  if (salpha) {
+    *salpha = 0;
+    salpha++;
+    if (sscanf(salpha, "%u%c", &alpha, &(char){0}) != 1)
+      alpha = -1;
+  }
+  bgfn = path_posix_to_win_w(bf);
+  free(bf);
+
+  HBITMAP
+  load_background_bitmap(wstring fn)
+  {
+    HBITMAP bm = 0;
+    wstring bmpsuf = wcscasestr(fn, W(".bmp"));
+    if (bmpsuf && wcslen(bmpsuf) == 4) {
+      if (tiled)
+        bm = (HBITMAP) LoadImageW(0, fn,
+                                  IMAGE_BITMAP, 0, 0,
+                                  LR_DEFAULTSIZE |
+                                  LR_LOADFROMFILE);
+      else
+        bm = (HBITMAP) LoadImageW(0, fn,
+                                  IMAGE_BITMAP, w, h,
+                                  LR_LOADFROMFILE);
+    }
+
+    if (bm && alpha >= 0) {
+      if (tiled)
+        bm = alpha_blend_bg(alpha, dc, bm, 0, 0, win_get_colour(BG_COLOUR_I));
+      else
+        bm = alpha_blend_bg(alpha, dc, bm, w, h, win_get_colour(BG_COLOUR_I));
+    }
+
+    return bm;
+  }
+
+  if (!bgbrush_bmp) {
+    HBITMAP bm = load_background_bitmap(bgfn);
+    if (bm) {
+      bgbrush_bmp = CreatePatternBrush(bm);
+      DeleteObject(bm);
+      if (bgbrush_bmp) {
+        FillRect(dc, &cr, bgbrush_bmp);
+      }
+    }
+  }
+
+  if (!bgbrush_bmp) {
+#if CYGWIN_VERSION_API_MINOR >= 74
+    load_background_image_brush(dc, bgfn);
+    // can have set bgbrush_img or bgbrush_bmp
+    if (bgbrush_img)
+      fill_rect(dc, &cr, bgbrush_img);
+    // flag failure to load background?
+    // this is now detected in win_paint by checking the brushes
+    //else if (!bgbrush_bmp)
+#endif
+    //  // trigger proper win_paint behaviour
+    //  wstrset(&cfg.background, W(""));  // not the right approach (zooming)
+  }
+#ifdef debug_gdiplus
+  printf("loaded brush <%ls>: GDI %d GDI+ %d (tiled %d)\n", bgfn, !!bgbrush_bmp, !!bgbrush_img, tiled);
+#endif
+
+  free(bgfn);
+}
+
+static bool
+fill_background(HDC dc, RECT * boxp)
+{
+  load_background_brush(dc);
+  return
+    (bgbrush_bmp && FillRect(dc, boxp, bgbrush_bmp))
+#if CYGWIN_VERSION_API_MINOR >= 74
+    || (bgbrush_img && fill_rect(dc, boxp, bgbrush_img))
+#endif
+    ;
+}
+
+
+/*
+   Text output.
+ */
 
 #define dont_debug_win_text
 
@@ -1688,9 +2200,9 @@ apply_attr_colour(cattr a, attr_colour_mode mode)
  * We are allowed to fiddle with the contents of `text'.
  */
 void
-win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort lattr, bool has_rtl)
+win_text(int tx, int ty, wchar *text, int len, cattr attr, cattr *textattr, ushort lattr, bool has_rtl)
 {
-  bool even_line = y % 2;
+  bool even_line = ty % 2;
   int graph = (attr.attr >> ATTR_GRAPH_SHIFT) & 0xFF;
   int findex = (attr.attr & FONTFAM_MASK) >> ATTR_FONTFAM_SHIFT;
   struct fontfam * ff = &fontfamilies[findex];
@@ -1706,16 +2218,19 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
 
  /* Only want the left half of double width lines */
   // check this before scaling up x to pixels!
-  if (lattr != LATTR_NORM && x * 2 >= term.cols)
+  if (lattr != LATTR_NORM && tx * 2 >= term.cols)
     return;
 
  /* Convert to window coordinates */
-  x = x * char_width + PADDING;
-  y = y * cell_height + PADDING;
+  int x = tx * char_width + PADDING;
+  int y = ty * cell_height + PADDING;
 
   if (attr.attr & ATTR_WIDE)
     char_width *= 2;
 
+  bool default_bg = (attr.attr & ATTR_BGMASK) >> ATTR_BGSHIFT == BG_COLOUR_I;
+  if (attr.attr & ATTR_REVERSE)
+    default_bg = false;
   attr = apply_attr_colour(attr, ACM_TERM);
   colour fg = attr.truefg;
   colour bg = attr.truebg;
@@ -1724,16 +2239,28 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
   bool has_cursor = attr.attr & (TATTR_ACTCURS | TATTR_PASCURS);
   colour cursor_colour = 0;
 
+#ifdef keep_sel_colour_here
+  if ((attr.attr & ATTR_BGMASK) >> ATTR_BGSHIFT == SEL_COLOUR_I)
+#else
+  if (attr.attr & TATTR_SELECTED)
+#endif
+    default_bg = false;
+
   if (attr.attr & (TATTR_CURRESULT | TATTR_CURMARKED)) {
     bg = cfg.search_current_colour;
     fg = cfg.search_fg_colour;
+    default_bg = false;
   }
   else if (attr.attr & (TATTR_RESULT | TATTR_MARKED)) {
     bg = cfg.search_bg_colour;
     fg = cfg.search_fg_colour;
+    default_bg = false;
   }
 
   if (has_cursor) {
+    if (term_cursor_type() == CUR_BLOCK && (attr.attr & TATTR_ACTCURS))
+      default_bg = false;
+
     cursor_colour = colours[ime_open ? IME_CURSOR_COLOUR_I : CURSOR_COLOUR_I];
 
     //static uint mindist = 32768;
@@ -1794,12 +2321,14 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
   }
   if (ff->bold_mode == BOLD_FONT && (attr.attr & ATTR_BOLD))
     nfont |= FONT_BOLD;
-  if (ff->und_mode == UND_FONT && (attr.attr & ATTR_UNDER))
+  if (ff->und_mode == UND_FONT && (attr.attr & UNDER_MASK) == ATTR_UNDER
+      && !(attr.attr & ATTR_ULCOLOUR))
     nfont |= FONT_UNDERLINE;
   if (attr.attr & ATTR_ITALIC)
     nfont |= FONT_ITALIC;
   if (attr.attr & ATTR_STRIKEOUT
-      && !cfg.underl_manual && cfg.underl_colour == (colour)-1)
+      && !cfg.underl_manual && cfg.underl_colour == (colour)-1
+      && !(attr.attr & ATTR_ULCOLOUR))
     nfont |= FONT_STRIKEOUT;
   if (attr.attr & TATTR_ZOOMFULL)
     nfont |= FONT_ZOOMFULL;
@@ -1863,6 +2392,7 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
     };
 
     trace_line(" <ChrPlc:");
+    // This does not work for non-BMP:
     GetCharacterPlacementW(dc, text, len, 0, &gcpr,
                            FLI_MASK | GCP_CLASSIN | GCP_DIACRITIC);
     len = gcpr.nGlyphs;
@@ -1987,7 +2517,9 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
   if (uloff >= cell_height)
     uloff = cell_height - 1;
 
-  if (cfg.underl_colour != (colour)-1)
+  if (attr.attr & ATTR_ULCOLOUR)
+    ul = attr.ulcolr;
+  else if (cfg.underl_colour != (colour)-1)
     ul = cfg.underl_colour;
 #ifdef debug_underline
   if (cfg.underl_colour == (colour)-1)
@@ -2015,6 +2547,27 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
 
       underlaid = true;
     }
+  }
+
+ /* Graphic background: picture or texture */
+  if (*cfg.background && default_bg) {
+    RECT bgbox = box0;
+    if (!tx)
+      bgbox.left = 0;
+    if (bgbox.right >= PADDING + cell_width * term.cols)
+      bgbox.right += PADDING;
+    if (!ty)
+      bgbox.top = 0;
+    if (ty == term.rows - 1) {
+      RECT cr;
+      GetClientRect(wnd, &cr);
+      if (win_search_visible())
+        cr.bottom -= SEARCHBAR_HEIGHT;
+      bgbox.bottom = cr.bottom;
+    }
+
+    if (fill_background(dc, &bgbox))
+      underlaid = true;
   }
 
  /* Special underlay */
@@ -2059,16 +2612,51 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
     underlaid = true;
   }
 
+ /* Special underline */
+  if (!ldisp2 && lattr != LATTR_TOP &&
+      (attr.attr & UNDER_MASK) == ATTR_CURLYUND) {
+    clear_run();
+
+    int step = 4;  // horizontal step width
+    int delta = 3; // vertical phase height
+    int offset = 1; // offset up from uloff
+    int rep = (ulen * char_width - 1) / step + 1;
+    POINT bezier[1 + rep * 3];
+    for (int i = 0; i <= rep * 3; i++) {
+      bezier[i].x = x + i * step;
+      int wave = (i % 3 == 2) ? delta : (i % 3 == 1) ? -delta : 0;
+      bezier[i].y = y + uloff - offset + wave;
+    }
+    HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, 0, ul));
+    for (int l = 0; l < line_width; l++) {
+      if (l)
+        for (int i = 0; i <= rep * 3; i++)
+          bezier[i].y--;
+      PolyBezier(dc, (const POINT *)bezier, 1 + rep * 3);
+    }
+    oldpen = SelectObject(dc, oldpen);
+    DeleteObject(oldpen);
+  }
+  else
+
  /* Underline */
   if (!ldisp2 && lattr != LATTR_TOP &&
       (force_manual_underline ||
-       (ff->und_mode == UND_LINE && (attr.attr & ATTR_UNDER)) ||
-       (attr.attr & ATTR_DOUBLYUND))) {
+       (attr.attr & (ATTR_DOUBLYUND | ATTR_BROKENUND)) ||
+       ((attr.attr & UNDER_MASK) == ATTR_UNDER &&
+        (ff->und_mode == UND_LINE || (attr.attr & ATTR_ULCOLOUR)))
+      )
+     ) {
     clear_run();
 
-    HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, 0, ul));
+    int penstyle = (attr.attr & ATTR_BROKENUND)
+                   ? (attr.attr & ATTR_DOUBLYUND)
+                     ? PS_DASH
+                     : PS_DOT
+                   : PS_SOLID;
+    HPEN oldpen = SelectObject(dc, CreatePen(penstyle, 0, ul));
     int gapfrom = 0, gapdone = 0;
-    if (attr.attr & ATTR_DOUBLYUND) {
+    if ((attr.attr & UNDER_MASK) == ATTR_DOUBLYUND) {
       if (line_width < 3)
         line_width = 3;
       int gap = line_width / 3;
@@ -2357,8 +2945,10 @@ win_text(int x, int y, wchar *text, int len, cattr attr, cattr *textattr, ushort
   }
 
  /* Strikeout */
-  if (attr.attr & ATTR_STRIKEOUT
-      && (cfg.underl_manual || cfg.underl_colour != (colour)-1)) {
+  if ((attr.attr & ATTR_STRIKEOUT)
+      && (cfg.underl_manual || cfg.underl_colour != (colour)-1
+          || (attr.attr & ATTR_ULCOLOUR)
+         )) {
     int soff = (ff->descent + (ff->row_spacing / 2)) * 2 / 3;
     HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, 0, ul));
     for (int l = 0; l < line_width; l++) {
@@ -2448,6 +3038,21 @@ win_check_glyphs(wchar *wcs, uint num)
   ReleaseDC(wnd, dc);
 }
 
+#define dont_debug_win_char_width
+
+#ifdef debug_win_char_width
+int
+win_char_width(xchar c)
+{
+#define win_char_width xwin_char_width
+int win_char_width(xchar);
+  int w = win_char_width(c);
+  if (c >= 0x80)
+    printf("win_char_width(%04X) -> %d\n", c, w);
+  return w;
+}
+#endif
+
 /* This function gets the actual width of a character in the normal font.
    Usage:
    * determine whether to trim an ambiguous wide character 
@@ -2460,8 +3065,6 @@ win_char_width(xchar c)
 {
   int findex = (term.curs.attr.attr & FONTFAM_MASK) >> ATTR_FONTFAM_SHIFT;
   struct fontfam * ff = &fontfamilies[findex];
-
-#define win_char_width
 
 #define measure_width
 
@@ -2594,7 +3197,8 @@ win_char_width(xchar c)
                // although FONT_WIDE is actually activated
   }
 
-  if (ambigwide(c) &&
+  if ((c >= 0x3000 && c <= 0x303F)
+     || (ambigwide(c) &&
 #ifdef check_ambig_non_letters
 #warning instead we now check all non-letters with some exclusions
       (c == 0x20AC  // €
@@ -2620,7 +3224,7 @@ win_char_width(xchar c)
        //|| wcschr (W("‐‑‘’‚‛“”„‟‹›"), c) // #712 workaround; now caching
        )
 #endif
-     ) {
+     )) {
     // look up c in charpropcache
     struct charpropcache * cpfound = 0;
     for (uint i = 0; i < ff->cpcachelen[font4index]; i++)
@@ -2784,7 +3388,7 @@ win_set_colour(colour_i i, colour c)
 
   // Redraw everything.
   if (changed_something)
-    win_invalidate_all();
+    win_invalidate_all(false);
 }
 
 colour
@@ -2843,3 +3447,68 @@ win_reset_colours(void)
       printf("colour %d %06X [%s]\n", i, (int)colours[i], ci[i - FG_COLOUR_I]);
 #endif
 }
+
+
+void
+win_paint(void)
+{
+  PAINTSTRUCT p;
+  dc = BeginPaint(wnd, &p);
+
+  term_invalidate(
+    (p.rcPaint.left - PADDING) / cell_width,
+    (p.rcPaint.top - PADDING) / cell_height,
+    (p.rcPaint.right - PADDING - 1) / cell_width,
+    (p.rcPaint.bottom - PADDING - 1) / cell_height
+  );
+
+  if (update_state != UPDATE_PENDING) {
+    term_paint();
+    winimg_paint();
+  }
+
+  if (// do not just check whether a background was configured
+      //!*cfg.background &&
+      // check whether a configured background was successfully loaded
+      !bgbrush_bmp &&
+#if CYGWIN_VERSION_API_MINOR >= 74
+      !bgbrush_img &&
+#endif
+      (p.fErase
+       || p.rcPaint.left < PADDING
+       || p.rcPaint.top < PADDING
+       || p.rcPaint.right >= PADDING + cell_width * term.cols
+       || p.rcPaint.bottom >= PADDING + cell_height * term.rows
+      )
+     ) {
+    /* Notes:
+       * Do we actually need this stuff? We paint the background with
+         each win_text chunk anyway, except for the padding border,
+         which could however be touched e.g. by Sixel images?
+       * With a texture/image background, we could try to paint that here 
+         (invoked on WM_PAINT) or on WM_ERASEBKGND, but these messages are 
+         not received sufficiently often, e.g. not when scrolling.
+       * So let's let's keep finer control and paint background in chunks 
+         but not modify the established behaviour if there is no background.
+     */
+    colour bg_colour = colours[term.rvideo ? FG_COLOUR_I : BG_COLOUR_I];
+    HBRUSH oldbrush = SelectObject(dc, CreateSolidBrush(bg_colour));
+    HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, 0, bg_colour));
+
+    IntersectClipRect(dc, p.rcPaint.left, p.rcPaint.top, p.rcPaint.right,
+                      p.rcPaint.bottom);
+
+    ExcludeClipRect(dc, PADDING, PADDING,
+                    PADDING + cell_width * term.cols,
+                    PADDING + cell_height * term.rows);
+
+    Rectangle(dc, p.rcPaint.left, p.rcPaint.top,
+                  p.rcPaint.right, p.rcPaint.bottom);
+
+    DeleteObject(SelectObject(dc, oldbrush));
+    DeleteObject(SelectObject(dc, oldpen));
+  }
+
+  EndPaint(wnd, &p);
+}
+

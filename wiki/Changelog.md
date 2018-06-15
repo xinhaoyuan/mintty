@@ -1,6 +1,68 @@
-  * Workaround for ConEmu WM_MOUSEACTIVATE bug (#724).
+Character attributes and rendering
+  * Support for colon-separated SGR sub-parameters (ISO/IEC 8613-6) (xterm 282):
+  * SGR escapes for ISO/IEC 8613-6 RGB, CMY, CMYK, and indexed colour formats.
+  * DECRQSS uses SGR sub-parameters for colour specifications (xterm 331).
+  * SGR 4:1...4:5 for underline styles solid, double, wavy, dotted, dashed.
+  * SGR 58/59 for underline colour (kitty, iTerm2).
+
+Window handling
+  * Fixed scrollbar toggle (Ctrl+Shift+O) from forcing scrollbar to the right.
+  * Preventing font zooming after scrollbar toggle (Ctrl+Shift+O).
+  * DECSET 30 to enable/disable outer scrollbar (like xterm) (#159, ~#262).
+  * Ctrl+mouse-move hovering underlines URLs and filenames (#173).
+  * DECSET 1046 enables/disables alternate screen switching (xterm 331).
+  * Cursor style modes DECSET 12 (AT&T 610) (xterm 331) and SM 33/34 (Wyse).
+  * Enable Win+Shift move coupling of tab sets if SessionGeomSync ≥ 2 (#600).
+  * Drag-and-drop selection after focus click enabled by combined cell and time distance (#717).
+  * Only suppress focus-click selection if focus reporting disabled or mouse reporting not effective (#717).
+  * Background image or texture support (#18, #666).
+
+Configuration
+  * CMY(K) colour specifications in OSC sequences and config file.
+  * Option Background to set background image or texture (#18, #666).
+
+Other
+  * Fixed syntax error in `mintheme` tool (#764).
+  * Option `mintheme -d -q` for decimal colour format (#718).
+  * Updated Emoji data according to Unicode.org.
+
+### 2.8.5 (14 Apr 2018) ###
+
+Character handling and rendering
+  * CJK brackets are expanded if needed to ensure their symmetry (#756).
+  * Support of emoji style text attribute SGR 51/52 (mintty/wsltty#82, #600).
+  * Fixed emoji display variation selector handling.
+  * Character Info displays emoji sequence short names (mintty/wsltty#82, #600).
+  * Reverted Sixel colour registers patch that could fail Sixel display or even stall mintty window (#740, mintty/wsltty#90).
+
+Input
+  * Reenabled Ctrl+key escape sequences (#743).
+  * Input optionally keeps selection highlighting (ClearSelectionOnInput=false) (#222).
+
+Mouse handling
+  * Reenabled drag-and-drop text selection on focussing at a threshold (~#717).
+
+Configuration
+  * Alt+F2 and mintty --dir=... stay in selected dir even in login mode (#500, #744).
+  * Fixed option --dir=...
+  * Context menu configuration (MenuMenu etc): new flags 'x' and 'u' (#755).
+  * More layout-tolerant colour value syntax (#758).
+  * Invocation as wsl*[-distro].exe implies a --WSL[=distro] parameter (mintty/wsltty#63).
+  * Added missing option `mintheme --list`.
+  * New mintheme options --file (#762) and --query.
+  * New option ClearSelectionOnInput=false disables selection highlight clearing on input (#222).
+
+Window handling
+  * Clear selection when clipboard content updated (#742).
   * Skip refresh after colour setting if nothing changed (e.g. by prompt).
-  * Support of emoji style text attribute, reusing "framed" or "encircled".
+
+Desktop integration
+  * WSL mount point configuration (/etc/wsl.conf or fstab) is considered in path conversion for open/paste (mintty/wsltty#91).
+  * Workaround for ConEmu WM_MOUSEACTIVATE bug (#724).
+
+Documentation
+  * Terminal multiplexer configuration: added tmux (#757).
+  * Search bar: activated also from context menu (#753).
 
 ### 2.8.4 (10 Feb 2018) ###
 
