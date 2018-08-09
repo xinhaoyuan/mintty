@@ -71,7 +71,7 @@ const config default_cfg = {
   .show_hidden_fonts = false,
   .font_smoothing = FS_DEFAULT,
   .font_render = FR_UNISCRIBE,
-  .bold_as_font = -1,  // -1 means "the opposite of bold_as_colour"
+  .bold_as_font = false,
   .bold_as_colour = true,
   .allow_blinking = false,
   .locale = "",
@@ -108,6 +108,7 @@ const config default_cfg = {
   .clicks_target_app = true,
   .click_target_mod = MDK_SHIFT,
   .hide_mouse = true,
+  .elastic_mouse = false,
   // Window
   .cols = 80,
   .rows = 24,
@@ -320,6 +321,7 @@ options[] = {
   {"ClicksTargetApp", OPT_BOOL, offcfg(clicks_target_app)},
   {"ClickTargetMod", OPT_MOD, offcfg(click_target_mod)},
   {"HideMouse", OPT_BOOL, offcfg(hide_mouse)},
+  {"ElasticMouse", OPT_BOOL, offcfg(elastic_mouse)},
 
   // Window
   {"Columns", OPT_INT, offcfg(cols)},
@@ -1289,6 +1291,7 @@ load_config(string filename, int to_save)
   if (to_save) {
     copy_config("after load", &file_cfg, &cfg);
   }
+  //printf("load_config %s %d bd %d\n", filename, to_save, cfg.bold_as_font);
 }
 
 void
@@ -1352,13 +1355,22 @@ finish_config(void)
     strset(&cfg.charset, "");
 
   // bold_as_font used to be implied by !bold_as_colour.
+  //printf("finish_config bd %d\n", cfg.bold_as_font);
+#ifdef previous_patch_for_242
+  // This tweak was added in commit/964b3097e4624d4b5a3231389d34c00eb5cd1d6d
+  // to support bold display as both font and colour (#242)
+  // but it does not seem necessary anymore with the current code and options
+  // handling, and it confuses option initialization (mintty/wsltty#103),
+  // so it's removed.
   if (cfg.bold_as_font == -1) {
     cfg.bold_as_font = !cfg.bold_as_colour;
     remember_file_option("finish", find_option(true, "BoldAsFont"));
   }
+#endif
 
   if (0 < cfg.transparency && cfg.transparency <= 3)
     cfg.transparency *= 16;
+  //printf("finish_config bd %d\n", cfg.bold_as_font);
 }
 
 static void
@@ -1486,6 +1498,7 @@ apply_config(bool save)
   }
   else if (had_theme)
     win_reset_colours();
+  //printf("apply_config %d bd %d\n", save, cfg.bold_as_font);
 }
 
 

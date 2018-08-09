@@ -240,6 +240,9 @@ Windows' virtual monitor coordinate system), and exits.
 With value "f", mintty reports the monospace fonts installed on the system 
 as determined by mintty, and exits.
 
+With value "W", mintty lists installed WSL distributions and properties, 
+and exits.
+
 .TP
 \fB--store-taskbar-properties\fP
 Enable persistent storage of Windows taskbar properties together with 
@@ -276,6 +279,11 @@ otherwise, it refers to the installed WSL packages as listed by the
 Windows tool \fBwslconfig /l\fP.
 Implies \fB--wsl -o Locale=C -o Charset=UTF-8\fP, \fB--rootfs=\fP..., 
 and \fB--icon=\fP... if a respective icon file exists for the distribution.
+
+.TP
+\fB--WSLmode\fP \fIWSL DISTRIBUTION NAME\fP
+Setup a WSL session like \fB--WSL\fP but do not actually launch wsl 
+which must be achieved with explicit setup of a suitable gateway.
 
 .TP
 \fB--rootfs\fP \fIROOTFOLDER\fP
@@ -368,7 +376,7 @@ by clicking on the program icon or pressing \fBAlt+Space\fP.
 Both menus have an entry that leads to the options dialog for changing mintty's
 configuration.
 
-.SS Copy & paste
+.SS Text selection, copy & paste
 
 Screen contents can be selected by holding down the left mouse button and
 dragging the mouse.  If Alt is held down before the left mouse button, a 
@@ -405,6 +413,14 @@ with option \fBClearSelectionOnInput=false\fP.
 
 The current selection size can optionally been indicated with a popup, 
 enabled with option \fBSelectionShowSize\fP.
+
+.TP
+\fBElastic text selection\fP
+The traditional selection behaviour of cell-based terminals is that a 
+character touched with the mouse is included in the selection.
+With option \fBElasticMouse\fP, text selection can be changed to include 
+the first and last characters only if they are spanned at least halfway 
+by the mouse dragging, like many GUI application do.
 
 .SS Drag & drop
 
@@ -775,6 +791,18 @@ deployed in a mintty configuration directory.
 See the Tips wiki page \fIhttps://github.com/mintty/mintty/wiki/Tips#emojis\fP 
 about deployment of emoji graphics for mintty.
 
+.SS HTML Screen dump
+
+Mintty can create an HTML representation of the screen, from the extended 
+context menu or using the respective xterm Media Copy escape sequence.
+The HTML page is created in the start directory of mintty and uses a 
+filename pattern of \fBmintty.date_time.html\fP. Screen layout and 
+character attributes are reproduced as closely as possible.
+If there is a current selection, the selected text will be included in the 
+HTML dump, otherwise the current screen view is used. In the latter case, 
+also a background image or pattern is reproduced, if its filename was 
+configured as a relative path name using POSIX syntax (forward slashes).
+
 .SS Diagnostic support
 
 .TP
@@ -837,7 +865,7 @@ the system ANSI encoding.
 (This does not apply to the same configuration settings when given on the 
 command-line.)
 .br
-Unicode-enabled settings: BellFile, ThemeFile, Title, ExitTitle, Icon, Log, 
+Unicode-enabled settings: BellFile, ThemeFile, Background, Title, ExitTitle, Icon, Log, 
 Language, Font, Font1..., FontSample, Printer, Answerback, SixelClipChars, 
 Class, AppID, AppName, AppLaunchCmd, DropCommands, UserCommands, SessionCommands, TaskCommands.
 
@@ -1344,9 +1372,15 @@ The \fBOff\fP setting disables overriding.
 \(en \fBOff\fP
 
 .TP
-\fB\fP(HideMouse=on)
+\fBMouse auto-hiding\fP(HideMouse=on)
 By default, mintty automatically hides the cross-hair mouse cursor when 
 keyboard input is being entered. Setting this option =false keeps the cursor.
+
+.TP
+\fBElastic text selection\fP(ElasticMouse=off)
+With this option set, text selection with mouse dragging only includes 
+first and last characters if they are spanned at least halfway, so just 
+slightly touching a character leaves it out.
 
 .SS Window
 Window properties.
@@ -2188,7 +2222,15 @@ specified as an alternative separator by starting the whole setting with it.)
 
 \fINote:\fP This feature only works in combination with a parameter 
 \fB-o AppID=...\fP. If the taskbar icon is "pinned" to the taskbar, 
-the task list is retained with it.
+the task list is retained with it, initially...
+
+\fINote:\fP To make the jump list persistent, it is necessary to carefully 
+apply additional tricks to satisfy the insane taskbar configuration paradigm of Windows.
+First, also configure a default taskbar icon command using options 
+AppName and AppLaunchCmd.
+Second, choose a unique value for AppID and also add it to 
+the (default) launch command and all (jumplist) task commands.
+Third, invoke mintty with the chosen AppID and option --store-taskbar-properties.
 
 \fINote:\fP Task names are subject to localization if they are 
 added to the localization file of the selected UI localization language 

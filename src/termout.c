@@ -1258,8 +1258,14 @@ do_winop(void)
     when 2: win_set_iconic(true);
     when 3: win_set_pos(arg1, arg2);
     when 4: win_set_pixels(arg1, arg2);
-    when 5: win_set_zorder(true);  // top
-    when 6: win_set_zorder(false); // bottom
+    when 5:
+      if (term.csi_argc != 1)
+        return;
+      win_set_zorder(true);  // top
+    when 6:
+      if (term.csi_argc != 1)
+        return;
+      win_set_zorder(false); // bottom
     when 7: win_invalidate_all(false);  // refresh
     when 8: {
       int def1 = term.csi_argv_defined[1], def2 = term.csi_argv_defined[2];
@@ -1268,6 +1274,8 @@ do_winop(void)
       win_set_chars(arg1 ?: def1 ? rows : term.rows, arg2 ?: def2 ? cols : term.cols);
     }
     when 9: {
+      if (term.csi_argc != 2)
+        return;
       // Ps = 9 ; 0  -> Restore maximized window.
       // Ps = 9 ; 1  -> Maximize window (i.e., resize to screen size).
       // Ps = 9 ; 2  -> Maximize window vertically.
@@ -1280,33 +1288,48 @@ do_winop(void)
         // maximize window horizontally
         win_set_geom(-1, 0, -1, 0);
       }
-      else
+      else if (arg1 == 1 || arg1 == 0)
         win_maximise(arg1);
     }
     when 10:
+      if (term.csi_argc != 2)
+        return;
       // Ps = 1 0 ; 0  -> Undo full-screen mode.
       // Ps = 1 0 ; 1  -> Change to full-screen.
       // Ps = 1 0 ; 2  -> Toggle full-screen.
       if (arg1 == 2)
         win_maximise(-2);
-      else
+      else if (arg1 == 1 || arg1 == 0)
         win_maximise(arg1 ? 2 : 0);
     when 11: child_write(win_is_iconic() ? "\e[1t" : "\e[2t", 4);
     when 13: {
       int x, y;
-      win_get_pos(&x, &y);
+      win_get_scrpos(&x, &y, arg1 == 2);
       child_printf("\e[3;%d;%dt", x, y);
     }
     when 14: {
       int height, width;
-      win_get_pixels(&height, &width);
+      win_get_pixels(&height, &width, arg1 == 2);
       child_printf("\e[4;%d;%dt", height, width);
     }
+    when 15: {
+      int w, h;
+      search_monitors(&w, &h, 0, false, 0);
+      child_printf("\e[5;%d;%dt", h, w);
+    }
+    when 16: child_printf("\e[6;%d;%dt", cell_height, cell_width);
     when 18: child_printf("\e[8;%d;%dt", term.rows, term.cols);
     when 19: {
+#ifdef size_of_monitor_only
+#warning not what xterm reports
       int rows, cols;
       win_get_screen_chars(&rows, &cols);
       child_printf("\e[9;%d;%dt", rows, cols);
+#else
+      int w, h;
+      search_monitors(&w, &h, 0, false, 0);
+      child_printf("\e[9;%d;%dt", h / cell_height, w / cell_width);
+#endif
     }
     when 22:
       if (arg1 == 0 || arg1 == 2)
@@ -1449,6 +1472,9 @@ do_csi(uchar c)
         // Drop escape sequence from print buffer and finish printing.
         while (term.printbuf[--term.printbuf_pos] != '\e');
         term_print_finish();
+      }
+      else if (arg0 == 10 && !term.esc_mod) {
+        term_export_html();
       }
     when 'g':        /* TBC: clear tabs */
       if (!arg0)
@@ -2399,12 +2425,12 @@ term_write(const char *buf, uint len)
                    [c - ' ' - 1];
               if (c <= 0x37) {
                 static uchar techdraw_code[23] = {
-                  0x80,                    // square root base
+                  0xE0,                    // square root base
                   0, 0, 0, 0, 0,
-                  0x88, 0x89, 0x8A, 0x8B,  // square bracket corners
+                  0xE8, 0xE9, 0xEA, 0xEB,  // square bracket corners
                   0, 0, 0, 0,              // curly bracket hooks
                   0, 0,                    // curly bracket middle pieces
-                  0x81, 0x82, 0, 0, 0x85, 0x86, 0x87  // sum segments
+                  0xE1, 0xE2, 0, 0, 0xE5, 0xE6, 0xE7  // sum segments
                 };
                 uchar dispcode = techdraw_code[c - 0x21];
                 term.curs.attr.attr |= ((cattrflags)dispcode) << ATTR_GRAPH_SHIFT;
@@ -2443,6 +2469,13 @@ term_write(const char *buf, uint len)
             }
           otherwise: ;
         }
+
+        if (wc >= 0x2580 && wc <= 0x259F) {
+          // Block Elements (U+2580-U+259F)
+          // ▀▁▂▃▄▅▆▇█▉▊▋▌▍▎▏▐░▒▓▔▕▖▗▘▙▚▛▜▝▞▟
+          term.curs.attr.attr |= ((cattrflags)(wc & 0xFF)) << ATTR_GRAPH_SHIFT;
+        }
+
         write_char(wc, width);
         term.curs.attr.attr = asav;
       } // end term_write switch (term.state) when NORMAL

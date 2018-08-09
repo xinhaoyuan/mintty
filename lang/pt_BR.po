@@ -8,84 +8,86 @@ msgstr ""
 "Project-Id-Version: mintty\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2018-07-01 23:19+0200\n"
-"PO-Revision-Date: 2016-12-19 04:18+0500\n"
+"PO-Revision-Date: 2018-06-24 00:19-0300\n"
 "Last-Translator: \n"
 "Language-Team: \n"
-"Language: ru\n"
+"Language: pt_BR\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 2.0.6\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
 #: charset.c:213 charset.c:224 winmain.c:3449 winmain.c:3545 winmain.c:3552
 msgid "(Default)"
-msgstr "(по умолчанию)"
+msgstr "(Padrão)"
 
 #: charset.c:235
 msgid "(OEM codepage)"
-msgstr "(OEM русская)"
+msgstr "(Página de código OEM)"
 
 #: charset.c:239
 msgid "(ANSI codepage)"
-msgstr "(ANSI кириллица)"
+msgstr "(Página de código ANSI)"
 
 #: child.c:82
 msgid "There are no available terminals"
-msgstr "Нет доступных панелей"
+msgstr "Não há terminais disponíveis"
 
 #: child.c:157
 msgid "Error: Could not open log file"
-msgstr "Ошибка: не удалось открыть файл журнала"
+msgstr "Erro: Não foi possível abrir o arquivo de log"
 
 #: child.c:229
 msgid "Error: Could not fork child process"
-msgstr "Ошибка: не удалось запустить дочерний процесс"
+msgstr "Erro: Não foi possível bifurcar o processo filho"
 
 #: child.c:231
 msgid "DLL rebasing may be required; see 'rebaseall / rebase --help'"
 msgstr ""
-"Может потребоваться перебазировка библиотек, см. 'rebaseall / rebase --help'"
+"Pode ser necessário um rebasing do DLL; veja 'rebaseall / rebase --help'"
 
 #. __ %1$s: client command (e.g. shell) to be run; %2$s: error message
 #: child.c:309
 msgid "Failed to run '%s': %s"
-msgstr "Не удалось выполнить '%s': %s"
+msgstr "Falha ao executar '%s': %s"
 
 #. __ %1$s: client command (e.g. shell) terminated, %2$i: exit code
 #: child.c:426
 msgid "%s: Exit %i"
-msgstr "%s остановлено: %i"
+msgstr "%s: Saiu com código %i"
 
 #. __ default inline notification if ExitWrite=yes
 #: child.c:433
 msgid "TERMINATED"
-msgstr "ЗАВЕРШЕНИЕ"
+msgstr "FINALIZADO"
 
 #: child.c:844
 msgid "Error: Could not fork child daemon"
-msgstr "Ошибка: не удалось запустить фоновый дочерний процесс"
+msgstr "Erro: Não foi possível bifurcar o daemon filho"
 
 #. __ %s: unknown option name
 #: config.c:558
 msgid "Ignoring unknown option '%s'"
-msgstr "Игнорирование неизвестного параметра '%s'"
+msgstr "Ignorando opção desconhecida '%s'"
 
 #: config.c:603 config.c:632
 msgid "Internal error: too many options"
-msgstr "Внутренняя ошибка: слишком много параметров"
+msgstr "Erro interno: opções em excesso"
 
 #: config.c:619
 msgid "Internal error: too many options/comments"
-msgstr "Внутренняя ошибка: слишком много параметров/комментариев"
+msgstr "Erro interno: opções/comentários em excesso"
 
 #. __ %2$s: option name, %1$s: invalid value
 #: config.c:765
 msgid "Ignoring invalid value '%s' for option '%s'"
-msgstr "Игнорирование неправильного значения '%s' для параметра '%s'"
+msgstr "Ignorando valor inválido '%s' para a opção '%s'"
 
 #. __ %s: option name
 #: config.c:776
 msgid "Ignoring option '%s' with missing value"
-msgstr "Игнорирование параметра '%s' отсутствует значение"
+msgstr "Ignorando opção '%s' com valor faltando"
 
 #. __ %1$s: config file name, %2$s: error message
 #: config.c:1389
@@ -93,167 +95,167 @@ msgid ""
 "Could not save options to '%s':\n"
 "%s."
 msgstr ""
-"Не удалось сохранить параметр '%s':\n"
+"Não foi possível salvar as opções em '%s':\n"
 "%s."
 
 #: config.c:1707
 msgid "◇ None (printing disabled) ◇"
-msgstr "◇ Нет (печать выключена) ◇"
+msgstr "◇ Nenhuma (impressão desativada) ◇"
 
 #: config.c:1709
 msgid "◆ Default printer ◆"
-msgstr "◆ Принтер по умолчанию ◆"
+msgstr "◆ Impressora padrão ◆"
 
 #. __ UI language
 #: config.c:1818
 msgid "– None –"
-msgstr "– Отсутствует –"
+msgstr "– Nenhuma –"
 
 #: config.c:1819
 msgid "@ Windows language @"
-msgstr "@ Из Windows @"
+msgstr "@ Idioma do Windows @"
 
 #: config.c:1820
 msgid "* Locale environm. *"
-msgstr "* Из окружения *"
+msgstr "* Variável amb. de locale *"
 
 #: config.c:1821
 msgid "= cfg. Text Locale ="
-msgstr "= Файл конфигурации ="
+msgstr "= Cfg. de locale em Texto ="
 
 #: config.c:1884
 msgid "simple beep"
-msgstr ""
+msgstr "Bipe simples"
 
 #: config.c:1885
 msgid "no beep"
-msgstr ""
+msgstr "Sem bipe"
 
 #: config.c:1886
 msgid "Default Beep"
-msgstr ""
+msgstr "Bipe padrão"
 
 #: config.c:1887
 msgid "Critical Stop"
-msgstr "Критическая остановка"
+msgstr "Parada crítica"
 
 #: config.c:1888
 msgid "Question"
-msgstr "Вопрос"
+msgstr "Pergunta"
 
 #: config.c:1889
 msgid "Exclamation"
-msgstr "Восклицание"
+msgstr "Exclamação"
 
 #: config.c:1890
 msgid "Asterisk"
-msgstr "Звездочка (*)"
+msgstr "Asterisco"
 
 #: config.c:1933
 msgid "◇ None (system sound) ◇"
-msgstr "◇ Стандартный звук ◇"
+msgstr "◇ Nenhum (som do sistema) ◇"
 
 #. __ terminal theme / colour scheme
 #: config.c:2064
 msgid "◇ None ◇"
-msgstr "◇ Отсутствует ◇"
+msgstr "◇ Nenhum ◇"
 
 #. __ indicator of unsaved downloaded colour scheme
 #: config.c:2067
 msgid "downloaded / give me a name!"
-msgstr "загружено / сохранить как"
+msgstr "baixado / me dê um nome!"
 
 #: config.c:2156
 msgid "Could not load web theme"
-msgstr "Не удалось загрузить веб-тему"
+msgstr "Não foi possível carregar o tema web"
 
 #: config.c:2205
 msgid "Cannot write theme file"
-msgstr "Невозможно записать файл темы"
+msgstr "Não é possível gravar o tema web"
 
 #: config.c:2210
 msgid "Cannot store theme file"
-msgstr "Не удается сохранить файл темы"
+msgstr "Não é possível salvar o tema web"
 
 #. __ Dialog button - show About text
 #: config.c:2570
 msgid "About..."
-msgstr "О нас"
+msgstr "Sobre..."
 
 #. __ Dialog button - save changes
 #: config.c:2573
 msgid "Save"
-msgstr "Сохранить"
+msgstr "Salvar"
 
 #. __ Dialog button - cancel
 #: config.c:2577 winctrls.c:1143 windialog.c:782
 msgid "Cancel"
-msgstr "Отмена"
+msgstr "Cancelar"
 
 #. __ Dialog button - apply changes
 #: config.c:2581
 msgid "Apply"
-msgstr "Применить"
+msgstr "Aplicar"
 
 #. __ Dialog button - take notice
 #: config.c:2585 windialog.c:779
 msgid "I see"
-msgstr "Хорошо"
+msgstr "Entendi"
 
 #. __ Dialog button - confirm action
 #: config.c:2587 winctrls.c:1142 windialog.c:781
 msgid "OK"
-msgstr ""
+msgstr "OK"
 
 #. __ Options - Looks: treeview label
 #: config.c:2594 config.c:2625 config.c:2666
 msgid "Looks"
-msgstr "Вид"
+msgstr "Aparência"
 
 #. __ Options - Looks: panel title
 #: config.c:2596
 msgid "Looks in Terminal"
-msgstr "Внешний вид"
+msgstr "Aparência no terminal"
 
 #. __ Options - Looks: section title
 #: config.c:2598
 msgid "Colours"
-msgstr "Цвета"
+msgstr "Cores"
 
 #. __ Options - Looks:
 #: config.c:2602
 msgid "&Foreground..."
-msgstr "Текст..."
+msgstr "&Prim. plano..."
 
 #. __ Options - Looks:
 #: config.c:2606
 msgid "&Background..."
-msgstr "Фон..."
+msgstr "&Fundo..."
 
 #. __ Options - Looks:
 #: config.c:2610
 msgid "&Cursor..."
-msgstr "Каретка..."
+msgstr "&Cursor..."
 
 #. __ Options - Looks:
 #: config.c:2614
 msgid "&Theme"
-msgstr "Тема"
+msgstr "&Tema"
 
 #. __ Options - Looks: name of web service
 #: config.c:2619
 msgid "Color Scheme Designer"
-msgstr "Онлайн генератор тем"
+msgstr "Criar esquema de cores"
 
 #. __ Options - Looks: store colour scheme
 #: config.c:2622 winctrls.c:381
 msgid "Store"
-msgstr "В набор"
+msgstr "Salvar"
 
 #. __ Options - Looks: section title
 #: config.c:2627
 msgid "Transparency"
-msgstr "Прозрачность"
+msgstr "Transparência"
 
 #. __ Options - Looks: transparency
 #. __ Options - Keys:
@@ -261,746 +263,744 @@ msgstr "Прозрачность"
 #. __ Options - Window:
 #: config.c:2633 config.c:2843 config.c:2927 config.c:2984
 msgid "&Off"
-msgstr "Нет"
+msgstr "&Desat."
 
 #. __ Options - Looks: transparency
 #: config.c:2635
 msgid "&Low"
-msgstr "Низ."
+msgstr "&Baixa"
 
 #. __ Options - Looks: transparency, short form of radio button label "Medium"
 #: config.c:2637
 msgid "&Med."
-msgstr "Сред."
+msgstr "&Méd."
 
 #. __ Options - Looks: transparency
 #: config.c:2639
 msgid "&Medium"
-msgstr "Средняя"
+msgstr "&Média"
 
 #. __ Options - Looks: transparency
 #: config.c:2641
 msgid "&High"
-msgstr "Выс."
+msgstr "&Alta"
 
 #. __ Options - Looks: transparency
 #: config.c:2643
 msgid "Gla&ss"
-msgstr "Проз."
+msgstr "&Vidro"
 
 #. __ Options - Looks: transparency
 #: config.c:2650 config.c:2661
 msgid "Opa&que when focused"
-msgstr "Непрозрачно при фокусировке"
+msgstr "&Opaca quando em primeiro plano"
 
 #. __ Options - Looks: transparency
 #: config.c:2655
 msgid "Blu&r"
-msgstr "Размытие"
+msgstr "&Desfoque"
 
 #. __ Options - Looks: section title
 #: config.c:2668
 msgid "Cursor"
-msgstr "Каретка"
+msgstr "Cursor"
 
 #. __ Options - Looks: cursor type
 #: config.c:2673
 msgid "Li&ne"
-msgstr "Слеш "
+msgstr "L&inha"
 
 #. __ Options - Looks: cursor type
 #: config.c:2675
 msgid "Bloc&k"
-msgstr "Блок"
+msgstr "Blo&co"
 
 #. __ Options - Looks: cursor type
 #: config.c:2677
 msgid "&Underscore"
-msgstr "Подчеркивание"
+msgstr "&Sublinhado"
 
 #. __ Options - Looks: cursor feature
 #: config.c:2682
 msgid "Blinkin&g"
-msgstr "Мерцание"
+msgstr "&Piscar"
 
 #. __ Options - Text: treeview label
 #: config.c:2689 config.c:2711 config.c:2729 config.c:2763
 msgid "Text"
-msgstr "Текст"
+msgstr "Texto"
 
 #. __ Options - Text: panel title
 #: config.c:2691
 msgid "Text and Font properties"
-msgstr "Текст и шрифт"
+msgstr "Propriedades de texto e fonte"
 
 #. __ Options - Text: section title
 #: config.c:2693
 msgid "Font"
-msgstr "Шрифт"
+msgstr "Fonte"
 
 #. __ Options - Text:
 #. __ Font chooser:
 #: config.c:2701 winctrls.c:1153
 msgid "Font st&yle:"
-msgstr "Начертание:"
+msgstr "E&stilo de fonte:"
 
 #. __ Font chooser:
 #: config.c:2706 winctrls.c:1155
 msgid "&Size:"
-msgstr "Размер:"
+msgstr "&Tamanho:"
 
 #. __ Options - Text:
 #: config.c:2715 config.c:2748
 msgid "Sho&w bold as font"
-msgstr "Разреш. жир. текст"
+msgstr "Most. n&eg. como fonte"
 
 #. __ Options - Text:
 #: config.c:2720 config.c:2753
 msgid "Show &bold as colour"
-msgstr "Разреш. цвет. текст"
+msgstr "Most. ne&g. como cor"
 
 #. __ Options - Text:
 #: config.c:2733
 msgid "Font smoothing"
-msgstr "Сглаживание шрифта"
+msgstr "Suavização da fonte"
 
 #. __ Options - Text:
 #: config.c:2736
 msgid "&Default"
-msgstr "Система"
+msgstr "&Padrão"
 
 #. __ Options - Text:
 #. __ Options - Window: scrollbar
 #: config.c:2738 config.c:2968
 msgid "&None"
-msgstr "Нет"
+msgstr "&Desat."
 
 #. __ Options - Text:
 #: config.c:2740
 msgid "&Partial"
-msgstr "Среднее"
+msgstr "&Parcial"
 
 #. __ Options - Text:
 #: config.c:2742
 msgid "&Full"
-msgstr "Полное"
+msgstr "&Total"
 
 #. __ Options - Text:
 #: config.c:2758
 msgid "&Allow blinking"
-msgstr "Разреш. мерцание"
+msgstr "Pe&rmitir piscar"
 
 #: config.c:2766
 msgid "&Locale"
-msgstr "Формат"
+msgstr "&Locale"
 
 #: config.c:2769
 msgid "&Character set"
-msgstr "Набор символов"
+msgstr "&Conjunto de caracteres"
 
 #. __ Options - Keys: treeview label
 #: config.c:2776 config.c:2796 config.c:2830
 msgid "Keys"
-msgstr "Клавиатура"
+msgstr "Teclado"
 
 #. __ Options - Keys: panel title
 #: config.c:2778
 msgid "Keyboard features"
-msgstr "Клавиатура"
+msgstr "Funcionalidades do teclado"
 
 #. __ Options - Keys:
 #: config.c:2782
 msgid "&Backarrow sends ^H"
-msgstr "&Backarrow как ^H"
+msgstr "&Backspace envia ^H"
 
 #. __ Options - Keys:
 #: config.c:2787
 msgid "&Delete sends DEL"
-msgstr "DEL удаляет слева"
+msgstr "&Delete envia DEL"
 
 #. __ Options - Keys:
 #: config.c:2792
 msgid "Ctrl+LeftAlt is Alt&Gr"
-msgstr "Ctrl+LeftAlt заменяет Alt&Gr"
+msgstr "Ctrl+AltEsq. vira Alt&Gr"
 
 #. __ Options - Keys: section title
 #: config.c:2798
 msgid "Shortcuts"
-msgstr "Клавиши быстрого доступа"
+msgstr "Atalhos"
 
 #. __ Options - Keys:
 #: config.c:2801
 msgid "Cop&y and Paste (Ctrl/Shift+Ins)"
-msgstr "Копировать и Вставить (Ctrl/Shift+Ins)"
+msgstr "C&opiar e colar (Ctrl/Shift+Ins)"
 
 #. __ Options - Keys:
 #: config.c:2806
 msgid "&Menu and Full Screen (Alt+Space/Enter)"
-msgstr "Меню и полный экран (Alt+Space/Enter)"
+msgstr "&Menu e tela cheia (Alt+Space/Enter)"
 
 #. __ Options - Keys:
 #: config.c:2811
 msgid "&Switch window (Ctrl+[Shift+]Tab)"
-msgstr "Переключить окно (Ctrl+[Shift+]Tab)"
+msgstr "&Trocar janela (Ctrl+[Shift+]Tab)"
 
 #. __ Options - Keys:
 #: config.c:2816
 msgid "&Zoom (Ctrl+plus/minus/zero)"
-msgstr "Масштаб (Ctrl+plus/minus/zero)"
+msgstr "&Zoom (Ctrl+mais/menos/zero)"
 
 #. __ Options - Keys:
 #: config.c:2821
 msgid "&Alt+Fn shortcuts"
-msgstr "&Alt+F(n) сочетания"
+msgstr "Atalhos &Alt+Fn"
 
 #. __ Options - Keys:
 #: config.c:2826
 msgid "&Ctrl+Shift+letter shortcuts"
-msgstr "&Ctrl+Shift+(n) сочетания"
+msgstr "Atalhos &Ctrl+Shift+letra"
 
 #. __ Options - Keys: section title
 #: config.c:2832
 msgid "Compose key"
-msgstr "Модификатор клавиатуры"
+msgstr "Tecla de composição"
 
 #. __ Options - Keys:
 #. __ Options - Mouse:
 #. __ Options - Window:
 #: config.c:2837 config.c:2921 config.c:2978
 msgid "&Shift"
-msgstr ""
+msgstr "&Shift"
 
 #. __ Options - Keys:
 #. __ Options - Mouse:
 #. __ Options - Window:
 #: config.c:2839 config.c:2923 config.c:2980
 msgid "&Ctrl"
-msgstr ""
+msgstr "Ct&rl"
 
 #. __ Options - Keys:
 #. __ Options - Mouse:
 #. __ Options - Window:
 #: config.c:2841 config.c:2925 config.c:2982
 msgid "&Alt"
-msgstr ""
+msgstr "A&lt"
 
 #. __ Options - Mouse: treeview label
 #: config.c:2851 config.c:2871 config.c:2903
 msgid "Mouse"
-msgstr "Мышь"
+msgstr "Mouse"
 
 #. __ Options - Mouse: panel title
 #: config.c:2853
 msgid "Mouse functions"
-msgstr "Свойства мыши"
+msgstr "Funções do mouse"
 
 #. __ Options - Mouse:
 #: config.c:2857
 msgid "Cop&y on select"
-msgstr "Копир. выделеное"
+msgstr "&Copiar ao selecionar"
 
 #. __ Options - Mouse:
 #: config.c:2862
 msgid "Copy as &rich text"
-msgstr "Копир. как таблицу"
+msgstr "Cop. como texto &rico"
 
 #. __ Options - Mouse:
 #: config.c:2867
 msgid "Clic&ks place command line cursor"
-msgstr "Устанавливать каретку мышкой"
+msgstr "Cliques &posicionam o cursor na linha de com."
 
 #. __ Options - Mouse: section title
 #: config.c:2873
 msgid "Click actions"
-msgstr "Действия при нажатии кнопок"
+msgstr "Ações de clique"
 
 #. __ Options - Mouse:
 #: config.c:2876
 msgid "Right mouse button"
-msgstr "Правая кнопка мыши"
+msgstr "Botão direito do mouse"
 
 #. __ Options - Mouse:
 #: config.c:2879 config.c:2893
 msgid "&Paste"
-msgstr "Вставка"
+msgstr "C&olar"
 
 #. __ Options - Mouse:
 #: config.c:2881 config.c:2895
 msgid "E&xtend"
-msgstr "Выбрать"
+msgstr "E&stender"
 
 #. __ Options - Mouse:
 #: config.c:2883
 msgid "&Menu"
-msgstr "Меню"
+msgstr "&Menu"
 
 #. __ Options - Mouse:
 #: config.c:2885 config.c:2899
 msgid "Ente&r"
-msgstr "Запуск"
+msgstr "Ente&r"
 
 #. __ Options - Mouse:
 #: config.c:2890
 msgid "Middle mouse button"
-msgstr "Средняя кнопка мыши"
+msgstr "Botão do meio do mouse"
 
 #. __ Options - Mouse:
 #: config.c:2897
 msgid "&Nothing"
-msgstr "Нет"
+msgstr "&Nada"
 
 #. __ Options - Mouse: section title
 #: config.c:2905
 msgid "Application mouse mode"
-msgstr "Режим отслеживания мыши"
+msgstr "Modo de mouse de aplicativo"
 
 #. __ Options - Mouse:
 #: config.c:2908
 msgid "Default click target"
-msgstr "События мыши передаются"
+msgstr "Alvo padrão do clique"
 
 #. __ Options - Mouse: application mouse mode click target
 #: config.c:2911
 msgid "&Window"
-msgstr "&Window"
+msgstr "&Janela"
 
 #. __ Options - Mouse: application mouse mode click target
 #: config.c:2913
 msgid "&Application"
-msgstr "Приложению"
+msgstr "&Aplicativo"
 
 #. __ Options - Mouse:
 #: config.c:2918
 msgid "Modifier for overriding default"
-msgstr "Модификатор отмены захвата мыши"
+msgstr "Modificador para sobrescrever o padrão"
 
 #. __ Options - Window: treeview label
 #: config.c:2935 config.c:2954 config.c:2993
 msgid "Window"
-msgstr "Окно"
+msgstr "Janela"
 
 #. __ Options - Window: panel title
 #: config.c:2937
 msgid "Window properties"
-msgstr "Свойства окна"
+msgstr "Propriedades da janela"
 
 #. __ Options - Window: section title
 #: config.c:2939
 msgid "Default size"
-msgstr "Размер по умолчанию"
+msgstr "Tamanho padrão"
 
 #. __ Options - Window:
 #: config.c:2943
 msgid "Colu&mns"
-msgstr "Колонны"
+msgstr "Col&unas"
 
 #. __ Options - Window:
 #: config.c:2947
 msgid "Ro&ws"
-msgstr "Ряды"
+msgstr "&Linhas"
 
 #. __ Options - Window:
 #: config.c:2951
 msgid "C&urrent size"
-msgstr "Текущие"
+msgstr "&Tam. atual"
 
 #. __ Options - Window:
 #: config.c:2958
 msgid "Scroll&back lines"
-msgstr "Буфер строк"
+msgstr "Linhas de &rol."
 
 #. __ Options - Window:
 #: config.c:2963
 msgid "Scrollbar"
-msgstr "Полоса прокрутки"
+msgstr "Barra de rolagem"
 
 #. __ Options - Window: scrollbar
 #: config.c:2966
 msgid "&Left"
-msgstr "Слева"
+msgstr "&Esquerda"
 
 #. __ Options - Window: scrollbar
 #: config.c:2970
 msgid "&Right"
-msgstr "Справа"
+msgstr "&Direita"
 
 #. __ Options - Window:
 #: config.c:2975
 msgid "Modifier for scrolling"
-msgstr "Модификатор прокрутки"
+msgstr "Modificador para rolagem"
 
 #. __ Options - Window:
 #: config.c:2989
 msgid "&PgUp and PgDn scroll without modifier"
-msgstr "&PgUp и PgDn прокрутка без модификатора"
+msgstr "&PgUp e PgDn rolam sem modificador"
 
 #. __ Options - Window: section title
 #: config.c:2995
 msgid "UI language"
-msgstr "Язык интерфейса"
+msgstr "Idioma da interface"
 
 #. __ Options - Terminal: treeview label
 #: config.c:3005 config.c:3018 config.c:3079 config.c:3093
 msgid "Terminal"
-msgstr "Консоль"
+msgstr "Terminal"
 
 #. __ Options - Terminal: panel title
 #: config.c:3007
 msgid "Terminal features"
-msgstr "Свойства консоли"
+msgstr "Recursos do terminal"
 
 #. __ Options - Terminal:
 #: config.c:3011
 msgid "&Type"
-msgstr "Тип"
+msgstr "&Tipo"
 
 #. __ Options - Terminal:
 #: config.c:3015
 msgid "&Answerback"
-msgstr "Автоответ "
+msgstr "&Answerback"
 
 #. __ Options - Terminal: section title
 #: config.c:3020
 msgid "Bell"
-msgstr "Оповещения"
+msgstr "Aviso"
 
 #. __ Options - Terminal: bell
 #: config.c:3027
 msgid "► &Play"
-msgstr "► Воспр."
+msgstr "► T&ocar"
 
 #. __ Options - Terminal: bell
 #: config.c:3033
 msgid "&Wave"
-msgstr "Звук"
+msgstr "&Wave"
 
 #. __ Options - Terminal: bell
 #: config.c:3055 config.c:3068
 msgid "&Flash"
-msgstr "Вспл."
+msgstr "&Piscar"
 
-# msgstr "Всплывающее"
 #. __ Options - Terminal: bell
 #: config.c:3057 config.c:3072
 msgid "&Highlight in taskbar"
-msgstr "Подсветка"
+msgstr "&Destac. na bar. de tar."
 
-# msgstr "Статус в панели"
 #. __ Options - Terminal: bell
 #: config.c:3059 config.c:3076
 msgid "&Popup"
-msgstr "Всплывающее"
+msgstr "&Saltar"
 
 #. __ Options - Terminal: section title
 #: config.c:3081
 msgid "Printer"
-msgstr "Принтер"
+msgstr "Impressora"
 
 #. __ Options - Terminal:
 #: config.c:3096
 msgid "Prompt about running processes on &close"
-msgstr "При закрытии подсказывать о процессах"
+msgstr "Confirmar &fechar com processos ativos"
 
 #: textprint.c:37 textprint.c:101
 msgid "[Printing...] "
-msgstr "[Печать ...]"
+msgstr "[Imprimindo...] "
 
 #. __ Options - Text: font chooser activation button
 #: winctrls.c:812
 msgid "&Select..."
-msgstr "Выбрать"
+msgstr "Selec&..."
 
 #. __ Font chooser: title bar label
 #: winctrls.c:1147
 msgid "Font "
-msgstr "Шрифт"
+msgstr "Fonte "
 
 #. __ Font chooser: button
 #: winctrls.c:1149
 msgid "&Apply"
-msgstr "Применить"
+msgstr "&Aplicar"
 
 #. __ Font chooser:
 #: winctrls.c:1151
 msgid "&Font:"
-msgstr "Шрифт:"
+msgstr "&Fonte:"
 
 #. __ Font chooser:
 #: winctrls.c:1157
 msgid "Sample"
-msgstr "Образец"
+msgstr "Exemplo"
 
 #. __ Font chooser: text sample ("AaBbYyZz" by default)
 #: winctrls.c:1161 winctrls.c:1399 winctrls.c:1564
 msgid "Ferqœm’4€"
-msgstr "АаБбВвГг"
+msgstr "AaBbYyZz"
 
 #. __ Font chooser: this field is only shown with FontMenu=1
 #: winctrls.c:1178
 msgid "Sc&ript:"
-msgstr "Набор символов:"
+msgstr "Sc&ript:"
 
 #. __ Font chooser: this field is only shown with FontMenu=1
 #: winctrls.c:1180
 msgid "<A>Show more fonts</A>"
-msgstr "<A>Показать дополнительные шрифты</A>"
+msgstr "<A>Mostrar mais fontes</A>"
 
 #. __ Colour chooser: title bar label
 #: winctrls.c:1185
 msgid "Colour "
-msgstr "Цвет"
+msgstr "Cor "
 
 #. __ Colour chooser:
 #: winctrls.c:1198 winctrls.c:1210
 msgid "B&asic colours:"
-msgstr "Основные цвета:"
+msgstr "Cores &básicas:"
 
 #. __ Colour chooser:
 #: winctrls.c:1217
 msgid "&Custom colours:"
-msgstr "Дополнительные цвета:"
+msgstr "Cores &personalizadas:"
 
 #. __ Colour chooser:
 #: winctrls.c:1224
 msgid "De&fine Custom Colours >>"
-msgstr "Определить цвет >>"
+msgstr "De&finir cores personalizadas >>"
 
 #. __ Colour chooser:
 #: winctrls.c:1227
 msgid "Colour"
-msgstr "Цвет"
+msgstr "Cor"
 
 #. __ Colour chooser:
 #: winctrls.c:1229
 msgid "|S&olid"
-msgstr "|Заливка"
+msgstr "|Só&lida"
 
 #. __ Colour chooser:
 #: winctrls.c:1231
 msgid "&Hue:"
-msgstr "Оттенок:"
+msgstr "&Hue:"
 
 #. __ Colour chooser:
 #: winctrls.c:1234
 msgid "&Sat:"
-msgstr "Контраст:"
+msgstr "&Sat:"
 
 #. __ Colour chooser:
 #: winctrls.c:1236
 msgid "&Lum:"
-msgstr "Яркость:"
+msgstr "&Lum:"
 
 #. __ Colour chooser:
 #: winctrls.c:1238
 msgid "&Red:"
-msgstr "Красный:"
+msgstr "&Vermelho:"
 
 #. __ Colour chooser:
 #: winctrls.c:1240
 msgid "&Green:"
-msgstr "Зеленый:"
+msgstr "V&erde:"
 
 #. __ Colour chooser:
 #: winctrls.c:1242
 msgid "&Blue:"
-msgstr "Синий:"
+msgstr "&Azul:"
 
 #. __ Colour chooser:
 #: winctrls.c:1245
 msgid "A&dd to Custom Colours"
-msgstr "Добавить в набор"
+msgstr "A&dicionar às cores personalizadas"
 
 #. __ Options: dialog title
 #: windialog.c:243 windialog.c:729
 msgid "Options"
-msgstr "Настройки"
+msgstr "Opções"
 
 #. __ Options: dialog title: "mintty <release> available (for download)"
 #: windialog.c:245
 msgid "available"
-msgstr "доступный"
+msgstr "disponível"
 
 #. __ Options: dialog width scale factor (80...200)
 #: windialog.c:676
 msgid "100"
-msgstr ""
+msgstr "100"
 
 #: windialog.c:811 windialog.c:836
 msgid "Error"
-msgstr "Ошибка"
+msgstr "Erro"
 
 #. __ Context menu, session switcher ("virtual tabs")
 #: wininput.c:153
 msgid "Session switcher"
-msgstr ""
+msgstr "Alternar sessão"
 
 #. __ Context menu, session launcher ("virtual tabs")
 #: wininput.c:254
 msgid "Session launcher"
-msgstr ""
+msgstr "Iniciar sessão"
 
 #: wininput.c:357 wininput.c:363
 msgid "Ctrl+"
-msgstr ""
+msgstr "Ctrl+"
 
 #: wininput.c:358 wininput.c:364
 msgid "Alt+"
-msgstr ""
+msgstr "Alt+"
 
 #: wininput.c:359 wininput.c:365
 msgid "Shift+"
-msgstr ""
+msgstr "Shift+"
 
 #. __ System menu:
 #: wininput.c:390
 msgid "&Restore"
-msgstr "Восстановить"
+msgstr "&Restaurar"
 
 #. __ System menu:
 #: wininput.c:392
 msgid "&Move"
-msgstr "Переместить"
+msgstr "Mo&ver"
 
 #. __ System menu:
 #: wininput.c:394
 msgid "&Size"
-msgstr "Размер"
+msgstr "&Tamanho"
 
 #. __ System menu:
 #: wininput.c:396
 msgid "Mi&nimize"
-msgstr "Свернуть"
+msgstr "Mi&nimizar"
 
 #. __ System menu:
 #: wininput.c:398
 msgid "Ma&ximize"
-msgstr "Развернуть"
+msgstr "Ma&ximizar"
 
 #. __ System menu:
 #: wininput.c:400
 msgid "&Close"
-msgstr "Закрыть"
+msgstr "&Fechar"
 
 #. __ System menu:
 #: wininput.c:405
 msgid "Ne&w"
-msgstr "Новое окно"
+msgstr "N&ova"
 
 #. __ Context menu:
 #: wininput.c:412
 msgid "&Copy"
-msgstr "Копировать"
+msgstr "&Copiar"
 
 #. __ Context menu:
 #: wininput.c:422
 msgid "&Paste "
-msgstr "Вставить"
+msgstr "Co&lar "
 
 #. __ Context menu:
 #: wininput.c:427
 msgid "Copy → Paste"
-msgstr "Копировать → Вставить"
+msgstr "Copiar → Colar"
 
 #. __ Context menu:
 #: wininput.c:432
 msgid "S&earch"
-msgstr "Поиск"
+msgstr "P&rocurar"
 
 #. __ Context menu:
 #: wininput.c:439
 msgid "&Log to File"
-msgstr "Лог в файл"
+msgstr "&Registrar em arquivo"
 
 #. __ Context menu:
 #: wininput.c:445
 msgid "Character &Info"
-msgstr "Информация символов"
+msgstr "In&formações do caractere"
 
 #. __ Context menu:
 #: wininput.c:450
 msgid "&Reset"
-msgstr "Сброс"
+msgstr "R&edefinir"
 
 #. __ Context menu:
 #: wininput.c:458
 msgid "&Default Size"
-msgstr "Стандартный размер"
+msgstr "&Tamanho padrão"
 
 #. __ Context menu:
 #: wininput.c:466
 msgid "Scroll&bar"
-msgstr "Полоса прокрутки"
+msgstr "&Barra de rolagem"
 
 #. __ Context menu:
 #: wininput.c:472
 msgid "&Full Screen"
-msgstr "На весь экран"
+msgstr "Tela &cheia"
 
 #. __ Context menu:
 #: wininput.c:478
 msgid "Flip &Screen"
-msgstr "Альтернативный экран"
+msgstr "Al&ternar tela"
 
 #. __ System menu:
 #: wininput.c:488 wininput.c:568
 msgid "Copy &Title"
-msgstr "Копировать заголовок"
+msgstr "Copiar tít&ulo"
 
 #. __ System menu:
 #. __ Context menu:
 #. __ System menu:
 #: wininput.c:490 wininput.c:556 wininput.c:570
 msgid "&Options..."
-msgstr "Настройки ..."
+msgstr "O&pções..."
 
 #. __ Context menu, user commands
 #: wininput.c:501
 msgid "User commands"
-msgstr ""
+msgstr "Comandos do usuário"
 
 #. __ Context menu:
 #: wininput.c:518
 msgid "Ope&n"
-msgstr "Открыть"
+msgstr "A&brir"
 
 #. __ Context menu:
 #: wininput.c:526
 msgid "Select &All"
-msgstr "Выбрать все"
+msgstr "Se&lecionar tudo"
 
 #. __ Context menu:
 #: wininput.c:536
 msgid "Clear Scrollback"
-msgstr "Очистить скроллинг"
+msgstr "Limpar tela"
 
 #. __ Context menu:
 #: wininput.c:546
 msgid "Send Break"
-msgstr ""
+msgstr "Enviar break"
 
 #: winmain.c:1887
 msgid "Processes are running in session:"
-msgstr "Имеются запущенные процессы:"
+msgstr "Processos rodando na sessão:"
 
 #: winmain.c:1888
 msgid "Close anyway?"
-msgstr "Закрыть все равно?"
+msgstr "Fechar mesmo assim?"
 
 #: winmain.c:2634
 msgid "Try '--help' for more information"
-msgstr "Используйте '--help' для получения дополнительной информации"
+msgstr "Tente '--help' para mais informações"
 
 #: winmain.c:2642
 msgid "Could not load icon"
-msgstr "Не удалось загрузить иконку"
+msgstr "Não foi possível carregar o ícone"
 
 #: winmain.c:3289
 msgid "Usage:"
-msgstr "Применение:"
+msgstr "Uso:"
 
 #: winmain.c:3290
 msgid "[OPTION]... [ PROGRAM [ARG]... | - ]"
-msgstr "[ОПЦИЙ]... [ ПРОГРАММА [АРГУМЕНТЫ]... | - ]"
+msgstr "[OPÇÃO]... [ PROGRAMA [ARG]... | - ]"
 
 #. __ help text (output of -H / --help), after initial line ("synopsis")
 #: winmain.c:3293
@@ -1035,130 +1035,132 @@ msgid ""
 "  -V, --version         Print version information and exit\n"
 "See manual page for further command line options and configuration.\n"
 msgstr ""
-"Запуск нового сеанса терминала, на котором запущена указанная программа или "
-"оболочка пользователя.\n"
-"Если вместо программы указывается тире, вызовите оболочку в качестве "
-"оболочки входа.\n"
+"Inicia uma nova sessão de terminal executando o programa especificado na "
+"shell do usuário.\n"
+"Se um hífen foi fornecido ao invés de um programa, invoca a shell como uma "
+"shell de login.\n"
 "\n"
-"Параметры:\n"
-"  -c, --config FILE     Загрузить указанный файл конфигурации (также -C или -"
-"o ThemeFile)\n"
-"  -e, --exec ...        Аргументы в качестве команды для выполнения\n"
-"  -h, --hold never|start|error|always  Оставить окно открытым после "
-"выполнения комманды\n"
-"  -p, --position X,Y    Открыть окно в заданных координатах\n"
-"  -p, --position center|left|right|top|bottom  Открыть окно в особом "
-"положении\n"
-"  -p, --position @N     Открыть окно на мониторе N\n"
-"  -s, --size COLS,ROWS  Установить размер окна в символах (или COLSxROWS)\n"
-"  -s, --size maxwidth|maxheight  Установить максимальный размер окна\n"
-"  -t, --title TITLE     Установить заголовок окна (также -Т)\n"
-"  -w, --window normal|min|max|full|hide  Установить начальное состояние "
-"окна\n"
-"  -i, --icon FILE[,IX]  Загрузить значок из файла, при необходимости с "
-"индексом\n"
-"  -l, --log FILE|-      Журнал вывод в файл или стандартный вывод\n"
-"      --nobidi|--nortl  Отключить двунаправленный текст(справа-налево)\n"
-"  -o, --option OPT=VAL  Установить/переопределить файл конфигураций с "
-"заданными вариантами переменных/переопределении\n"
-"  -B, --Border frame|void  Использовать границы окна\n"
-"  -R, --Report s|o      Отчет позиций окна (короткий/длинный) после выхода\n"
-"      --nopin           Сделать этот экземпляр невидимым на панели задач\n"
-"  -D, --daemon          Запустить новый экземпляр с клавишами быстрого "
-"доступа Windows\n"
-"  -H, --help            Показать справку и выйти\n"
-"  -V, --version         Вывести информацию о версии и выйти\n"
-"Смотрите страницу руководства для параметров командной строки и "
-"конфигурации.\n"
+"Opções:\n"
+"  -c, --config ARQUIVO     Carrega o arquivo de conf. especificado (cf. -C "
+"ou -o ThemeFile)\n"
+"  -e, --exec ...        Trata os argumentos seguintes como o comando a ser "
+"executado\n"
+"  -h, --hold never|start|error|always  Mantém a janela aberta após o comando "
+"terminar\n"
+"  -p, --position X,Y    Abre a janela nas coordenadas especificadas\n"
+"  -p, --position center|left|right|top|bottom  Abre a janela em uma posição "
+"especial\n"
+"  -p, --position @N     Abre a janela no monitor N\n"
+"  -s, --size COLS,LINHAS  Define o tamanho da tela em caracteres (tbm. dá "
+"com COLSxLINHAS)\n"
+"  -s, --size largmax|altmax  Define o tam. máx. da tela nas dimensões "
+"especificadas\n"
+"  -t, --title TÍTULO     Define o título da janela (padrão: o comando "
+"invocado) (cf. -T)\n"
+"  -w, --window normal|min|max|full|hide  Define o estado inicial da janela\n"
+"  -i, --icon ARQUIVO[,IND]  Carrega o ícone da janela de um arquivo, opcion. "
+"com o índice\n"
+"  -l, --log ARQUIVO|-      Registra a saída em um arquivo ou no stdout\n"
+"      --nobidi|--nortl  Desativa o bidi (suporte a esquerda-para-direita)\n"
+"  -o, --option OPC=VAL  Define/sobrescreve a opção no arq. de config. com o "
+"valor dado\n"
+"  -B, --Border frame|void  Usar borda fina/nenhuma borda na janela\n"
+"  -R, --Report s|o      Informar posição da janela (curta/longa) após a "
+"saída\n"
+"      --nopin           Impede que essa instância seja afixável na barra de "
+"tarefas\n"
+"  -D, --daemon          Inicia uma nova instância com tecla de atalho "
+"Windows\n"
+"  -H, --help            Mostra a ajuda e encerra\n"
+"  -V, --version         Mostra informações de versão e encerra\n"
+"Veja a página do manual para mais opções de linha de comando e "
+"configurações.\n"
 
 #: winmain.c:3449 winmain.c:3545 winmain.c:3552
 msgid "WSL distribution '%s' not found"
-msgstr ""
+msgstr "Distribuição WSL '%s' não encontrada"
 
 #: winmain.c:3580
 msgid "Duplicate option '%s'"
-msgstr "Дублированный вариант '%s'"
+msgstr "Opção repetida: '%s'"
 
 #: winmain.c:3588
 msgid "Unknown option '%s'"
-msgstr "Неизвестный параметр '%s'"
+msgstr "Opção desconhecida: '%s'"
 
 #: winmain.c:3590
 msgid "Option '%s' requires an argument"
-msgstr "Параметр '%s' требует аргумент"
+msgstr "A opção '%s' precisa de um argumento"
 
 #: winmain.c:3617
 msgid "Syntax error in position argument '%s'"
-msgstr "Ошибка синтаксиса в позиции аргумента '%s'"
+msgstr "Erro de sintaxe no argumento de posição '%s'"
 
 #: winmain.c:3628
 msgid "Syntax error in size argument '%s'"
-msgstr "Ошибка синтаксиса в размере аргумента '%s'"
+msgstr "Erro de sintaxe no argumento de tamanho '%s'"
 
 #: winmain.c:3752
 msgid "Syntax error in geometry argument '%s'"
-msgstr "Ошибка синтаксиса в размере аргумента '%s'"
+msgstr "Erro de sintaxe no argumento de geometria '%s'"
 
 #: winmain.c:3827
 msgid "Mintty could not detach from caller, starting anyway"
-msgstr ""
-"Mintty не может отключится от вызывающего метода, запуск в любом случае"
+msgstr "O Mintty não pôde se desanexar do chamador, iniciando mesmo assim"
 
 #: winmain.c:4065
 msgid "Using default title due to invalid characters in program name"
-msgstr ""
-"Использование заголовка по умолчанию из-за недопустимых символов в имени "
-"программы"
+msgstr "Usando título padrão devido a caracteres inválidos no nome do programa"
 
 #. __ label of search bar close button; not actually "localization"
 #: winsearch.c:241
 msgid "X"
-msgstr ""
+msgstr "X"
 
 #. __ label of search bar prev button; not actually "localization"
 #: winsearch.c:245
 msgid "◀"
-msgstr ""
+msgstr "◀"
 
 #. __ label of search bar next button; not actually "localization"
 #: winsearch.c:249
 msgid "▶"
-msgstr ""
+msgstr "▶"
 
 #. __ Options - Text: font properties information ("leading" ("ledding"): add. row spacing)
 #: wintext.c:139
 msgid "Leading: %d, Bold: %s, Underline: %s"
-msgstr ""
+msgstr "Distância: %d, Negrito: %s, Sublinhado: %s"
 
 #. __ Options - Text: font properties: value taken from font
 #: wintext.c:141
 msgid "font"
-msgstr ""
+msgstr "fonte"
 
 #. __ Options - Text: font properties: value affected by option
 #: wintext.c:143
 msgid "manual"
-msgstr ""
+msgstr "manual"
 
 #: wintext.c:387
 msgid "Font not found, using system substitute"
-msgstr "Шрифт не найден, используя систему замены"
+msgstr "Fonte não encontrada. Usando substituta do sistema."
 
 #: wintext.c:394
 msgid "Font has limited support for character ranges"
-msgstr "Шрифт имеет ограниченную поддержку диапазонов символов"
+msgstr "A fonte tem suporte limitado a intervalos de caracteres"
 
 #: wintext.c:500
 msgid "Font installation corrupt, using system substitute"
-msgstr "Установка шрифта прервана, используя систему замены"
+msgstr "Instalação da fonte está corrompida. Usando substituta do sistema."
 
 #: wintext.c:513
 msgid "Font does not support system locale"
-msgstr "Шрифт не поддерживает язык системы"
+msgstr "A fonte é incompatível com o idioma do sistema"
 
 #: appinfo.h:61
 msgid "There is no warranty, to the extent permitted by law."
-msgstr "Нет никаких гарантий, в пределах допускаемых законом."
+msgstr "Não há garantia, na medida permitida por lei."
 
 #. __ %s: WEBSITE (URL)
 #: appinfo.h:66
@@ -1168,7 +1170,8 @@ msgid ""
 "%s.\n"
 "See also the Wiki there for further hints, thanks and credits."
 msgstr ""
-"Сообщите об ошибках или предложите улучшения на странице проекта mintty, "
-"расположенного по адресу\n"
+"Informe bugs ou sugira melhorias no gerenciador de issues na página do "
+"projeto do Mintty no endereço\n"
 "%s.\n"
-"Смотрите также там Wiki для советов и подсказок."
+"Veja por lá também a Wiki do projeto para maiores dicas, agradecimentos e "
+"créditos."

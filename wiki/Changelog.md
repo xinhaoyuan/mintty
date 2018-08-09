@@ -1,30 +1,72 @@
+### 2.9.0 (1 July 2018) ###
+
+Highlights (details see below)
+  * Background image and texture support.
+  * Enhanced multi-monitor DPI handling.
+  * Underline styles and colours, CMYK colour specifications.
+  * Outer scrollbar mode, xterm-compatible.
+  * Enhanced text selection mouse support.
+  * Enhanced quick window switching.
+  * Tweaked start error handling.
+  * Tweaked WSL support.
+
 Character attributes and rendering
   * Support for colon-separated SGR sub-parameters (ISO/IEC 8613-6) (xterm 282):
   * SGR escapes for ISO/IEC 8613-6 RGB, CMY, CMYK, and indexed colour formats.
   * DECRQSS uses SGR sub-parameters for colour specifications (xterm 331).
   * SGR 4:1...4:5 for underline styles solid, double, wavy, dotted, dashed.
   * SGR 58/59 for underline colour (kitty, iTerm2).
+  * Fixed (almost) selection highlighting of emojis.
+  * Drawing Unicode Block Elements which are broken in many fonts (#264).
+  * Fixed initial bold as font suppression glitch (mintty/wsltty#103).
 
-Window handling
-  * Fixed scrollbar toggle (Ctrl+Shift+O) from forcing scrollbar to the right.
-  * Preventing font zooming after scrollbar toggle (Ctrl+Shift+O).
+Window control
   * DECSET 30 to enable/disable outer scrollbar (like xterm) (#159, ~#262).
-  * Ctrl+mouse-move hovering underlines URLs and filenames (#173).
   * DECSET 1046 enables/disables alternate screen switching (xterm 331).
   * Cursor style modes DECSET 12 (AT&T 610) (xterm 331) and SM 33/34 (Wyse).
-  * Enable Win+Shift move coupling of tab sets if SessionGeomSync ≥ 2 (#600).
+
+Scrollbar
+  * Fixed scrollbar toggle (Ctrl+Shift+O) from forcing scrollbar to the right.
+  * Preventing font zooming after scrollbar toggle (Ctrl+Shift+O).
+
+Window layout
+  * Background image or texture support (#18, #666).
+
+Multi-monitor support
+  * Using Windows DPI handling V2, avoiding fluttering (#774, #470, #492, ~#566, ~#547).
+
+Text selection
   * Drag-and-drop selection after focus click enabled by combined cell and time distance (#717).
   * Only suppress focus-click selection if focus reporting disabled or mouse reporting not effective (#717).
-  * Background image or texture support (#18, #666).
+  * Ctrl+mouse-move hovering underlines URLs and filenames (#173).
+  * Selection highlighting can also indicate selection size (#660).
+
+Window handling
+  * Revised Ctrl+(Shift+)Tab window switching (#773).
+  * Ctrl+Ctrl+(Shift+)Tab for window switching including iconized windows (#735).
+  * Win+Shift move coupling of tab sets if SessionGeomSync ≥ 2 (#600, #699).
 
 Configuration
   * CMY(K) colour specifications in OSC sequences and config file.
-  * Option Background to set background image or texture (#18, #666).
+  * Option Background and OSC 11 to set background image or texture (#18, #666).
+  * Option SelectionShowSize to enable selection size indication (#660).
 
-Other
+Themes management
   * Fixed syntax error in `mintheme` tool (#764).
   * Option `mintheme -d -q` for decimal colour format (#718).
-  * Updated Emoji data according to Unicode.org.
+  * Supporting `mintheme` tool on WSL.
+  * Options `mintheme -p` and `mintheme -t` to set background picture or texture.
+  * Options `mintheme -s` and `mintheme -S` for theme visualization and comparison.
+
+Other
+  * Updated Emoji data and built-in width data to Unicode 11.0.
+  * Enabled OSC 7 current directory injection for Ctrl+click in WSL (mintty/wsltty#104, mintty/wsltty#19).
+  * Reporting start error (exit status 255) (#745).
+  * Changed start error exit code from 255 to 126 (#745).
+  * Fixed slowdown of Character Info mode if Unicode data are not deployed.
+  * Option --WSLmode to tune behaviour for WSL distro but not launch (mintty/wsltty#99).
+  * WSLtty appx mode triggered statically or dynamically (mintty/wsltty.appx#3).
+  * Clarified additional configuration requirements for option TaskCommands in the manual.
 
 ### 2.8.5 (14 Apr 2018) ###
 
@@ -426,7 +468,7 @@ Keyboard:
 
 Other:
   * Suppressing repeated font error messages.
-  * Enabled link-click in wsltty (#164).
+  * Enabled link-click in wsltty (~#164).
 
 ### 2.7.0 (13 Nov 2016) ###
 

@@ -69,7 +69,7 @@ typedef struct {
   bool show_hidden_fonts;
   char font_smoothing;
   char font_render;
-  char bold_as_font;    // 0 = false, 1 = true, -1 = undefined
+  bool bold_as_font;
   bool bold_as_colour;
   bool allow_blinking;
   string locale;
@@ -106,6 +106,7 @@ typedef struct {
   bool clicks_target_app;
   char click_target_mod;
   bool hide_mouse;
+  bool elastic_mouse;
   // Window
   int cols, rows;
   int scrollback_lines;

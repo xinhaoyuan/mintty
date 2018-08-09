@@ -110,7 +110,13 @@ static bool prevent_pinning = false;
 bool support_wsl = false;
 wstring wsl_basepath = W("");
 static char * wsl_guid = 0;
+static bool wsl_launch = false;
 static bool start_home = false;
+#ifdef WSLTTY_APPX
+static bool wsltty_appx = true;
+#else
+static bool wsltty_appx = false;
+#endif
 
 
 static HBITMAP caretbm;
@@ -908,11 +914,18 @@ static long current_monitor = 1 - 1;  // assumption for MonitorFromWindow
        stores info of primary monitor
    search_monitors(&x, &y, mon, false/true, 0)
      returns index of given monitor (0/primary if not found)
-   search_monitors(&x, &y, 0, false/true, 0)
+   search_monitors(&x, &y, 0, false, 0)
+     returns number of monitors;
+       stores virtual screen size
+   search_monitors(&x, &y, 0, 2, &moninfo)
+     returns number of monitors;
+       stores virtual screen top left corner
+       stores virtual screen size
+   search_monitors(&x, &y, 0, true, 0)
      prints information about all monitors
  */
 int
-search_monitors(int * minx, int * miny, HMONITOR lookup_mon, bool get_primary, MONITORINFO *mip)
+search_monitors(int * minx, int * miny, HMONITOR lookup_mon, int get_primary, MONITORINFO *mip)
 {
 #ifdef debug_display_monitors_mockup
   BOOL
@@ -954,9 +967,10 @@ search_monitors(int * minx, int * miny, HMONITOR lookup_mon, bool get_primary, M
   int moni_found = 0;
   * minx = 0;
   * miny = 0;
+  RECT vscr = (RECT){0, 0, 0, 0};
   HMONITOR refmon = 0;
   HMONITOR curmon = lookup_mon ? 0 : MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST);
-  bool print_monitors = !lookup_mon && !mip;
+  bool print_monitors = !lookup_mon && !mip && get_primary;
 #ifdef debug_display_monitors
   print_monitors = !lookup_mon;
 #endif
@@ -988,6 +1002,10 @@ search_monitors(int * minx, int * miny, HMONITOR lookup_mon, bool get_primary, M
       *minx = fr.right - fr.left;
     if (*miny == 0 || *miny > fr.bottom - fr.top)
       *miny = fr.bottom - fr.top;
+    vscr.top = min(vscr.top, fr.top);
+    vscr.left = min(vscr.left, fr.left);
+    vscr.right = max(vscr.right, fr.right);
+    vscr.bottom = max(vscr.bottom, fr.bottom);
 
     if (print_monitors) {
       printf("Monitor %d %s %s width,height %4d,%4d (%4d,%4d...%4d,%4d)\n", 
@@ -1002,7 +1020,13 @@ search_monitors(int * minx, int * miny, HMONITOR lookup_mon, bool get_primary, M
   }
 
   EnumDisplayMonitors(0, 0, monitor_enum, 0);
-  if (lookup_mon) {
+
+  if (!lookup_mon && !mip && !get_primary) {
+    *minx = vscr.right - vscr.left;
+    *miny = vscr.bottom - vscr.top;
+    return moni;
+  }
+  else if (lookup_mon) {
     return moni_found;
   }
   else if (mip) {
@@ -1011,6 +1035,10 @@ search_monitors(int * minx, int * miny, HMONITOR lookup_mon, bool get_primary, M
       refmon = MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST);
     mip->cbSize = sizeof(MONITORINFO);
     GetMonitorInfo(refmon, mip);
+    if (get_primary == 2) {
+      *minx = vscr.left;
+      *miny = vscr.top;
+    }
     return moni;  // number of monitors
   }
   else
@@ -1060,7 +1088,7 @@ win_is_iconic(void)
   return IsIconic(wnd);
 }
 
-void
+static void
 win_get_pos(int *xp, int *yp)
 {
   RECT r;
@@ -1070,14 +1098,39 @@ win_get_pos(int *xp, int *yp)
 }
 
 void
-win_get_pixels(int *height_p, int *width_p)
+win_get_scrpos(int *xp, int *yp, bool with_borders)
 {
   RECT r;
   GetWindowRect(wnd, &r);
-  // report inner pixel size, without padding, like xterm:
-  int sy = win_search_visible() ? SEARCHBAR_HEIGHT : 0;
-  *height_p = r.bottom - r.top - extra_height - 2 * PADDING - sy;
-  *width_p = r.right - r.left - extra_width - 2 * PADDING;
+  *xp = r.left;
+  *yp = r.top;
+  MONITORINFO mi;
+  int vx, vy;
+  search_monitors(&vx, &vy, 0, 2, &mi);
+  RECT fr = mi.rcMonitor;
+  *xp += fr.left - vx;
+  *yp += fr.top - vy;
+  if (with_borders) {
+    *xp += GetSystemMetrics(SM_CXSIZEFRAME) + PADDING;
+    *yp += GetSystemMetrics(SM_CYSIZEFRAME) + GetSystemMetrics(SM_CYCAPTION) + PADDING;
+  }
+}
+
+void
+win_get_pixels(int *height_p, int *width_p, bool with_borders)
+{
+  RECT r;
+  GetWindowRect(wnd, &r);
+  if (with_borders) {
+    *height_p = r.bottom - r.top;
+    *width_p = r.right - r.left
+             + (cfg.scrollbar ? GetSystemMetrics(SM_CXVSCROLL) : 0);
+  }
+  else {
+    int sy = win_search_visible() ? SEARCHBAR_HEIGHT : 0;
+    *height_p = r.bottom - r.top - extra_height - 2 * PADDING - sy;
+    *width_p = r.right - r.left - extra_width - 2 * PADDING;
+  }
 }
 
 void
@@ -1262,7 +1315,7 @@ win_set_geom(int y, int x, int height, int width)
   int scr_height = ar.bottom - ar.top, scr_width = ar.right - ar.left;
   int term_height, term_width;
   int term_x, term_y;
-  win_get_pixels(&term_height, &term_width);
+  win_get_pixels(&term_height, &term_width, false);
   win_get_pos(&term_x, &term_y);
 
   if (x >= 0)
@@ -2068,6 +2121,7 @@ static struct {
         when IDM_COPASTE: term_copy(); win_paste();
         when IDM_CLRSCRLBCK: term_clear_scrollback(); term.disptop = 0;
         when IDM_TOGLOG: toggle_logging();
+        when IDM_HTML: term_export_html();
         when IDM_TOGCHARINFO: toggle_charinfo();
         when IDM_PASTE: win_paste();
         when IDM_SELALL: term_select_all(); win_update(false);
@@ -2847,10 +2901,8 @@ regclose(HKEY key)
     RegCloseKey(key);
 }
 
-#define dont_debug_reg_lxss
-
 static int
-getlxssinfo(wstring wslname,
+getlxssinfo(bool list, wstring wslname,
             char ** wsl_guid, wstring * wsl_rootfs, wstring * wsl_icon)
 {
   static wstring lxsskeyname = W("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Lxss");
@@ -2871,7 +2923,7 @@ getlxssinfo(wstring wslname,
     return 0;
   }
 
-  int getlxssdistinfo(HKEY lxss, wchar * guid)
+  int getlxssdistinfo(bool list, HKEY lxss, wchar * guid)
   {
     wchar * rootfs;
     wchar * icon = 0;
@@ -2904,24 +2956,24 @@ getlxssinfo(wstring wslname,
       rootfs = wcsdup(bp);
       icon = legacy_icon();
     }
-#ifdef debug_reg_lxss
-    printf("WSL distribution name %ls\n", getregstr(lxss, guid, W("DistributionName")));
-    printf("-- guid %ls\n", guid);
-    printf("-- root %ls\n", rootfs);
-    printf("-- pack %ls\n", pn);
-    printf("-- icon %ls\n", icon);
-#endif
+    if (list) {
+      printf("WSL distribution name %ls\n", getregstr(lxss, guid, W("DistributionName")));
+      printf("-- guid %ls\n", guid);
+      printf("-- root %ls\n", rootfs);
+      printf("-- pack %ls\n", pn);
+      printf("-- icon %ls\n", icon);
+    }
     *wsl_guid = cs__wcstoutf(guid);
     *wsl_rootfs = rootfs;
     *wsl_icon = icon;
     return 0;
   }
 
-  if (!wslname || !*wslname) {
+  if (!list && (!wslname || !*wslname)) {
     wchar * dd = getregstr(HKEY_CURRENT_USER, lxsskeyname, W("DefaultDistribution"));
     int err;
     if (dd) {
-      err = getlxssdistinfo(lxss, dd);
+      err = getlxssdistinfo(false, lxss, dd);
       free(dd);
     }
     else {  // Legacy "Bash on Windows" installed only, no registry info
@@ -2968,8 +3020,11 @@ getlxssinfo(wstring wslname,
       ret = RegEnumKeyW(lxss, i, subkey, keylen);
       if (ret == ERROR_SUCCESS) {
           wchar * dn = getregstr(lxss, subkey, W("DistributionName"));
-          if (0 == wcscmp(dn, wslname)) {
-            int err = getlxssdistinfo(lxss, subkey);
+          if (list) {
+            getlxssdistinfo(true, lxss, subkey);
+          }
+          else if (0 == wcscmp(dn, wslname)) {
+            int err = getlxssdistinfo(false, lxss, subkey);
             regclose(lxss);
             return err;
           }
@@ -3005,8 +3060,7 @@ select_WSL(char * wsl)
   wchar * wslname = cs__mbstowcs(wsl ?: "");
   wstring wsl_icon;
   // set --rootfs implicitly
-  int err = getlxssinfo(wslname, &wsl_guid, &wsl_basepath, &wsl_icon);
-  free(wslname);
+  int err = getlxssinfo(false, wslname, &wsl_guid, &wsl_basepath, &wsl_icon);
   if (!err) {
     // set --icon if WSL specific icon exists
     if (wsl_icon) {
@@ -3019,7 +3073,10 @@ select_WSL(char * wsl)
     support_wsl = true;
     set_arg_option("Locale", strdup("C"));
     set_arg_option("Charset", strdup("UTF-8"));
+    if (!*cfg.app_id)
+      set_arg_option("AppID", asform("%s.%s", APPNAME, wsl ?: "WSL"));
   }
+  free(wslname);
   return err;
 }
 
@@ -3077,7 +3134,7 @@ wslicon(wchar * params)
       wslname[len] = 0;
       char * guid;
       wstring basepath;
-      int err = getlxssinfo(wslname, &guid, &basepath, &icon);
+      int err = getlxssinfo(false, wslname, &guid, &basepath, &icon);
       free(wslname);
       if (!err) {
         delete(basepath);
@@ -3353,6 +3410,7 @@ opts[] = {
   {"wsl",        no_argument,       0, ''},  // short option not enabled
 #if CYGWIN_VERSION_API_MINOR >= 74
   {"WSL",        optional_argument, 0, ''},  // short option not enabled
+  {"WSLmode",    optional_argument, 0, ''},  // short option not enabled
 #endif
   {"rootfs",     required_argument, 0, ''},  // short option not enabled
   {"dir~",       no_argument,       0, '~'},
@@ -3438,13 +3496,12 @@ main(int argc, char *argv[])
     int err = select_WSL(exearg);
     if (err)
       option_error(__("WSL distribution '%s' not found"), exearg ?: _("(Default)"), err);
+    else {
+      wsl_launch = true;
+      wsltty_appx = true;
+    }
   }
-#endif
 
-  // Load config files
-  // try global config file
-  load_config("/etc/minttyrc", true);
-#ifdef WSLTTY_APPX
   char * getlocalappdata(void)
   {
     // get appx-redirected system dir, as investigated by Biswapriyo Nath
@@ -3452,20 +3509,29 @@ main(int argc, char *argv[])
 #define KF_FLAG_FORCE_APP_DATA_REDIRECTION 0x00080000
 #endif
     HMODULE shell = load_sys_library("shell32.dll");
-    HRESULT (WINAPI *pSHGetKnownFolderPath)(GUID, DWORD, HANDLE, wchar**) =
+    HRESULT (WINAPI *pSHGetKnownFolderPath)(const GUID*, DWORD, HANDLE, wchar**) =
       (void *)GetProcAddress(shell, "SHGetKnownFolderPath");
     if (!pSHGetKnownFolderPath)
       return 0;
-    wchar * lappdata;
-    long hres = pSHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_FORCE_APP_DATA_REDIRECTION, 0, &lappdata);
+    wchar * wlappdata;
+    long hres = pSHGetKnownFolderPath(&FOLDERID_LocalAppData, KF_FLAG_FORCE_APP_DATA_REDIRECTION, 0, &wlappdata);
     if (hres)
       return 0;
     else
-      return path_win_w_to_posix(lappdata);
+      return path_win_w_to_posix(wlappdata);
   }
+
+  char * lappdata = 0;
+  if (wsltty_appx)
+    lappdata = getlocalappdata();
+#endif
+
+  // Load config files
+  // try global config file
+  load_config("/etc/minttyrc", true);
+#if CYGWIN_VERSION_API_MINOR >= 74
   // try Windows APPX local config location (wsltty.appx#3)
-  char * lappdata = getlocalappdata();
-  if (lappdata && *lappdata) {
+  if (wsltty_appx && lappdata && *lappdata) {
     string rc_file = asform("%s/.minttyrc", lappdata);
     load_config(rc_file, 2);
     delete(rc_file);
@@ -3523,6 +3589,13 @@ main(int argc, char *argv[])
       when '': wsl_basepath = path_posix_to_win_w(optarg);
 #if CYGWIN_VERSION_API_MINOR >= 74
       when '': {
+        int err = select_WSL(optarg);
+        if (err)
+          option_error(__("WSL distribution '%s' not found"), optarg ?: _("(Default)"), err);
+        else
+          wsl_launch = true;
+      }
+      when '': {
         int err = select_WSL(optarg);
         if (err)
           option_error(__("WSL distribution '%s' not found"), optarg ?: _("(Default)"), err);
@@ -3617,6 +3690,13 @@ main(int argc, char *argv[])
           when 'f':
             list_fonts(true);
             exit(0);
+#if CYGWIN_VERSION_API_MINOR >= 74
+          when 'W': {
+            wstring wsl_icon;
+            getlxssinfo(true, 0, &wsl_guid, &wsl_basepath, &wsl_icon);
+            exit(0);
+          }
+#endif
         }
       when 'u': cfg.create_utmp = true;
       when '':
@@ -3817,7 +3897,7 @@ main(int argc, char *argv[])
 
   // Work out what to execute.
   argv += optind;
-  if (wsl_guid) {
+  if (wsl_guid && wsl_launch) {
 #define dont_debug_wsl
     cmd = "/bin/wslbridge";
     argc -= optind;
@@ -3828,11 +3908,7 @@ main(int argc, char *argv[])
       //argc--;
       //argc++; // for "-l"
     }
-#ifdef WSLTTY_APPX
-    char ** new_argv = newn(char *, argc + 10 + start_home);
-#else
-    char ** new_argv = newn(char *, argc + 8 + start_home);
-#endif
+    char ** new_argv = newn(char *, argc + 8 + start_home + (wsltty_appx ? 2 : 0));
     char ** pargv = new_argv;
     if (login_dash) {
       *pargv++ = "-wslbridge";
@@ -3853,11 +3929,11 @@ main(int argc, char *argv[])
     if (start_home)
       *pargv++ = "-C~";
 
-#ifdef WSLTTY_APPX
+#if CYGWIN_VERSION_API_MINOR >= 74
     // provide wslbridge-backend in a reachable place for invocation
     bool copyfile(char * fn, char * tn, bool overwrite)
     {
-#ifdef copyfile_posix
+# ifdef copyfile_posix
       int f = open(fn, O_BINARY | O_RDONLY);
       if (!f)
         return false;
@@ -3879,16 +3955,17 @@ main(int argc, char *argv[])
       close(f);
       close(t);
       return res;
-#else
+# else
       wchar * src = path_posix_to_win_w(fn);
       wchar * dst = path_posix_to_win_w(tn);
       bool ok = CopyFileW(src, dst, !overwrite);
       free(dst);
       free(src);
       return ok;
-#endif
+# endif
     }
-    if (lappdata && *lappdata) {
+
+    if (wsltty_appx && lappdata && *lappdata) {
       char * wslbridge_backend = asform("%s/wslbridge-backend", lappdata);
 
       bool ok = copyfile("/bin/wslbridge-backend", wslbridge_backend, true);
@@ -3937,13 +4014,6 @@ main(int argc, char *argv[])
     argv[0] = arg0;
     argv[1] = 0;
   }
-#ifdef debug_reg_lxss
-  printf("exec <%s> argv", cmd);
-  char ** a = argv;
-  while (*a)
-    printf(" <%s>", *a++);
-  printf("\n");
-#endif
 
   // Load icon if specified.
   HICON large_icon = 0, small_icon = 0;
@@ -4340,7 +4410,7 @@ main(int argc, char *argv[])
 #endif
   if (report_moni) {
     int x, y;
-    int n = search_monitors(&x, &y, 0, false, 0);
+    int n = search_monitors(&x, &y, 0, true, 0);
     printf("%d monitors,      smallest width,height %4d,%4d\n", n, x, y);
 #ifndef debug_display_monitors_mockup
     exit(0);
