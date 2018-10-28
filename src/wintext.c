@@ -448,7 +448,6 @@ win_init_fontfamily(HDC dc, int findex)
 
   trace_resize(("--- init_fontfamily\n"));
   TEXTMETRIC tm;
-  int fontsize[FONT_UNDERLINE + 1];
 
   for (uint i = 0; i < FONT_BOLDITAL; i++) {
     if (ff->fonts[i])
@@ -516,6 +515,12 @@ win_init_fontfamily(HDC dc, int findex)
   }
 #endif
 
+  float latin_char_width, greek_char_width, line_char_width, cjk_char_width;
+  GetCharWidthFloatW(dc, 0x0041, 0x0041, &latin_char_width);
+  GetCharWidthFloatW(dc, 0x03B1, 0x03B1, &greek_char_width);
+  GetCharWidthFloatW(dc, 0x2500, 0x2500, &line_char_width);
+  GetCharWidthFloatW(dc, 0x4E00, 0x4E00, &cjk_char_width);
+
   if (!findex) {
     ff->row_spacing = row_padding(tm.tmInternalLeading, tm.tmExternalLeading);
     trace_font(("00 height %d avwidth %d asc %d dsc %d intlead %d extlead %d %ls\n", 
@@ -532,7 +537,8 @@ win_init_fontfamily(HDC dc, int findex)
     ff->col_spacing = cfg.col_spacing;
 
     cell_height = tm.tmHeight + ff->row_spacing;
-    cell_width = tm.tmAveCharWidth + ff->col_spacing;
+    //cell_width = tm.tmAveCharWidth + ff->col_spacing;
+    cell_width = (int)(latin_char_width * 16) + ff->col_spacing;
 
     line_scale = cell_height * 100 / abs(font_height);
 
@@ -542,20 +548,18 @@ win_init_fontfamily(HDC dc, int findex)
   }
   else {
     ff->row_spacing = cell_height - tm.tmHeight;
-    ff->col_spacing = cell_width - tm.tmAveCharWidth;
+    //ff->col_spacing = cell_width - tm.tmAveCharWidth;
+    ff->col_spacing = cell_width - (int)(latin_char_width * 16);
   }
 
 #ifdef debug_create_font
   printf("size %d -> height %d -> height %d\n", font_size, font_height, cell_height);
 #endif
 
-  ff->font_dualwidth = (tm.tmMaxCharWidth >= tm.tmAveCharWidth * 3 / 2);
+  //ff->font_dualwidth = (tm.tmMaxCharWidth >= tm.tmAveCharWidth * 3 / 2);
+  ff->font_dualwidth = (cjk_char_width >= latin_char_width * 3 / 2);
 
   // Determine whether ambiguous-width characters are wide in this font */
-  float latin_char_width, greek_char_width, line_char_width;
-  GetCharWidthFloatW(dc, 0x0041, 0x0041, &latin_char_width);
-  GetCharWidthFloatW(dc, 0x03B1, 0x03B1, &greek_char_width);
-  GetCharWidthFloatW(dc, 0x2500, 0x2500, &line_char_width);
   if (!findex)
     font_ambig_wide =
       greek_char_width >= latin_char_width * 1.5 ||
@@ -652,6 +656,7 @@ win_init_fontfamily(HDC dc, int findex)
   if (ff->descent >= cell_height)
     ff->descent = cell_height - 1;
 
+  int fontsize[FONT_UNDERLINE + 1];
 #ifdef handle_baseline_leap
   int base_ascent = tm.tmAscent;
 #endif
@@ -660,9 +665,10 @@ win_init_fontfamily(HDC dc, int findex)
       if (SelectObject(dc, ff->fonts[i]) && GetTextMetrics(dc, &tm)) {
         fontsize[i] = tm.tmAveCharWidth + 256 * tm.tmHeight;
         trace_font(("%02X height %d avwidth %d asc %d dsc %d intlead %d extlead %d %ls\n", 
-               i, (int)tm.tmHeight, (int)tm.tmAveCharWidth, (int)tm.tmAscent, (int)tm.tmDescent, 
-               (int)tm.tmInternalLeading, (int)tm.tmExternalLeading, 
-               ff->name));
+                    i, (int)tm.tmHeight, (int)tm.tmAveCharWidth, 
+                    (int)tm.tmAscent, (int)tm.tmDescent, 
+                    (int)tm.tmInternalLeading, (int)tm.tmExternalLeading, 
+                    ff->name));
 #ifdef handle_baseline_leap
         if (i == FONT_BOLD && tm.tmAscent < base_ascent) {
           // for Courier New, this correlates with a significant visual leap 
@@ -702,6 +708,7 @@ win_init_fontfamily(HDC dc, int findex)
       ff->fonts[FONT_BOLD] = 0;
     }
   }
+
   trace_font(("bold_mode %d\n", ff->bold_mode));
   ff->fontflag[FONT_NORMAL] = true;
   ff->fontflag[FONT_BOLD] = true;
@@ -1139,12 +1146,19 @@ do_update(void)
 
 #include <math.h>
 
+/*
+   Indicate size of selection with a popup tip (option SelectionShowSize).
+   Future enhancements may be automatic position flipping depending 
+   on selection direction or if the tip reaches outside the screen.
+   Also the actual tip window should better be decoupled from the 
+   window size tip which is now abused for this feature.
+ */
 static void
 sel_update(bool update_sel_tip)
 {
   static bool selection_tip_active = false;
   //printf("sel_update tok %d sel %d act %d\n", tip_token, term.selected, selection_tip_active);
-  if (term.selected && update_sel_tip) {
+  if (term.selected && cfg.selection_show_size && update_sel_tip) {
     int cols, rows;
     if (term.sel_rect) {
       rows = abs(term.sel_end.y - term.sel_start.y) + 1;
@@ -1159,11 +1173,13 @@ sel_update(bool update_sel_tip)
     }
     RECT wr;
     GetWindowRect(wnd, &wr);
+    LONG style = GetWindowLong(wnd, GWL_STYLE);
     int x = wr.left
-          + GetSystemMetrics(SM_CXSIZEFRAME)
+          + ((style & WS_THICKFRAME) ? GetSystemMetrics(SM_CXSIZEFRAME) : 0)
           + PADDING + last_pos.x * cell_width;
     int y = wr.top
-          + GetSystemMetrics(SM_CYSIZEFRAME) + GetSystemMetrics(SM_CYCAPTION)
+          + ((style & WS_THICKFRAME) ? GetSystemMetrics(SM_CYSIZEFRAME) : 0)
+          + ((style & WS_CAPTION) ? GetSystemMetrics(SM_CYCAPTION) : 0)
           + PADDING + last_pos.y * cell_height;
 #ifdef debug_selection_show_size 
     cfg.selection_show_size = cfg.selection_show_size % 12 + 1;
@@ -1275,6 +1291,7 @@ win_set_ime_open(bool open)
  */
 
 static bool tiled = false;
+static bool ratio = false;
 static int alpha = -1;
 static LONG w = 0, h = 0;
 static HBRUSH bgbrush_bmp = 0;
@@ -1389,18 +1406,62 @@ drop_background_image_brush(void)
 }
 
 static void
+init_gdiplus(void)
+{
+  static GdiplusStartupInput gi = (GdiplusStartupInput){1, NULL, FALSE, FALSE};
+  static ULONG_PTR gis = 0;
+  if (!gis) {
+    GpStatus s = GdiplusStartup(&gis, &gi, NULL);
+    gpcheck("startup", s);
+  }
+}
+
+static bool
+get_image_size(wstring fn, uint * _bw, uint * _bh)
+{
+  GpStatus s;
+
+  init_gdiplus();
+
+  GpBitmap * gbm = 0;
+  s = GdipCreateBitmapFromFile(fn, &gbm);
+  gpcheck("bitmap from file", s);
+  if (s != Ok || !gbm)
+    return false;
+
+  GpStatus stsz = GdipGetImageWidth(gbm, _bw);
+  gpcheck("get size", stsz);
+  if (stsz == Ok) {
+    stsz = GdipGetImageHeight(gbm, _bh);
+    gpcheck("get size", stsz);
+  }
+
+  s = GdipDisposeImage(gbm);
+  gpcheck("dispose bitmap", s);
+
+  if (stsz != Ok) {
+    HBITMAP hbm = 0;
+    s = GdipCreateHBITMAPFromBitmap(gbm, &hbm, 0);
+    gpcheck("convert bitmap", s);
+
+    BITMAP bm0;
+    if (!GetObject(hbm, sizeof(BITMAP), &bm0))
+      return false;
+    *_bw = bm0.bmWidth;
+    *_bh = bm0.bmHeight;
+    DeleteObject(hbm);
+  }
+  return true;
+}
+
+static void
 load_background_image_brush(HDC dc, wstring fn)
 {
   GpStatus s;
 
-  drop_background_image_brush();
+  init_gdiplus();
 
-  static GdiplusStartupInput gi = (GdiplusStartupInput){1, NULL, FALSE, FALSE};
-  static ULONG_PTR gis = 0;
-  if (!gis) {
-    s = GdiplusStartup(&gis, &gi, NULL);
-    gpcheck("startup", s);
-  }
+  drop_background_image_brush();
 
   // try to provide a GDI brush from a GDI+ image
   // (because a GDI brush is much more efficient than a GDI+ brush)
@@ -1420,10 +1481,10 @@ load_background_image_brush(HDC dc, wstring fn)
 
       uint bw, bh;
       GpStatus stsz = GdipGetImageWidth(gbm, &bw);
-      gpcheck("get size", s);
+      gpcheck("get size", stsz);
       if (stsz == Ok) {
         stsz = GdipGetImageHeight(gbm, &bh);
-        gpcheck("get size", s);
+        gpcheck("get size", stsz);
       }
 
       s = GdipDisposeImage(gbm);
@@ -1437,6 +1498,41 @@ load_background_image_brush(HDC dc, wstring fn)
         bw = bm0.bmWidth;
         bh = bm0.bmHeight;
       }
+
+#ifdef scale_to_aspect_ratio_asynchronously
+      // keep aspect ratio of background image if requested
+      static wchar * prevbg = 0;
+      bool isnewbg = !prevbg || wcscmp(cfg.background, prevbg);
+      printf("isnewbg %d <%ls> <%ls>\n", isnewbg, cfg.background, prevbg);
+      if (ratio && isnewbg && abs(bw * h - bh * w) > 5) {
+        if (prevbg)
+          free(prevbg);
+        prevbg = wcsdup(cfg.background);
+
+        int xh, xw;
+        if (bw * h < bh * w) {
+          xh = h;
+          xw = bw * xh / bh;
+        } else {
+          xw = w;
+          xh = bh * xw / bw;
+        }
+        int sy = win_search_visible() ? SEARCHBAR_HEIGHT : 0;
+        printf("%dx%d (%dx%d) -> %dx%d\n", (int)h, (int)w, bh, bw, xh, xw);
+        // rescale window to aspect ratio of background image
+        win_set_pixels(xh - 2 * PADDING - sy, xw - 2 * PADDING);
+        // WARNING: rescaling asynchronously at this point makes 
+        // terminal geometry (term.rows, term.cols) inconsistent with 
+        // running operations and may crash mintty; 
+        // postponing the resizing with SendMessage does not help;
+        // therefore try to update mintty data now; 
+        // this seems to help a bit, but not completely;
+        // that's why this embedded approach is disabled
+        do_update();
+        w = xw;
+        h = xh;
+      }
+#endif
 
       // prepare source memory DC and select the source bitmap into it
       HDC dc0 = CreateCompatibleDC(dc);
@@ -1613,31 +1709,19 @@ win_flush_background(bool clearbg)
 #endif
 }
 
-static void
-load_background_brush(HDC dc)
+static wchar *
+get_bg_filename(void)
 {
-  // we could try to hook into win_adapt_term_size to update the full 
-  // screen background and reload the background on demand, 
-  // but let's rather handle this autonomously here
-  RECT cr;
-  GetClientRect(wnd, &cr);
-  if (cr.right - cr.left == w && cr.bottom - cr.top == h)
-    return;  // keep brush
-
-  if (tiled)
-    return;  // do not scale tiled brush
-
-  // remember terminal screen size
-  w = cr.right - cr.left;
-  h = cr.bottom - cr.top;
-
-  // adjust paint screen size
-  if (win_search_visible())
-    cr.bottom -= SEARCHBAR_HEIGHT;
+  tiled = false;
+  ratio = false;
 
   wchar * bgfn = (wchar *)cfg.background;
   if (*bgfn == '*') {
     tiled = true;
+    bgfn++;
+  }
+  else if (*bgfn == '%') {
+    ratio = true;
     bgfn++;
   }
   else if (*bgfn == '_') {
@@ -1680,6 +1764,32 @@ load_background_brush(HDC dc)
   printf("loading brush <%ls> <%s> <%ls>\n", cfg.background, bf, bgfn);
 #endif
   free(bf);
+  return bgfn;
+}
+
+static void
+load_background_brush(HDC dc)
+{
+  // we could try to hook into win_adapt_term_size to update the full 
+  // screen background and reload the background on demand, 
+  // but let's rather handle this autonomously here
+  RECT cr;
+  GetClientRect(wnd, &cr);
+  if (cr.right - cr.left == w && cr.bottom - cr.top == h)
+    return;  // keep brush
+
+  if (tiled)
+    return;  // do not scale tiled brush
+
+  // remember terminal screen size
+  w = cr.right - cr.left;
+  h = cr.bottom - cr.top;
+
+  // adjust paint screen size
+  if (win_search_visible())
+    cr.bottom -= SEARCHBAR_HEIGHT;
+
+  wchar * bgfn = get_bg_filename();  // also set tiled and alpha
 
   HBITMAP
   load_background_bitmap(wstring fn)
@@ -1749,6 +1859,62 @@ fill_background(HDC dc, RECT * boxp)
     || (bgbrush_img && fill_rect(dc, boxp, bgbrush_img))
 #endif
     ;
+}
+
+#define dont_debug_aspect_ratio
+
+void
+scale_to_image_ratio()
+{
+#if CYGWIN_VERSION_API_MINOR >= 74
+  if (*cfg.background != '%')
+    return;
+  wchar * bgfn = get_bg_filename();
+#ifdef debug_aspect_ratio
+  printf("scale_to_image_ratio <%ls> ratio %d\n", bgfn, ratio);
+#endif
+  if (!ratio)
+    return;
+
+  uint bw, bh;
+  int res = get_image_size(bgfn, &bw, &bh);
+  free(bgfn);
+  if (!res || !bw || !bh)
+    return;
+
+  RECT cr;
+  GetClientRect(wnd, &cr);
+  // remember terminal screen size
+  int w = cr.right - cr.left;
+  int h = cr.bottom - cr.top;
+#ifdef debug_aspect_ratio
+  printf("  cur w %d h %d img bw %d bh %d\n", (int)w, (int)h, bw, bh);
+#endif
+
+  if (abs(bw * h - bh * w) < w + h)
+    return;
+
+  w = max(w, ini_width);
+  h = max(h, ini_height);
+#ifdef debug_aspect_ratio
+  printf("  max w %d h %d\n", (int)w, (int)h);
+#endif
+
+  int xh, xw;
+  if (bw * h < bh * w) {
+    xh = h;
+    xw = bw * xh / bh;
+  } else {
+    xw = w;
+    xh = bh * xw / bw;
+  }
+  int sy = win_search_visible() ? SEARCHBAR_HEIGHT : 0;
+#ifdef debug_aspect_ratio
+  printf("  %dx%d (%dx%d) -> %dx%d\n", (int)w, (int)h, bw, bh, xw, xh);
+#endif
+  // rescale window to aspect ratio of background image
+  win_set_pixels(xh - 2 * PADDING - sy, xw - 2 * PADDING);
+#endif
 }
 
 
@@ -3631,7 +3797,7 @@ win_paint(void)
        * With a texture/image background, we could try to paint that here 
          (invoked on WM_PAINT) or on WM_ERASEBKGND, but these messages are 
          not received sufficiently often, e.g. not when scrolling.
-       * So let's let's keep finer control and paint background in chunks 
+       * So let's keep finer control and paint background with text chunks 
          but not modify the established behaviour if there is no background.
      */
     colour bg_colour = colours[term.rvideo ? FG_COLOUR_I : BG_COLOUR_I];

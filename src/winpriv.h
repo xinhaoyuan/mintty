@@ -31,11 +31,13 @@ extern int line_scale;
 extern int PADDING;
 extern bool show_charinfo;
 extern void toggle_charinfo(void);
+extern void toggle_vt220(void);
 extern char * fontpropinfo(void);
 
 extern bool support_wsl;
 extern wstring wsl_basepath;
 
+extern int ini_width, ini_height;
 extern bool win_is_fullscreen;
 extern bool clipboard_token;
 extern uint dpi;
@@ -54,6 +56,7 @@ extern void win_font_cs_reconfig(bool font_changed);
 
 extern void win_update_scrollbar(bool inner);
 extern void win_adapt_term_size(bool sync_size_with_font, bool scale_font_with_size);
+extern void scale_to_image_ratio(void);
 
 extern void win_open_config(void);
 extern void * load_library_func(string lib, string func);
@@ -62,6 +65,7 @@ extern void set_dpi_auto_scaling(bool on);
 extern void win_update_transparency(bool opaque);
 extern void win_prefix_title(const wstring);
 extern void win_unprefix_title(const wstring);
+extern void win_set_icon(char * s, int icon_index);
 
 extern void win_show_tip(int x, int y, int cols, int rows);
 extern void win_destroy_tip(void);
@@ -92,5 +96,7 @@ extern int search_monitors(int * minx, int * miny, HMONITOR lookup_mon, int get_
 extern void win_set_ime_open(bool);
 
 extern void show_message(char * msg, UINT type);
+
+extern void win_close(void);
 
 #endif

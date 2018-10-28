@@ -42,16 +42,63 @@ instance would be focussed again with the associated hotkey. To have a
 new instance started with every usage of the hotkey, use the command-line 
 option ```-D``` for mintty in the shortcut target.
 
-_Note:_ About interaction problems of icon, shortcut, and the Windows taskbar:
-In a Windows desktop shortcut, to achieve consistent icon behaviour, 
-the same icon should be specified in the shortcut properties (Change Icon...) 
-and the mintty command line (Target:),
-or (beginning 2.2.3) no icon should be specified on the command line as 
-mintty will then take the icon from the invoking shortcut.
+### Taskbar icons ###
 
-_Note:_ It is suggested to _not_ use the option AppID in a Windows desktop 
-shortcut, or follow the advice about avoiding trouble with taskbar grouping 
-in the manual page.
+In a Windows desktop shortcut, (since mintty 2.2.3) it is suggested 
+to _not_ specify an icon in the command line, as mintty detects and uses 
+the icon from the invoking shortcut.
+If for any reason, an icon is to be specified, it should be the same 
+in the mintty command line (shortcut properties Target:) as in the 
+shortcut itself (Change Icon...).
+
+### Taskbar icon grouping ###
+
+Windows 7 and above use the application ID for grouping taskbar items.
+By default this setting is empty, in which case Windows groups taskbar
+items automatically based on their icon and command line.  This can be
+overridden by setting the AppID to a custom string, in which case windows
+with the same AppID are grouped together.
+
+The special value `AppID=@` causes mintty to derive an implicit AppID 
+from the WSL system name, in order to achieve WSL distribution-specific 
+taskbar grouping. This resolves taskbar grouping problems in some cases 
+(wsltty issue #96) but causes similar problems in other cases (issue #784).
+
+_Warning:_ Using this option in a Windows desktop shortcut may 
+cause trouble with taskbar grouping behaviour. If you need to do that, 
+the shortcut itself should also get attached with the same AppId.
+
+_Explanation:_ Note that Windows shortcut files have their own AppID.
+Hence, if an AppID is specified in the mintty settings, but not on a 
+taskbar-pinned shortcut for invoking mintty, clicking the pinned 
+shortcut will result in a separate taskbar item for the new mintty window, 
+rather than being grouped with the shortcut.
+To avoid this, the shortcut's AppID has to be set to the same string, 
+which can be done using the `Win7AppId` utility available cloned in 
+the mintty [utils repository](https://github.com/mintty/utils).
+
+
+## Window icons ##
+
+The icons (taskbar icon and title bar icon) can be changed dynamically 
+with an OSC I escape sequence. Example:
+
+```
+echo -e "\e]I;`printenv 'ProgramFiles(x86)'`/Mozilla Firefox/firefox.exe,4\a"
+```
+
+
+## Start errors ##
+
+### Error: could not fork child process ###
+
+If you are frequently facing this problem, it is not really a mintty issue, 
+but it may reportedly help if you turn off the Windows ASLR feature 
+for cygwin-based programs; turn off Mandatory ASLR for mintty, 
+cygwin-console-helper, your shell and other programs as described in 
+[issue #493](https://github.com/mintty/mintty/issues/493#issuecomment-361281995)
+or using Powershell commands as described in
+[wsltty issue #6](https://github.com/mintty/wsltty/issues/6#issuecomment-419589599).
 
 
 ## Supporting Linux/Posix subsystems ##
@@ -324,6 +371,17 @@ noremap! <Esc>O[ <C-c>
 ```
 
 
+## Keyboard issues in specific environments ##
+
+### Detecting AltGr in TeamViewer ###
+
+Windows provides AltGr using two virtual key codes (Ctrl and Menu) 
+sharing the same timestamp. TeamViewer is buggy with respect to the 
+timestamp. As a workaround, mintty can detect AltGr also from the 
+two key codes arriving with some delay. Setting 
+`CtrlAltDelayAltGr=16` or `CtrlAltDelayAltGr=20` is suggested.
+
+
 ## Using Ctrl+Tab to switch window pane in terminal multiplexers ##
 
 The _Ctrl+Tab_ and _Ctrl+Shift+Tab_ key combinations can be used to 
@@ -351,6 +409,13 @@ set -s user-keys[1] "\e[1;6I"
 bind-key -n User0 next-window
 bind-key -n User1 previous-window
 ```
+
+
+## Keyboard customization ##
+
+A number of options are available to customize the keyboard behaviour, 
+including user-defined function and keypad keys and Ctrl+Shift+key shortcuts.
+See the manual page for options and details.
 
 
 ## Compose key ##
@@ -647,14 +712,17 @@ ISO/IEC 8613-6 sub-parameters are supported.
 | 58:4:F:C:M:Y:K         | 59                | underline CMYK colour (*)     |
 | _any_                  | 0                 |                               |
 
-Note: The control sequences for Fraktur (“Gothic”) font are described 
-in ECMA-48, see also [wiki:ANSI code](https://en.wikipedia.org/wiki/ANSI_escape_code).
-To use this feature, it is suggested to install `F25 Blackletter Typewriter`.
+Note: Alternative fonts are configured with options Font1 ... Font10.
+They can also be dynamically changed with OSC sequence 50 which refers 
+to the respectively selected font attribute.
 
 Note: The control sequence for alternative font 1 overrides the identical 
 control sequence to select the VGA character set. Configuring alternative 
-font 1 is therefore discouraged. See the mintty manual page about how 
-to configure alternative fonts.
+font 1 is therefore discouraged.
+
+Note: The control sequences for Fraktur (“Gothic”) font are described 
+in ECMA-48, see also [wiki:ANSI code](https://en.wikipedia.org/wiki/ANSI_escape_code).
+To use this feature, it is suggested to install `F25 Blackletter Typewriter`.
 
 Note: RGB colour values are scaled to a maximum of 255 (=100%).
 CMY(K) colour values are scaled to a maximum of the given parameter F (=100%).
@@ -662,6 +730,8 @@ CMY(K) colour values are scaled to a maximum of the given parameter F (=100%).
 Note: The emoji style attribute sets the display preference for a number 
 of characters that have emojis but would be displayed with text style 
 by default (e.g. decimal digits).
+
+Note: Text attributes can be disabled with option SuppressSGR (see manual).
 
 As a fancy add-on feature for text attributes, mintty supports distinct 
 colour attributes for combining characters, so a combined character 
@@ -916,7 +986,22 @@ UserCommands=Kill foreground process:kill -9 $MINTTY_PID
 ## Running mintty stand-alone ##
 
 To install mintty outside a cygwin environment, follow a few rules:
-* Find out which libraries (dlls from the cygwin /bin directory) mintty needs in addition to cygwin1.dll and install them all, or:
 * Compile mintty statically.
+* Install mintty.exe together with cygwin1.dll and cygwin-console-helper.exe.
 * Call the directory in which to install mintty and libraries ‘bin’.
+
+### Bundling mintty with dedicated software ###
+
+To bundle an application which is not natively compiled on cygwin with mintty,
+some way of bridging the terminal interworking incompatiblity problems 
+([pty incompatibility problem](https://github.com/mintty/mintty/issues/56) and
+[character encoding incompatibility problem](https://github.com/mintty/mintty/issues/376))
+needs to be integrated. A generic solution is [winpty](https://github.com/rprichard/winpty)
+or its WSL-specific variant ʻwslbridge’.
+For software that is aware of Posix terminal conventions, it may be a feasible 
+solution if the software detects a terminal and its character encoding by 
+checking environment variable `TERM` and the locale variables and invokes 
+`stty raw -echo` to enable direct character-based I/O and disable 
+non-compatible signal handling. For this purpose, stty and its library 
+dependencies need to be bundled with the installation as well.
 

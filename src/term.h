@@ -151,6 +151,7 @@ enum {
   TATTR_CURMARKED = 0x0800000000000000u, /* current scroll marker */
 
   TATTR_SELECTED  = 0x2000000000000000u, /* highlighted */
+  TATTR_CLEAR     = 0x4000000000000000u, /* erased / unwritten */
 
   DATTR_STARTRUN  = 0x8000000000000000u, /* start of redraw run */
   DATTR_MASK      = TATTR_RIGHTCURS | TATTR_PASCURS | TATTR_ACTCURS
@@ -158,7 +159,6 @@ enum {
   // unassigned bits:
   //                0x0040000000000000u
   //                0x0080000000000000u
-  //                0x4000000000000000u
 };
 
 /* Line attributes.
@@ -226,6 +226,7 @@ typedef struct {
 
 typedef struct {
   ushort lattr;
+  ushort wrappos;
   ushort cols;    /* number of real columns on the line */
   ushort size;    /* number of allocated termchars
                      (cc-lists may make this > cols) */
@@ -273,6 +274,17 @@ typedef enum {
   CSET_ES = 'Z', // Z           Spanish
   CSET_SE = '7', // H or 7      Swedish
   CSET_CH = '=', // =           Swiss
+  // 96-character sets (xterm 336)
+  CSET_ISO_Latin_Cyrillic	= 'L',
+  CSET_ISO_Greek_Supp		= 'F',
+  CSET_ISO_Hebrew		= 'H',
+  CSET_ISO_Latin_5		= 'M',
+  CSET_DEC_Greek_Supp		= '?' + 0x80,
+  CSET_DEC_Hebrew_Supp		= '4' + 0x80,
+  CSET_DEC_Turkish_Supp		= '0' + 0x80,
+  CSET_NRCS_Greek		= '>' + 0x80,
+  CSET_NRCS_Hebrew		= '=' + 0x80,
+  CSET_NRCS_Turkish		= '2' + 0x80,
 } term_cset;
 
 typedef struct {
@@ -374,8 +386,8 @@ struct term {
 
   termchar erase_char;
 
-  char *inbuf;            /* terminal input buffer */
-  uint inbuf_size, inbuf_pos;
+  char * suspbuf;         /* suspend output during selection buffer */
+  uint suspbuf_size, suspbuf_pos;
 
   bool rvideo;            /* global reverse video flag */
   bool cursor_on;         /* cursor enabled flag */
@@ -394,6 +406,7 @@ struct term {
   uint printbuf_size, printbuf_pos;
 
   int  rows, cols;
+  int  rows0, cols0;
   bool has_focus;
   bool focus_reported;
   bool in_vbell;
@@ -543,7 +556,7 @@ extern void term_paint(void);
 extern void term_invalidate(int left, int top, int right, int bottom);
 extern void term_open(void);
 extern void term_copy(void);
-extern void term_paste(wchar *, uint len);
+extern void term_paste(wchar *, uint len, bool all);
 extern void term_send_paste(void);
 extern void term_cancel_paste(void);
 extern void term_cmd(char * cmdpat);

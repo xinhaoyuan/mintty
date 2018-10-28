@@ -36,7 +36,7 @@ const cattr CATTR_DEFAULT =
 termchar basic_erase_char =
    {.cc_next = 0, .chr = ' ',
             /* CATTR_DEFAULT */
-    .attr = {.attr = ATTR_DEFAULT,
+    .attr = {.attr = ATTR_DEFAULT | TATTR_CLEAR,
              .truefg = 0, .truebg = 0, .ulcolr = (colour)-1}
    };
 
@@ -193,6 +193,7 @@ term_reset(bool full)
   term.app_cursor_keys = false;
 
   if (full) {
+    term.deccolm_allowed = cfg.enable_deccolm_init;  // not reset by xterm
     term.vt220_keys = vt220(cfg.term);  // not reset by xterm
     term.app_keypad = false;  // xterm only with RIS
     term.app_wheel = false;
@@ -224,7 +225,6 @@ term_reset(bool full)
     term.wheel_reporting = true;
     term.echoing = false;
     term.bracketed_paste = false;
-    term.show_scrollbar = true;  // enable_scrollbar not reset by xterm
     term.wide_indic = false;
     term.wide_extra = false;
     term.disable_bidi = false;
@@ -243,8 +243,8 @@ term_reset(bool full)
   term.sixel_scrolls_left = 0;
 
   term.cursor_type = -1;
+  term.cursor_blinks = -1;
   if (full) {
-    term.cursor_blinks = -1;  // not reset by xterm
     term.blink_is_real = cfg.allow_blinking;
 	term.even_line_highlight_delta = cfg.even_line_highlight_delta;
   }
@@ -893,6 +893,8 @@ term_resize(int newrows, int newcols)
 
   term.rows = newrows;
   term.cols = newcols;
+  term.rows0 = newrows;
+  term.cols0 = newcols;
 
   term_switch_screen(on_alt_screen, false);
 }
@@ -1222,8 +1224,13 @@ term_erase(bool selective, bool line_only, bool from_begin, bool to_end)
         else
           line->lattr = LATTR_NORM;
       }
-      else if (!selective || !(line->chars[start.x].attr.attr & ATTR_PROTECTED))
+      else if (!selective ||
+               !(line->chars[start.x].attr.attr & ATTR_PROTECTED)
+              )
+      {
         line->chars[start.x] = term.erase_char;
+        line->chars[start.x].attr.attr |= TATTR_CLEAR;
+      }
       if (inclpos(start, cols) && start.y < term.rows)
         line = term.lines[start.y];
     }

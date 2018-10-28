@@ -1,9 +1,10 @@
 // winclip.c (part of mintty)
-// Copyright 2008-12 Andy Koppe, 2017 Thomas Wolff
+// Copyright 2008-12 Andy Koppe, 2018 Thomas Wolff
 // Adapted from code from PuTTY-0.60 by Simon Tatham and team.
 // Licensed under the terms of the GNU General Public License v3 or later.
 
 #include "winpriv.h"
+#include "termpriv.h"  // term_get_html
 #include "charset.h"
 #include "child.h"
 #include "res.h"  // DIALOG_CLASS
@@ -696,16 +697,86 @@ win_copy(const wchar *data, cattr *cattrs, int len)
   if (OpenClipboard(wnd)) {
     clipboard_token = true;
     EmptyClipboard();
+    // copy clipboard text formats
     SetClipboardData(CF_UNICODETEXT, clipdata);
     SetClipboardData(CF_TEXT, clipdata2);
+    // copy clipboard RTF format
     if (clipdata3)
       SetClipboardData(RegisterClipboardFormat(CF_RTF), clipdata3);
+    // copy clipboard HTML format
+    UINT CF_HTML = RegisterClipboardFormatA("HTML Format");
+    if (CF_HTML) {
+      //char * html = "<p>täst <b>böld</b> <i>schräg</i></p>";
+      char * html = term_get_html();
+      char * htmlpre = "<html><!--StartFragment-->";
+      char * htmlpost = "<!--EndFragment--></html>";
+      int htmldescrlen = 92;
+      char * htmlcb = asform(
+             "Version:0.9\n"
+             "StartHTML:%08d\n"
+             "EndHTML:%08d\n"
+             "StartFragment:%08d\n"
+             "EndFragment:%08d\n"
+             "%s%s%s",
+             htmldescrlen,
+             htmldescrlen + strlen(htmlpre) + strlen(html) + strlen(htmlpost),
+             htmldescrlen + strlen(htmlpre),
+             htmldescrlen + strlen(htmlpre) + strlen(html),
+             htmlpre, html, htmlpost);
+      free(html);
+      int len = strlen(htmlcb);
+      //printf("clipboard HTML Format:\n%s\n", htmlcb);
+      HGLOBAL clipdatahtml = GlobalAlloc(GMEM_DDESHARE | GMEM_MOVEABLE, len);
+      char * cliphtml = GlobalLock(clipdatahtml);
+      if (cliphtml) {
+        memcpy(cliphtml, htmlcb, len);
+        free(htmlcb);
+        GlobalUnlock(clipdatahtml);
+        SetClipboardData(CF_HTML, clipdatahtml);
+        GlobalFree(clipdatahtml);
+      }
+    }
+
     CloseClipboard();
   }
   else {
     GlobalFree(clipdata);
     GlobalFree(clipdata2);
   }
+}
+
+static char *
+matchconf(char * conf, char * item)
+{
+  char * cmdp = conf;
+  char sepch = ';';
+  if ((uchar)*cmdp <= (uchar)' ')
+    sepch = *cmdp++;
+
+  char * paramp;
+  while ((paramp = strchr(cmdp, ':'))) {
+    *paramp = '\0';
+    paramp++;
+    char * sepp = strchr(paramp, sepch);
+    if (sepp)
+      *sepp = '\0';
+
+    if (!strcmp(cmdp, item))
+      return paramp;
+
+    if (sepp) {
+      cmdp = sepp + 1;
+      // check for multi-line separation
+      if (*cmdp == '\\' && cmdp[1] == '\n') {
+        cmdp += 2;
+        while (isspace(*cmdp))
+          cmdp++;
+      }
+    }
+    else
+      break;
+  }
+  return 0;
 }
 
 static void
@@ -857,35 +928,9 @@ paste_hdrop(HDROP drop)
     char * fg_prog = foreground_prog();
     if (fg_prog) {
       // match program base name
-      char * matchconf(char * conf, char * item, char sepch) {
-        if (*conf == sepch)
-          conf++;
-        char * m = strstr(conf, item);
-        if (m && (m == conf || *(m - 1) == sepch)) {
-          m += strlen(item);
-          if (*m == ':')
-            return m + 1;
-          else {
-            m = strchr(m, ':');
-            if (m)
-              return matchconf(m, item, sepch);
-            else
-              return null;
-          }
-        }
-        else
-          return null;
-      }
-
       char * drops = cs__wcstombs(cfg.drop_commands);
-      char sepch = ';';
-      if (((uchar)*drops) < (uchar)' ')
-        sepch = *drops;
-      char * paste = matchconf(drops, fg_prog, sepch);
+      char * paste = matchconf(drops, fg_prog);
       if (paste) {
-        char * sep = strchr(paste, sepch);
-        if (sep)
-          *sep = 0;
         buf[buf_pos] = 0;
         char * pastebuf = newn(char, strlen(paste) + strlen(buf) + 1);
         sprintf(pastebuf, paste, buf);
@@ -914,7 +959,7 @@ paste_unicode_text(HANDLE data)
 {
   wchar *s = GlobalLock(data);
   uint l = wcslen(s);
-  term_paste(s, l);
+  term_paste(s, l, (GetKeyState(VK_CONTROL) & 0x80) != 0);
   GlobalUnlock(data);
 }
 
@@ -926,7 +971,7 @@ paste_text(HANDLE data)
   wchar s[l];
   MultiByteToWideChar(CP_ACP, 0, cs, -1, s, l);
   GlobalUnlock(data);
-  term_paste(s, l);
+  term_paste(s, l, (GetKeyState(VK_CONTROL) & 0x80) != 0);
 }
 
 void
@@ -934,9 +979,11 @@ win_paste(void)
 {
   if (!OpenClipboard(null))
     return;
-  HGLOBAL data;
+
   if (cfg.input_clears_selection)
     term.selected = false;
+
+  HGLOBAL data;
   if ((data = GetClipboardData(CF_HDROP)))
     paste_hdrop(data);
   else if ((data = GetClipboardData(CF_UNICODETEXT)))
@@ -945,6 +992,11 @@ win_paste(void)
     paste_text(data);
   CloseClipboard();
 }
+
+
+/*
+ *  Drag-and-drop
+ */
 
 static wchar *
 paste_dialog(HANDLE data, CLIPFORMAT cf)

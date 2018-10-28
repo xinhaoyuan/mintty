@@ -79,6 +79,7 @@ typedef struct {
   bool backspace_sends_bs;
   bool delete_sends_del;
   bool ctrl_alt_is_altgr;
+  int ctrl_alt_delay_altgr;
   bool old_altgr_detection;
   bool clip_shortcuts;
   bool window_shortcuts;
@@ -95,6 +96,7 @@ typedef struct {
   string key_break;	// VK_CANCEL
   string key_menu;	// VK_APPS
   string key_scrlock;	// VK_SCROLL
+  wstring key_commands;
   // Mouse
   bool copy_on_select;
   bool copy_as_rtf;
@@ -119,6 +121,7 @@ typedef struct {
   string term;
   wstring answerback;
   bool old_wrapmodes;
+  bool enable_deccolm_init;
   bool bell_sound;
   int bell_type;
   wstring bell_file;
@@ -148,7 +151,15 @@ typedef struct {
   // "Hidden"
   int bidi;
   bool disable_alternate_screen;
+  string suppress_sgr;
+  string suppress_dec;
+  string suppress_win;
+  string suppress_osc;
+  string suppress_nrc;
+  string suppress_wheel;
+  string filter_paste;
   bool input_clears_selection;
+  bool trim_selection;
   char charwidth;
   char emojis;
   char emoji_placement;
@@ -167,6 +178,7 @@ typedef struct {
   int geom_sync;
   int col_spacing, row_spacing;
   int padding;
+  int ligatures_support;
   int handle_dpichanged;
   int check_version_update;
   string word_chars;

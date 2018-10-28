@@ -455,13 +455,11 @@ child_proc(void)
 
     if (select(win_fd + 1, &fds, 0, 0, timeout_p) > 0) {
       if (pty_fd >= 0 && FD_ISSET(pty_fd, &fds)) {
-#if CYGWIN_VERSION_DLL_MAJOR >= 1005
-        static char buf[4096];
-        int len = read(pty_fd, buf, sizeof buf);
-#else
-        // Pty devices on old Cygwin version deliver only 4 bytes at a time,
+        // Pty devices on old Cygwin versions (pre 1005) deliver only 4 bytes
+        // at a time, and newer ones or MSYS2 deliver up to 256 at a time.
         // so call read() repeatedly until we have a worthwhile haul.
-        static char buf[512];
+        // this avoids most partial updates, results in less flickering/tearing.
+        static char buf[4096];
         uint len = 0;
         do {
           int ret = read(pty_fd, buf + len, sizeof buf - len);
@@ -470,7 +468,6 @@ child_proc(void)
           else
             break;
         } while (len < sizeof buf);
-#endif
         if (len > 0) {
           term_write(buf, len);
           if (log_fd >= 0 && logging)
@@ -531,6 +528,112 @@ child_is_parent(void)
     }
   }
   closedir(d);
+  return res;
+}
+
+static struct procinfo {
+  int pid;
+  int ppid;
+  int winpid;
+  char * cmdline;
+} * ttyprocs = 0;
+static uint nttyprocs = 0;
+
+static char *
+procres(int pid, char * res)
+{
+  char fbuf[99];
+  char * fn = asform("/proc/%d/%s", pid, res);
+  int fd = open(fn, O_BINARY | O_RDONLY);
+  free(fn);
+  if (fd < 0)
+    return 0;
+  int n = read(fd, fbuf, sizeof fbuf - 1);
+  close(fd);
+  for (int i = 0; i < n - 1; i++)
+    if (!fbuf[i])
+      fbuf[i] = ' ';
+  fbuf[n] = 0;
+  char * nl = strchr(fbuf, '\n');
+  if (nl)
+    *nl = 0;
+  return strdup(fbuf);
+}
+
+static int
+procresi(int pid, char * res)
+{
+  char * si = procres(pid, res);
+  int i = atoi(si);
+  free(si);
+  return i;
+}
+
+wchar *
+grandchild_process_list(void)
+{
+  if (!pid)
+    return 0;
+  DIR * d = opendir("/proc");
+  if (!d)
+    return 0;
+  char * tty = child_tty();
+  struct dirent * e;
+  while ((e = readdir(d))) {
+    char * pn = e->d_name;
+    int thispid = atoi(pn);
+    if (thispid && thispid != pid) {
+      char * ctty = procres(thispid, "ctty");
+      if (0 == strcmp(ctty, tty)) {
+        int ppid = procresi(thispid, "ppid");
+        int winpid = procresi(thispid, "winpid");
+        // not including the direct child (pid)
+        ttyprocs = renewn(ttyprocs, nttyprocs + 1);
+        ttyprocs[nttyprocs].pid = thispid;
+        ttyprocs[nttyprocs].ppid = ppid;
+        ttyprocs[nttyprocs].winpid = winpid;
+        char * cmd = procres(thispid, "cmdline");
+        ttyprocs[nttyprocs].cmdline = cmd;
+
+        nttyprocs++;
+      }
+      free(ctty);
+    }
+  }
+  closedir(d);
+
+  wchar * res = 0;
+  for (uint i = 0; i < nttyprocs; i++) {
+    char * proc = newn(char, 50 + strlen(ttyprocs[i].cmdline));
+    sprintf(proc, " %5u %5u %s", ttyprocs[i].winpid, ttyprocs[i].pid, ttyprocs[i].cmdline);
+    free(ttyprocs[i].cmdline);
+    wchar * procw = cs__mbstowcs(proc);
+    free(proc);
+    for (int i = 0; i < 13; i++)
+      if (procw[i] == ' ')
+        procw[i] = 0x2007;  // FIGURE SPACE
+    int wid = min(wcslen(procw), 40);
+    for (int i = 13; i < wid; i++)
+#ifndef HAS_LOCALES
+#define wcwidth xcwidth
+#endif
+      if ((cfg.charwidth ? xcwidth(procw[i]) : wcwidth(procw[i])) == 2)
+        wid--;
+    procw[wid] = 0;
+
+    if (!res)
+      res = wcsdup(W("╎ WPID   PID  COMMAND\n"));  // ┆┇┊┋╎╏
+    res = renewn(res, wcslen(res) + wcslen(procw) + 3);
+    wcscat(res, W("╎"));
+    wcscat(res, procw);
+    wcscat(res, W("\n"));
+    free(procw);
+  }
+  if (ttyprocs) {
+    nttyprocs = 0;
+    free(ttyprocs);
+    ttyprocs = 0;
+  }
   return res;
 }
 
@@ -698,8 +801,15 @@ user_command(int n)
       }
       n--;
 
-      if (sepp)
+      if (sepp) {
         cmdp = sepp + 1;
+        // check for multi-line separation
+        if (*cmdp == '\\' && cmdp[1] == '\n') {
+          cmdp += 2;
+          while (isspace(*cmdp))
+            cmdp++;
+        }
+      }
       else
         break;
     }
@@ -1009,8 +1119,15 @@ child_launch(int n, int argc, char * argv[], int moni)
       }
       n--;
 
-      if (sepp)
+      if (sepp) {
         cmdp = sepp + 1;
+        // check for multi-line separation
+        if (*cmdp == '\\' && cmdp[1] == '\n') {
+          cmdp += 2;
+          while (isspace(*cmdp))
+            cmdp++;
+        }
+      }
       else
         break;
     }

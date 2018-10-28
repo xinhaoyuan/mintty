@@ -74,6 +74,8 @@ static int term_width, term_height;
 static int width, height;
 static int extra_width, extra_height, norm_extra_width, norm_extra_height;
 
+int ini_width, ini_height;
+
 // State
 bool win_is_fullscreen;
 static bool go_fullscr_on_max;
@@ -500,6 +502,20 @@ update_tab_titles()
   }
 }
 
+
+void
+win_set_icon(char * s, int icon_index)
+{
+  HICON large_icon = 0, small_icon = 0;
+  wstring icon_file = path_posix_to_win_w(s);
+  //printf("win_set_icon <%ls>,%d\n", icon_file, icon_index);
+  ExtractIconExW(icon_file, icon_index, &large_icon, &small_icon, 1);
+  delete(icon_file);
+  SetClassLongPtr(wnd, GCLP_HICONSM, (LONG_PTR)small_icon);
+  SetClassLongPtr(wnd, GCLP_HICON, (LONG_PTR)large_icon);
+  //SendMessage(wnd, WM_SETICON, ICON_SMALL, (LPARAM)small_icon);
+  //SendMessage(wnd, WM_SETICON, ICON_BIG, (LPARAM)large_icon);
+}
 
 void
 win_set_title(char *title)
@@ -1311,11 +1327,13 @@ win_set_geom(int y, int x, int height, int width)
   MONITORINFO mi;
   get_my_monitor_info(&mi);
   RECT ar = mi.rcWork;
-
   int scr_height = ar.bottom - ar.top, scr_width = ar.right - ar.left;
-  int term_height, term_width;
+
+  RECT r;
+  GetWindowRect(wnd, &r);
+  int term_height = r.bottom - r.top, term_width = r.right - r.left;
+
   int term_x, term_y;
-  win_get_pixels(&term_height, &term_width, false);
   win_get_pos(&term_x, &term_y);
 
   if (x >= 0)
@@ -1332,7 +1350,7 @@ win_set_geom(int y, int x, int height, int width)
     term_height = height;
 
   SetWindowPos(wnd, null, term_x, term_y,
-               term_width + 2 * PADDING, term_height + 2 * PADDING,
+               term_width, term_height,
                SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOZORDER);
 }
 
@@ -1768,7 +1786,11 @@ win_update_transparency(bool opaque)
 void
 win_update_scrollbar(bool inner)
 {
-  int scrollbar = term.show_scrollbar ? cfg.scrollbar : 0;
+  // enforce outer scrollbar if switched on
+  int scrollbar = term.show_scrollbar ? (cfg.scrollbar || !inner) : 0;
+  // keep config consistent with enforced scrollbar
+  if (scrollbar && !cfg.scrollbar)
+    cfg.scrollbar = 1;
 
   LONG style = GetWindowLong(wnd, GWL_STYLE);
   SetWindowLong(wnd, GWL_STYLE,
@@ -1863,6 +1885,7 @@ win_reconfig(void)
 static bool
 confirm_exit(void)
 {
+#ifdef use_ps
   if (!child_is_parent())
     return true;
 
@@ -1930,6 +1953,11 @@ confirm_exit(void)
     else
       cpos ++;
   }
+#else
+  wchar * proclist = grandchild_process_list();
+  if (!proclist)
+    return true;
+#endif
 
   wchar * msg_pre = _W("Processes are running in session:");
   wchar * msg_post = _W("Close anyway?");
@@ -1952,6 +1980,13 @@ confirm_exit(void)
   return !ret || ret == IDOK;
 }
 
+void
+win_close(void)
+{
+  if (!cfg.confirm_exit || confirm_exit())
+    child_kill((GetKeyState(VK_SHIFT) & 0x80) != 0);
+}
+
 #define dont_debug_messages
 #define dont_debug_only_sizepos_messages
 #define dont_debug_mouse_messages
@@ -1968,7 +2003,7 @@ static struct {
 };
   char * wm_name = "WM_?";
   for (uint i = 0; i < lengthof(wm_names); i++)
-    if (message == wm_names[i].wm_) {
+    if (message == wm_names[i].wm_ && !strstr(wm_names[i].wm_name, "FIRST")) {
       wm_name = wm_names[i].wm_name;
       break;
     }
@@ -2013,8 +2048,7 @@ static struct {
     }
 
     when WM_CLOSE:
-      if (!cfg.confirm_exit || confirm_exit())
-        child_kill((GetKeyState(VK_SHIFT) & 0x80) != 0);
+      win_close();
       return 0;
 
 #ifdef show_icon_via_callback
@@ -2121,8 +2155,9 @@ static struct {
         when IDM_COPASTE: term_copy(); win_paste();
         when IDM_CLRSCRLBCK: term_clear_scrollback(); term.disptop = 0;
         when IDM_TOGLOG: toggle_logging();
-        when IDM_HTML: term_export_html();
+        when IDM_HTML: term_export_html(GetKeyState(VK_SHIFT) & 0x80);
         when IDM_TOGCHARINFO: toggle_charinfo();
+        when IDM_TOGVT220KB: toggle_vt220();
         when IDM_PASTE: win_paste();
         when IDM_SELALL: term_select_all(); win_update(false);
         when IDM_RESET: winimgs_clear(); term_reset(true); win_update(false);
@@ -3073,7 +3108,9 @@ select_WSL(char * wsl)
     support_wsl = true;
     set_arg_option("Locale", strdup("C"));
     set_arg_option("Charset", strdup("UTF-8"));
-    if (!*cfg.app_id)
+    if (0 == wcscmp(cfg.app_id, W("@")))
+      // setting an implicit AppID fixes mintty/wsltty#96 but causes #784
+      // so an explicit config value derives AppID from wsl distro name
       set_arg_option("AppID", asform("%s.%s", APPNAME, wsl ?: "WSL"));
   }
   free(wslname);
@@ -3185,8 +3222,15 @@ enum_commands(wstring commands, CMDENUMPROC cmdenum)
     //printf("	task <%s> args <%ls> icon <%ls>\n", cmdp, params, icon);
     cmdenum(_W(cmdp), params, icon, 0);
 
-    if (sepp)
+    if (sepp) {
       cmdp = sepp + 1;
+      // check for multi-line separation
+      if (*cmdp == '\\' && cmdp[1] == '\n') {
+        cmdp += 2;
+        while (isspace(*cmdp))
+          cmdp++;
+      }
+    }
     else
       break;
   }
@@ -4080,7 +4124,7 @@ main(int argc, char *argv[])
   }
 
   // Set the AppID if specified and the required function is available.
-  if (*cfg.app_id) {
+  if (*cfg.app_id && wcscmp(cfg.app_id, W("@")) != 0) {
     HMODULE shell = load_sys_library("shell32.dll");
     HRESULT (WINAPI *pSetAppID)(PCWSTR) =
       (void *)GetProcAddress(shell, "SetCurrentProcessExplicitAppUserModelID");
@@ -4382,6 +4426,7 @@ main(int argc, char *argv[])
 
   // Initialise the terminal.
   term_reset(true);
+  term.show_scrollbar = !!cfg.scrollbar;
   term_resize(term_rows, term_cols);
 
   // Initialise the scroll bar.
@@ -4422,6 +4467,11 @@ main(int argc, char *argv[])
   default_size_token = true;  // prevent font zooming (#708)
   int show_cmd = go_fullscr_on_max ? SW_SHOWMAXIMIZED : cfg.window;
   show_cmd = win_fix_taskbar_max(show_cmd);
+
+  // Scale to background image aspect ratio if requested
+  win_get_pixels(&ini_height, &ini_width, false);
+  if (*cfg.background == '%')
+    scale_to_image_ratio();
 
   // Create child process.
   child_create(
