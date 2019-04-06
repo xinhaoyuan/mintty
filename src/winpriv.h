@@ -34,6 +34,7 @@ extern void toggle_charinfo(void);
 extern void toggle_vt220(void);
 extern char * fontpropinfo(void);
 
+extern bool title_settable;
 extern bool support_wsl;
 extern wstring wsl_basepath;
 
@@ -45,6 +46,11 @@ extern int per_monitor_dpi_aware;
 
 extern bool click_focus_token;
 extern pos last_pos;
+extern int lines_scrolled;
+extern bool kb_input;
+extern uint kb_trace;
+
+extern void win_update_now(void);
 
 extern void win_flush_background(bool clearbg);
 extern void win_paint(void);
@@ -71,7 +77,8 @@ extern void win_show_tip(int x, int y, int cols, int rows);
 extern void win_destroy_tip(void);
 
 extern void win_init_menus(void);
-extern void win_update_menus(void);
+extern void win_update_menus(bool callback);
+extern void user_function(wstring commands, int n);
 
 extern void win_show_mouse(void);
 extern void win_mouse_click(mouse_button, LPARAM);
@@ -83,7 +90,10 @@ extern void win_key_reset(void);
 extern bool win_key_down(WPARAM, LPARAM);
 extern bool win_key_up(WPARAM, LPARAM);
 
+extern void win_led(int led, bool set);
+
 extern wchar * dewsl(wchar * wpath);
+extern void shell_exec(wstring wpath);
 extern void win_init_drop_target(void);
 
 extern wstring wslicon(wchar * params);
@@ -96,7 +106,10 @@ extern int search_monitors(int * minx, int * miny, HMONITOR lookup_mon, int get_
 extern void win_set_ime_open(bool);
 
 extern void show_message(char * msg, UINT type);
+extern void show_info(char * msg);
 
 extern void win_close(void);
+
+extern unsigned long mtime(void);
 
 #endif

@@ -1,10 +1,10 @@
 // termout.c (part of mintty)
-// Copyright 2008-12 Andy Koppe, 2017 Thomas Wolff
+// Copyright 2008-12 Andy Koppe, 2017-19 Thomas Wolff
 // Adapted from code from PuTTY-0.60 by Simon Tatham and team.
 // Licensed under the terms of the GNU General Public License v3 or later.
 
 #include "termpriv.h"
-#include "winpriv.h"  // win_get_font, win_change_font
+#include "winpriv.h"  // win_get_font, win_change_font, win_led
 
 #include "win.h"
 #include "appinfo.h"
@@ -219,6 +219,7 @@ static void
 write_linefeed(void)
 {
   term_cursor *curs = &term.curs;
+  clear_wrapcontd(term.lines[curs->y], curs->y);
   if (curs->y == term.marg_bot)
     term_do_scroll(term.marg_top, term.marg_bot, 1, true);
   else if (curs->y < term.rows - 1)
@@ -254,6 +255,8 @@ cattr last_attr = {.attr = ATTR_DEFAULT,
 static void
 write_char(wchar c, int width)
 {
+  //if (kb_trace) printf("[%ld] write_char 'q'\n", mtime());
+
   if (!c)
     return;
 
@@ -274,11 +277,44 @@ write_char(wchar c, int width)
   last_char = c;
   last_attr = curs->attr;
 
+  void wrapparabidi(ushort parabidi, termline * line, int y)
+  {
+    line->lattr = (line->lattr & ~LATTR_BIDIMASK) | parabidi | LATTR_WRAPCONTD;
+
+#ifdef determine_parabidi_during_output
+    if (parabidi & (LATTR_BIDISEL | LATTR_AUTOSEL))
+      return;
+
+    // if direction autodetection pending:
+    // from current line, extend backward and forward to adjust 
+    // "paragraph" bidi attributes (esp. direction) to wrapped lines
+    termline * paraline = line;
+    int paray = y;
+    while ((paraline->lattr & LATTR_WRAPCONTD) && paray > -sblines()) {
+      paraline = fetch_line(--paray);
+      paraline->lattr = (paraline->lattr & ~LATTR_BIDIMASK) | parabidi;
+      release_line(paraline);
+    }
+    paraline = line;
+    paray = y;
+    while ((paraline->lattr & LATTR_WRAPPED) && paray < term.rows) {
+      paraline = fetch_line(++paray);
+      paraline->lattr = (paraline->lattr & ~LATTR_BIDIMASK) | parabidi;
+      release_line(paraline);
+    }
+#else
+    (void)y;
+#endif
+  }
+
   void put_char(wchar c)
   {
     clear_cc(line, curs->x);
     line->chars[curs->x].chr = c;
     line->chars[curs->x].attr = curs->attr;
+    if (!(line->lattr & LATTR_WRAPCONTD))
+      line->lattr = (line->lattr & ~LATTR_BIDIMASK) | curs->bidimode;
+    //TODO: if changed, propagate mode onto paragraph
     if (cfg.ligatures_support)
       term_invalidate(0, curs->y, curs->x, curs->y);
   }
@@ -286,6 +322,7 @@ write_char(wchar c, int width)
   if (curs->wrapnext && curs->autowrap && width > 0) {
     line->lattr |= LATTR_WRAPPED;
     line->wrappos = curs->x;
+    ushort parabidi = getparabidi(line);
     if (curs->y == term.marg_bot)
       term_do_scroll(term.marg_top, term.marg_bot, 1, true);
     else if (curs->y < term.rows - 1)
@@ -293,6 +330,7 @@ write_char(wchar c, int width)
     curs->x = 0;
     curs->wrapnext = false;
     line = term.lines[curs->y];
+    wrapparabidi(parabidi, line, curs->y);
   }
 
   if (term.insert && width > 0)
@@ -323,12 +361,14 @@ write_char(wchar c, int width)
         line->chars[curs->x] = term.erase_char;
         line->lattr |= LATTR_WRAPPED | LATTR_WRAPPED2;
         line->wrappos = curs->x;
+        ushort parabidi = getparabidi(line);
         if (curs->y == term.marg_bot)
           term_do_scroll(term.marg_top, term.marg_bot, 1, true);
         else if (curs->y < term.rows - 1)
           curs->y++;
         curs->x = 0;
         line = term.lines[curs->y];
+        wrapparabidi(parabidi, line, curs->y);
        /* Now we must term_check_boundary again, of course. */
         term_check_boundary(curs->x, curs->y);
         term_check_boundary(curs->x + width, curs->y);
@@ -365,6 +405,11 @@ write_char(wchar c, int width)
           line->chars[x].chr = pc;
         else
           add_cc(line, x, c, curs->attr);
+      }
+      else {
+        // add initial combining characters, 
+        // particularly to include initial bidi directional markers
+        add_cc(line, -1, c, curs->attr);
       }
       return;
     otherwise:  // Anything else. Probably shouldn't get here.
@@ -523,6 +568,7 @@ do_esc(uchar c)
       {CPAIR('"', '?'), 1, 1, CSET_DEC_Greek_Supp},
       {CPAIR('"', '4'), 1, 1, CSET_DEC_Hebrew_Supp},
       {CPAIR('%', '0'), 1, 1, CSET_DEC_Turkish_Supp},
+      {CPAIR('&', '4'), 1, 0, CSET_NRCS_Cyrillic},
       {CPAIR('"', '>'), 1, 0, CSET_NRCS_Greek},
       {CPAIR('%', '='), 1, 0, CSET_NRCS_Hebrew},
       {CPAIR('%', '2'), 1, 0, CSET_NRCS_Turkish},
@@ -594,13 +640,17 @@ do_esc(uchar c)
       }
       term.disptop = 0;
     when CPAIR('#', '3'):  /* DECDHL: 2*height, top */
-      term.lines[curs->y]->lattr = LATTR_TOP;
+      term.lines[curs->y]->lattr &= LATTR_BIDIMASK;
+      term.lines[curs->y]->lattr |= LATTR_TOP;
     when CPAIR('#', '4'):  /* DECDHL: 2*height, bottom */
-      term.lines[curs->y]->lattr = LATTR_BOT;
+      term.lines[curs->y]->lattr &= LATTR_BIDIMASK;
+      term.lines[curs->y]->lattr |= LATTR_BOT;
     when CPAIR('#', '5'):  /* DECSWL: normal */
-      term.lines[curs->y]->lattr = LATTR_NORM;
+      term.lines[curs->y]->lattr &= LATTR_BIDIMASK;
+      term.lines[curs->y]->lattr |= LATTR_NORM;
     when CPAIR('#', '6'):  /* DECDWL: 2*width */
-      term.lines[curs->y]->lattr = LATTR_WIDE;
+      term.lines[curs->y]->lattr &= LATTR_BIDIMASK;
+      term.lines[curs->y]->lattr |= LATTR_WIDE;
     when CPAIR('%', '8') or CPAIR('%', 'G'):
       curs->utf = true;
       term_update_cs();
@@ -953,7 +1003,7 @@ set_modes(bool state)
           term.curs.rev_wrap = state;
           term.curs.wrapnext = false;
         when 8:  /* DECARM: auto key repeat */
-          // ignore
+          term.auto_repeat = state;
         when 9:  /* X10_MOUSE */
           term.mouse_mode = state ? MM_X10 : 0;
           win_update_mouse();
@@ -1082,12 +1132,27 @@ set_modes(bool state)
           int ctrl = arg - 77000;
           term.app_control = (term.app_control & ~(1 << ctrl)) | (state << ctrl);
         }
+        when 2500: /* bidi box graphics mirroring */
+          if (state)
+            term.curs.bidimode |= LATTR_BOXMIRROR;
+          else
+            term.curs.bidimode &= ~LATTR_BOXMIRROR;
+        when 2501: /* bidi direction auto-detection */
+          if (state)
+            term.curs.bidimode &= ~LATTR_BIDISEL;
+          else
+            term.curs.bidimode |= LATTR_BIDISEL;
       }
     }
     else { /* SM/RM: set/reset mode */
       switch (arg) {
         when 4:  /* IRM: set insert mode */
           term.insert = state;
+        when 8: /* BDSM: bidirectional support mode */
+          if (state)
+            term.curs.bidimode &= ~LATTR_NOBIDI;
+          else
+            term.curs.bidimode |= LATTR_NOBIDI;
         when 12: /* SRM: set echo mode */
           term.echoing = !state;
         when 20: /* LNM: Return sends ... */
@@ -1142,7 +1207,8 @@ get_mode(bool privatemode, int arg)
       when 45:  /* xterm: reverse (auto) wraparound */
         return 2 - term.curs.rev_wrap;
       when 8:  /* DECARM: auto key repeat */
-        return 3; // ignored
+        return 2 - term.auto_repeat;
+        //return 3; // ignored
       when 9:  /* X10_MOUSE */
         return 2 - (term.mouse_mode == MM_X10);
       when 12: /* AT&T 610 blinking cursor */
@@ -1223,6 +1289,10 @@ get_mode(bool privatemode, int arg)
         int ctrl = arg - 77000;
         return 2 - !!(term.app_control & (1 << ctrl));
       }
+      when 2500: /* bidi box graphics mirroring */
+        return 2 - !!(term.curs.bidimode & LATTR_BOXMIRROR);
+      when 2501: /* bidi direction auto-detection */
+        return 2 - !(term.curs.bidimode & LATTR_BIDISEL);
       otherwise:
         return 0;
     }
@@ -1231,8 +1301,10 @@ get_mode(bool privatemode, int arg)
     switch (arg) {
       when 4:  /* IRM: insert mode */
         return 2 - term.insert;
+      when 8: /* BDSM: bidirectional support mode */
+        return 2 - !(term.curs.bidimode & LATTR_NOBIDI);
       when 12: /* SRM: echo mode */
-        return 2 - term.echoing;
+        return 2 - !term.echoing;
       when 20: /* LNM: Return sends ... */
         return 2 - term.newline_mode;
 #ifdef support_Wyse_cursor_modes
@@ -1708,12 +1780,28 @@ do_csi(uchar c)
         while (curs->x > 0 && !term.tabs[curs->x]);
       }
     }
+    when CPAIR('$', 'w'):     /* DECTABSR: tab stop report */
+      if (arg0 == 2) {
+        child_printf("\eP2$");
+        char sep = 'u';
+        for (int i = 0; i < term.cols; i++)
+          if (term.tabs[i]) {
+            child_printf("%c%d", sep, i + 1);
+            sep = '/';
+          }
+        child_printf("\e\\");
+      }
     when CPAIR('>', 'm'):     /* xterm: modifier key setting */
       /* only the modifyOtherKeys setting is implemented */
       if (!arg0)
         term.modify_other_keys = 0;
       else if (arg0 == 4)
         term.modify_other_keys = arg1;
+    when CPAIR('>', 'p'):     /* xterm: pointerMode */
+      if (arg0 == 0)
+        term.hide_mouse = false;
+      else if (arg0 == 2)
+        term.hide_mouse = true;
     when CPAIR('>', 'n'):     /* xterm: modifier key setting */
       /* only the modifyOtherKeys setting is implemented */
       if (arg0 == 4)
@@ -1721,6 +1809,8 @@ do_csi(uchar c)
     when CPAIR(' ', 'q'):     /* DECSCUSR: set cursor style */
       term.cursor_type = arg0 ? (arg0 - 1) / 2 : -1;
       term.cursor_blinks = arg0 ? arg0 % 2 : -1;
+      if (term.cursor_blinks)
+        term.cursor_blink_interval = arg1;
       term.cursor_invalid = true;
       term_schedule_cblink();
     when CPAIR('"', 'q'):  /* DECSCA: select character protection attribute */
@@ -1800,6 +1890,29 @@ do_csi(uchar c)
       term.locator_right = arg3 ?: x;
       term.locator_rectangle = true;
     }
+    when 'q': {  /* DECLL: load keyboard LEDs */
+      if (arg0 > 20)
+        win_led(arg0 - 20, false);
+      else if (arg0)
+        win_led(arg0, true);
+      else {
+        win_led(0, false);
+      }
+    }
+    when CPAIR(' ', 'k'):  /* SCP: ECMA-48 Set Character Path (LTR/RTL) */
+      if (arg0 <= 2) {
+        if (arg0 == 2)
+          curs->bidimode |= LATTR_BIDIRTL;
+        else if (arg0 == 1)
+          curs->bidimode &= ~LATTR_BIDIRTL;
+        else {  // default
+          curs->bidimode &= ~(LATTR_BIDISEL | LATTR_BIDIRTL);
+        }
+        // postpone propagation to line until char is written (put_char)
+        //termline *line = term.lines[curs->y];
+        //line->lattr &= ~(LATTR_BIDISEL | LATTR_BIDIRTL);
+        //line->lattr |= curs->bidimode & ~LATTR_BIDISEL | LATTR_BIDIRTL);
+      }
   }
 }
 
@@ -2217,7 +2330,7 @@ do_cmd(void)
     when 104: do_colour_osc(true, 4, true);
     when 105: do_colour_osc(true, 5, true);
     when 10:  do_colour_osc(false, FG_COLOUR_I, false);
-    when 11:  if (strchr("*_%", *term.cmd_buf)) {
+    when 11:  if (strchr("*_%=", *term.cmd_buf)) {
                 wchar * bn = cs__mbstowcs(term.cmd_buf);
                 wstrset(&cfg.background, bn);
                 free(bn);
@@ -2334,6 +2447,15 @@ do_cmd(void)
           win_change_font(ff, wfont);
         }
       }
+    }
+    when 8: {  // hyperlink attribute
+      char * link = s;
+      char * url = strchr(s, ';');
+      if (url++ && *url) {
+        term.curs.attr.link = putlink(link);
+      }
+      else
+        term.curs.attr.link = -1;
     }
   }
 }
@@ -2472,6 +2594,12 @@ term_do_write(const char *buf, uint len)
 
         if (hwc) // Previous high surrogate not followed by low one
           write_error();
+
+        // ASCII shortcut for some speedup (~5%), earliest applied here
+        if (wc >= ' ' && wc <= 0x7E && cset == CSET_ASCII) {
+          write_char(wc, 1);
+          continue;
+        }
 
         if (is_high_surrogate(wc)) {
           term.high_surrogate = wc;
@@ -2653,6 +2781,11 @@ term_do_write(const char *buf, uint len)
           when CSET_DEC_Turkish_Supp:
             if (c >= ' ' && c <= 0x7F) {
               wc = W(" ¡¢£￿¥￿§¨©ª«￿￿İ￿°±²³￿µ¶·￿¹º»¼½ı¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏĞÑÒÓÔÕÖŒØÙÚÛÜŸŞßàáâãäåæçèéêëìíîïğñòóôõöœøùúûüÿş")
+                   [c - ' '];
+            }
+          when CSET_NRCS_Cyrillic:
+            if (c >= ' ' && c <= 0x7F) {
+              wc = W(" ￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿￿юабцдефгхийклмнопярстужвьызшэщчъЮАБЦДЕФГХИЙКЛМНОПЯРСТУЖВЬЫЗШЭЩЧЪ")
                    [c - ' '];
             }
           when CSET_NRCS_Greek:
@@ -2984,22 +3117,20 @@ void
 term_write(const char *buf, uint len)
 {
  /*
-    During drag-selects, we do not wish to process terminal output,
-    because the user will want the screen to hold still to be selected.
+    During drag-selects, some people do not wish to process terminal output,
+    because the user may want the screen to hold still to be selected.
     Therefore, we maintain a suspend-output-on-selection buffer which 
-    can grow up to a moderate size.
+    can grow up to a configurable size.
   */
-  if (term_selecting()) {
-#define suspmax 88800
-#define suspdelta 888
+  if (term_selecting() && cfg.suspbuf_max > 0) {
     // if buffer size would be exceeded, flush; prevent uint overflow
-    if (len > suspmax - term.suspbuf_pos)
+    if (len > cfg.suspbuf_max - term.suspbuf_pos)
       term_flush();
     // if buffer length does not exceed max size, append output
-    if (len <= suspmax - term.suspbuf_pos) {
+    if (len <= cfg.suspbuf_max - term.suspbuf_pos) {
       // make sure buffer is large enough
       if (term.suspbuf_pos + len > term.suspbuf_size) {
-        term.suspbuf_size += suspdelta;
+        term.suspbuf_size = term.suspbuf_pos + len;
         term.suspbuf = renewn(term.suspbuf, term.suspbuf_size);
       }
       memcpy(term.suspbuf + term.suspbuf_pos, buf, len);

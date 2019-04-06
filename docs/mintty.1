@@ -40,6 +40,11 @@ as a login shell.
 Invocation by a name of \fBwsl*\fP\fI[-distro]\fP 
 implies a \fB--WSL\fP\fI[=distro]\fP parameter.
 
+Mintty supports being started from a Windows desktop shortcut; it honours
+window and icon settings of the shortcut, aligns taskbar grouping with the 
+shortcut, disables daemonizing, and sets environment variable 
+MINTTY_SHORTCUT to its pathname.
+
 .SH OPTIONS
 
 The standard GNU option formats are accepted, with single dashes
@@ -362,6 +367,18 @@ see the \fBCONFIGURATION\fP section on how it can be customised.
 Mintty uses Windows Uniscribe font rendering to display a wider range 
 of characters; the TextOut API is automatically used instead if suitable.
 
+.SS Bidirectional rendering
+
+In addition to its default implicit bidirectional rendering with automatic 
+direction detection (according to the Unicode Bidi algorithm), 
+mintty supports ECMA-48 bidi modes and private bidi modes to control 
+switchable bidi behaviour per line and partially per paragraph (i.e. within 
+an auto-wrapped line), as listed in 
+\fIhttps://github.com/mintty/mintty/wiki/CtrlSeqs#bidirectional-rendering\fP.
+They follow the current status of the bidi mode model of the 
+«BiDi in Terminal Emulators» recommendation 
+(\fIhttps://terminal-wg.pages.freedesktop.org/bidi/\fP).
+
 .SS Menus
 
 The context menu can be opened by right-clicking the mouse (with Shift 
@@ -414,6 +431,9 @@ with option \fBClearSelectionOnInput=false\fP.
 The current selection size can optionally been indicated with a popup, 
 enabled with option \fBSelectionShowSize\fP.
 
+Selection can also be managed using the keyboard. Shift+middle-keypad-key 
+(Shift+"5") enters keyboard selecting mode (modifier configurable).
+
 .TP
 \fBElastic text selection\fP
 The traditional selection behaviour of cell-based terminals is that a 
@@ -441,6 +461,10 @@ directory of the terminal foreground process if that can be determined,
 overridden by the working directory interactively communicated by the 
 respective control sequence (OSC 7).
 
+Mintty also supports the OSC 8 control to embed explicit hyperlinks 
+(similar to links on web pages), 
+see \fIhttps://github.com/mintty/mintty/wiki/CtrlSeqs#hyperlinks\fP.
+
 \fINote:\fP While application mouse modes are enabled (as used by many 
 screen oriented applications), \fBCtrl+Shift+click\fP can be used to 
 override it.
@@ -450,7 +474,8 @@ override it.
 The file names and links subject to opening are indicated by underlining 
 when mouse-hovering over them (i.e. when moving the mouse) while the 
 Control key is pressed. The colour used for hovering underlines 
-can be configured with \fBHoverColour\fP.
+can be configured with \fBHoverColour\fP. Explicit hyperlinks are displayed 
+in the window title when hovering them; this can be disabled with \fBHoverTitle\fP.
 
 .SS Font zoom
 
@@ -582,7 +607,7 @@ shortcut or menu item.
 
 A traditional BRK event on a serial terminal connection can be simulated.
 The Break is available in the extended context menu and it can be mapped 
-to the Break key by configuration.
+to the Break key (or other user-defined key) by configuration.
 Note, however, that a BRK can be ignored by configuration of the terminal 
 device (pty) or can be ignored by an application by catching the SIGINT signal.
 For more forceful interruption of the terminal client application, see the 
@@ -612,7 +637,7 @@ whereby the Alt key has to be held while entering the character code.
 Only the first key has to be on the numpad; subsequent digits can be entered
 both on the numpad or the main part of the keyboard.
 
-If the first key is the \fB'+'\fP on the numpad, the code is interpreted as
+If the first key is the \(aq\fB+\fP\(aq on the numpad, the code is interpreted as
 hexadecimal, whereby digits A through F can be entered using the letter keys.
 If the first key is a zero, the code is interpreted as octal.
 If the first key is any other digit from 1 to 9, the code is interpreted as
@@ -624,12 +649,13 @@ For other encodings, the entered code is sent as is.
 If it doesn't fit into one byte, it is sent as multiple bytes, with 
 the most significant non-zero byte first.
 
-.SS Shortcuts
+.SS Keyboard shortcuts
 
-An overview of all the keyboard shortcuts.
+This section gives an overview of all the keyboard shortcuts.
+See also the final subsection on user-defined shortcuts.
 
 .TP
-\fBScrollback\fP
+\fBScrollback and Selection via keyboard\fP
 .br
 \(en \fBShift+Up\fP: Line up
 .br
@@ -648,6 +674,23 @@ An overview of all the keyboard shortcuts.
 \(en \fBShift+cursor-left\fP: Go to previous scroll marker (e.g. in prompt)
 .br
 \(en \fBShift+cursor-right\fP: Go to next scroll marker (e.g. in prompt)
+.br
+\(en \fBShift+middle-keypad-key\fP: Enter keyboard selecting mode
+
+Note: The modifier can be configured with setting \fBScrollMod\fP.
+
+Keyboard selecting mode: \fBAlt\fP sets rectangular selection.
+Once keyboard selecting mode is entered, the following keys are applied:
+.br
+\(en \fBUp\fP, \fBDown\fP, \fBUp\fP, \fBUp\fP: Modify selection
+.br
+\(en \fBPgUp\fP, \fBPgDn\fP, \fBHome\fP, \fBEnd\fP: Scroll/Modify selection
+.br
+\(en \fB[Alt+]middle-keypad-key\fP: Restart [rectangular] selection
+.br
+\(en \fBInsert\fP or \fBEnter\fP: Copy selection and exit selection mode
+.br
+\(en \fBDelete\fP or \fBESC\fP: Exit selection mode
 
 .TP
 \fBCopy and paste\fP
@@ -694,8 +737,9 @@ An overview of all the keyboard shortcuts.
 .br
 \(en \fBCtrl+Alt+mouse-click/drag\fP: Move window
 
-Multi-monitor selection support: Alt+F2 will only spawn a new window 
-after F2 has been released. While F2 is being held, the target monitor 
+Multi-monitor selection support: Alt+F2 (or user-defined "new" key 
+as defined with option \fBKeyFunctions\fP) will only spawn a new window 
+after F2 has been released. While the key is being held, the target monitor 
 can be selected with a sequence of numeric keypad keys:
 .br
 \(en cursor-up/down/left/right (8/2/4/6) navigate the target focus to the 
@@ -713,6 +757,7 @@ Note that a heuristic algorithm is used, based on the size of the smallest
 monitor attached to the system, so the target may not always be selected 
 as expected if multiple monitors of different size are available or 
 monitors are not arranged in a regular grid.
+Note also that this feature is overridden by option \fBSessionGeomSync\fP.
 
 .TP
 \fBFont zoom\fP
@@ -773,7 +818,7 @@ provide visible feedback for the changes.
 
 .TP
 \fBUser-defined shortcuts\fP
-Function keys, modified function keys, and Ctrl+Shift+key combinations 
+Function keys, special keys, and Ctrl+Shift+key combinations 
 can be redefined to generate user-defined input or invoke functions.
 See option \fBKeyFunctions\fP for details.
 
@@ -876,7 +921,8 @@ command-line.)
 Unicode-enabled settings: BellFile, ThemeFile, Background, Title, ExitTitle, Icon, Log, 
 Language, Font, Font1..., FontSample, Printer, Answerback, SixelClipChars, 
 Class, AppID, AppName, AppLaunchCmd, 
-DropCommands, UserCommands, SessionCommands, TaskCommands, KeyFunctions.
+DropCommands, UserCommands, SessionCommands, TaskCommands, 
+KeyFunctions, SysMenuFunctions, CtxMenuFunctions, UserCommandsPath.
 
 Be careful when running multiple instances of mintty. If options are saved 
 from different instances, or the config file is edited manually, 
@@ -1208,6 +1254,11 @@ to the terminal to restore to "default".
 Settings controlling keyboard behaviour.
 
 .TP
+\fBAuto-repeat keys\fP (AutoRepeat=on)
+When setting this off, keyboard auto-repeat is ignored. Auto-repeat can also 
+be switched dynamically with DECSET 8.
+
+.TP
 \fBBackarrow sends ^H\fP (BackspaceSendsBS=no)
 By default, mintty sends \fB^?\fP (ASCII DEL) as the keycode for the backspace key.
 If this option is enabled, \fB^H\fP is sent instead.
@@ -1253,6 +1304,13 @@ allowed to detect a Ctrl+Menu sequence as AltGr.
 Setting this hidden option would disable a workaround for an 
 incompatibility in the Windows on-screen keyboard, 
 just in case is has any side effects.
+
+.TP
+\fBSupport injection of external hotkeys\fP (SupportExternalHotkeys=2)
+This setting supports external Alt+hotkey combinations, esp. Alt+F4 
+to close the window, independently of general Alt+Fn shortcuts support 
+(if option value is 2) and by fixing the buggy hotkey sequence sent 
+by StrokeIt.
 
 .TP
 \fBCopy and Paste shortcuts\fP (ClipShortcuts=yes)
@@ -1324,6 +1382,25 @@ clipboard in rich text format (RTF) in addition to plain text format.
 RTF preserves colours and styles when pasting text into applications that
 support it, e.g. word processors.
 
+\fINote:\fP Copy as rich text is also available as an explicit item in 
+the extended context menu.
+
+.TP
+\fBCopy as HTML\fP (CopyAsHTML=0)
+With this option, mintty also copies text in HTML format, using flexible 
+levels of HTML formatting, when applying the normal copy function.
+.br
+\(en \fB0\fP: do not include HTML
+.br
+\(en \fB1\fP: copy HTML text only (no font information)
+.br
+\(en \fB2\fP: copy HTML text (no global background)
+.br
+\(en \fB3\fP: copy HTML (close to screen layout)
+
+\fINote:\fP Copy as HTML levels are also available as explicit items in 
+the extended context menu.
+
 .TP
 \fBClicks place command line cursor\fP (ClicksPlaceCursor=no)
 If enabled, the command line cursor can be placed by pressing the left
@@ -1386,12 +1463,16 @@ The \fBOff\fP setting disables overriding.
 .br
 \(en \fBAlt\fP
 .br
+\(en \fBWin\fP
+.br
 \(en \fBOff\fP
 
 .TP
 \fBMouse auto-hiding\fP(HideMouse=on)
 By default, mintty automatically hides the cross-hair mouse cursor when 
 keyboard input is being entered. Setting this option =false keeps the cursor.
+.br
+(Corresponds to the xterm resource value \fBpointerMode:2\fP.)
 
 .TP
 \fBElastic text selection\fP(ElasticMouse=off)
@@ -1476,6 +1557,8 @@ The \fBOff\fP setting disables scrolling with keyboard shortcuts.
 \(en \fBCtrl\fP
 .br
 \(en \fBAlt\fP
+.br
+\(en \fBWin\fP
 .br
 \(en \fBOff\fP
 
@@ -1678,6 +1761,16 @@ for an overview of SGR attributes.
 .br
 See \fIhttp://invisible-island.net/xterm/ctlseqs/ctlseqs.txt\fP
 for a full listing of escape control sequences.
+.br
+For some of the option values, more specific configuration parameters exist:
+.br
+\(en AllowBlinking=false \(<> SuppressSGR=5,6
+.br
+\(en Enable132ColumnSwitching=false \(~~ SuppressDEC=3 (permanent)
+.br
+\(en NoAltScreen=true \(~~ SuppressDEC=47,1047,1048,1049 (switchable)
+.br
+\(en AllowSetSelection=false \(<> SuppressOSC=52
 .RE
 
 .TP
@@ -1795,9 +1888,12 @@ window manager is used.
 
 .TP
 \fBWindow class name\fP (Class=mintty)
-The \fBClass\fP setting determines the name of the window class of the terminal
-window.  This can be used to help Windows scripting tools such as AutoHotKey to
-distinguish different mintty windows.  The name defaults to "mintty".
+The \fBClass\fP setting determines the name of the window class of the terminal window.
+It can be used to distinguish or group different mintty windows, e.g. for 
+the mintty session switcher, or for Windows scripting tools such as AutoHotKey.
+
+For a flexible grouping configuration, the Class option supports the 
+same \fB%s\fP placeholder parameters as the AppID option.
 
 .SS "Hidden" settings
 The following settings appear neither in the options dialog nor as command line
@@ -1805,8 +1901,22 @@ options, which means they can only be set in config files or using the
 \fB--option\fP or \fB-o\fP command line option.
 
 .TP
+\fBAccelerate display speed\fP (DisplaySpeedup=6)
+If mintty processes high volume of output, it will skip up to the given 
+number of refresh intervals (of 16ms each) in order to save output that 
+is visually scrolled off right away, so effectively increasing output speed.
+The maximum value is 9.
+
+.TP
 \fBClear selection highlighting on input\fP (ClearSelectionOnInput=true)
 When this is disabled, keyboard input or pasting does not clear selection highlighting.
+
+.TP
+\fBSuspend output while selecting\fP (SuspendWhileSelecting=8080)
+During drag-selects, the user may want the screen to hold still 
+to be selected from. Mintty can suspend processing of terminal output 
+for a while; if the buffer exceeds the size configured with this parameter 
+(in bytes), output is flushed. Setting it to 0 disables the feature.
 
 .TP
 \fBTrim trailing space from selection on copy\fP (TrimSelection=true)
@@ -1818,6 +1928,11 @@ in a line is included in the selection buffer.
 \fBSelection size indication\fP (SelectionShowSize=0)
 The current selection size can optionally been indicated with a popup, 
 with a value between 1 and 12, setting the popup position by clock hour.
+
+.TP
+\fBShow hyperlink in window title when hovering\fP (HoverTitle=true)
+With this setting, display of an explicit hyperlink (OSC 8 attribute) 
+in the window title when hovering can be disabled.
 
 .TP
 \fBSingle-dash long options\fP (ShortLongOpts=false)
@@ -1910,23 +2025,47 @@ items automatically based on their icon and command line.  This can be
 overridden by setting the AppID to a custom string, in which case windows
 with the same AppID are grouped together.
 
+The AppID option supports up to 5 \fB%s\fP placeholder parameters for 
+a flexible grouping configuration, also supporting positional parameters 
+\fB%N$s\fP (N = 1..5), to be replaced with these values:
+.br
+\(en \fB%1$s\fP: system name (e.g. \fBCYGWIN\fP)
+.br
+\(en \fB%2$s\fP: system release
+.br
+\(en \fB%3$s\fP: machine type (\fBi686\fP/\fBx86_64\fP)
+.br
+\(en \fB%4$s\fP: icon name if started from shortcut
+.br
+\(en \fB%5$s\fP: WSL distribution name if selected
+
 The special value \fBAppID=@\fP causes mintty to derive an implicit AppID 
 from the WSL system name, in order to achieve WSL distribution-specific 
 taskbar grouping. This resolves taskbar grouping problems in some cases 
 (wsltty issue #96) but causes similar problems in other cases (issue #784).
 
-\fIWarning:\fP Using this option in a Windows desktop shortcut may 
+\fIWarning:\fP Using this option for a mintty window started from 
+a Windows shortcut (desktop, taskbar, start menu) may 
 cause trouble with taskbar grouping behaviour. If you need to do that, 
 the shortcut itself should also get attached with the same AppId.
+
+\fINote:\fP Since 2.9.6, if mintty is started via a Windows shortcut 
+which has its own AppID, it is reused for the new mintty window in order 
+to achieve proper taskbar icon grouping. This takes precedence over an 
+explicit setting of the AppID option.
 
 \fIExplanation:\fP Note that Windows shortcut files have their own AppID.
 Hence, if an AppID is specified in the mintty settings, but not on a 
 taskbar-pinned shortcut for invoking mintty, clicking the pinned 
 shortcut will result in a separate taskbar item for the new mintty window, 
 rather than being grouped with the shortcut.
-To avoid this, the shortcut's AppID has to be set to the same string, 
-which can be done using the \fBWin7AppId\fP utility available cloned in 
+
+\fIHint:\fP To avoid AppID inconsistence and thus ungrouped taskbar icons,
+the shortcut's AppID should to be set to the same string as the mintty AppID, 
+which can be done using the \fBwinappid\fP utility available in 
 the mintty utils repository \fIhttps://github.com/mintty/utils\fP.
+As noted above, since mintty 2.9.6, the mintty AppID does not need to be set 
+anymore in this case.
 
 .TP
 \fBApplication Taskbar Shortcut Title\fP (AppName=)
@@ -1942,7 +2081,7 @@ command-line option --store-taskbar-properties to make it persistent.
 It should also be combined with an explicit and unique AppID.
 
 \fINote:\fP The command must be given in Windows pathname syntax (e.g. 
-AppLaunchCmd='C:\\cygwin\\bin\\mintty -T mytitle -').
+AppLaunchCmd=\(aqC:\\cygwin\\bin\\mintty -T mytitle -\(aq).
 
 \fINote:\fP An explicit icon supplied with the -i option can also be stored 
 with the persistent properties; note, however, that for this purpose, 
@@ -1991,9 +2130,13 @@ of character tags:
 .br
 \(en \fBCR\fP Carriage return (enter)
 .br
+\(en \fBFF\fP Form feed
+.br
+\(en \fBESC\fP Escape
+.br
 \(en \fBDEL\fP DEL
 .br
-\(en \fBC0\fP other control characters < ' '
+\(en \fBC0\fP other control characters < \(aq \(aq
 .br
 \(en \fBC1\fP control characters 0x80...0x9F
 .br
@@ -2050,9 +2193,9 @@ Supported keys are described as follows:
 .br
 \(en function keys F1...F24
 .br
-\(en modified function keys, preceded with a combination of C, A, S, in this order,
-indicating Ctrl, Alt, Shift as combined with the function key, 
-attached with a "+" separator, e.g. \fBCS+F9\fP
+\(en modified function keys, preceded with a combination of C, A, S, W, 
+in this order, indicating Ctrl, Alt, Shift, Win as combined with the 
+function key, attached with a "+" separator, e.g. \fBCS+F9\fP
 .br
 \(en special keys (some of which do not occur on typical keyboards) 
 and keypad keys; 
@@ -2081,7 +2224,9 @@ Space, Enter, Esc and Tab are only considered with at least one modifier
   Play, Zoom
 .br
 \(en any character reachable on the keyboard without Shift, considered if 
-pressed while Ctrl and Shift are also held; AltGr-generated characters are supported
+pressed while Ctrl and Shift are also held; AltGr-generated characters 
+are supported; Alt and Win modifiers are supported, 
+e.g. \fBx\fP for Ctrl+Shift+x, \fBW+x\fP for Ctrl+Win+x, \fBAW+x\fP for Alt+Win+x
 
 \fINote:\fP A key that needs a modifier already to be sent (e.g. Break 
 which is often Ctrl+Pause) also needs that modifier in the key definition 
@@ -2101,9 +2246,9 @@ in order to prevent that input of Ctrl+_ would be inhibited.
 
 Supported actions are described as follows:
 .br
-\(en \fB"string"\fP or \fB'string'\fP: enters the literal string
+\(en \fB"string"\fP or \fB\(aqstring\(aq\fP: enters the literal string
 .br
-\(en \fB`command`\fP: enters the output of the command
+\(en \fB\`command\` (**)\fP: enters the output of the command
 .br
 \(en \fBfullscreen (*)\fP: switches to fullscreen mode
 .br
@@ -2113,11 +2258,15 @@ Supported actions are described as follows:
 .br
 \(en \fBwin-restore\fP: resizes to normal size
 .br
+\(en \fBwin-toggle-max\fP: toggles maximized / normal size
+.br
 \(en \fBwin-icon\fP: turns window into icon
 .br
 \(en \fBclose\fP: closes terminal window
 .br
-\(en \fBnew\fP: opens a new terminal window when key is released
+\(en \fBnew-key\fP: opens a new terminal window when key is released
+.br
+\(en \fBnew-window\fP: opens a new terminal window
 .br
 \(en \fBoptions\fP: opens the Options dialog
 .br
@@ -2127,7 +2276,7 @@ Supported actions are described as follows:
 .br
 \(en \fBsearch\fP: opens the search bar
 .br
-\(en \fBdefault-size (*)\fP: switches to default window size
+\(en \fBdefault-size (*)\fP: switches to default terminal size
 .br
 \(en \fBscrollbar-outer\fP: toggles the scrollbar (xterm compatible)
 .br
@@ -2139,6 +2288,16 @@ Supported actions are described as follows:
 .br
 \(en \fBcopy\fP: copies the selection to the clipboard
 .br
+\(en \fBcopy-text\fP: copies text only
+.br
+\(en \fBcopy-rtf\fP: copies rich text format
+.br
+\(en \fBcopy-html-text\fP: copies HTML text only (no font information)
+.br
+\(en \fBcopy-html-format\fP: copies HTML text (no global background)
+.br
+\(en \fBcopy-html-full\fP: copies HTML (close to screen layout)
+.br
 \(en \fBpaste\fP: pastes from the clipboard
 .br
 \(en \fBcopy-paste\fP: copies and pastes
@@ -2149,7 +2308,11 @@ Supported actions are described as follows:
 .br
 \(en \fBtoggle-vt220\fP: toggles VT220 keyboard mode
 .br
+\(en \fBtoggle-auto-repeat\fP: toggles auto-repeat keys mode
+.br
 \(en \fBcopy-title\fP: copies the window title to the clipboard
+.br
+\(en \fBlock-title\fP: locks the window title from being changed
 .br
 \(en \fBreset\fP: resets the terminal
 .br
@@ -2167,10 +2330,18 @@ Supported actions are described as follows:
 .br
 \(en \fBprint-screen\fP: print screen contents
 .br
+\(en \fBtoggle-bidi\fP: toggles (global) bidi disabling
+.br
 \(en \fBvoid\fP: do nothing
 
 \fINote (*):\fP The exact behaviour of some actions depends on the 
-Shift state as being mapped from.
+state of the Shift key.
+
+\fINote (**):\fP For external commands as key functions, the same 
+additional functionality is provided as for context menu user commands 
+(option \fBUserCommands\fP): environment variables and PATH substitution;
+the PATH environment for the external command can be set up 
+with option \fBUserCommandsPath\fP.
 
 \fINote:\fP To just disable the built-in shortcut (and not override it 
 with a user-defined one), but further process the key as normal input, 
@@ -2183,7 +2354,7 @@ use the "\fBvoid\fP" dummy action.
 
 Examples:
 .br
-\(en \fBKeyFunctions=d:`echo -n `date``;A+F4:;CA+F12:break;-:"minus"\fP
+\(en \fBKeyFunctions=d:\`echo -n \`date\`\`;A+F4:;CA+F12:break;-:"minus"\fP
 will input the current date on Ctrl+Shift+d, disable window closing with Alt+F4,
 send a BRK on Ctrl+Alt+F12, but likely not input "minus" on Ctrl+Shift+minus 
 because Shift+minus is an underline on many keyboard layouts which has a 
@@ -2296,9 +2467,14 @@ the option either uses the image as a background picture, scaled to
 the terminal size (optional prefix \fB_\fP to the filename), 
 or initially scaling the terminal to the aspect ratio of the image 
 (prefix \fB%\fP to the filename), 
-or as a tiled background texture (prefix \fB*\fP to the filename).
-The background can be changed with an OSC 11 escape sequence, using a filename 
-prefixed with either \fB_\fP, \fB%\fP, or \fB*\fP instead of a colour.
+or as a tiled background texture (prefix \fB*\fP to the filename), 
+or it uses the current desktop background, achieving a virtual 
+floating window effect (\fB=\fP without filename, currently only applicable 
+if desktop wallpaper is set as being "tiled" and unscaled).
+
+The background can be changed with an OSC 11 escape sequence, 
+instead of a colour using a background specification 
+prefixed with either of \fB_\fP, \fB%\fP, \fB*\fP, \fB=\fP.
 
 If the background filename is followed by a comma and a number between 1 and 254, 
 the background image will be dimmed towards the background colour;
@@ -2347,13 +2523,12 @@ window zooming by the Shift key is disabled,
 except for the keyboard zoom functions Shift+Alt+Enter/F11 and the Shift+menu function.
 
 .TP
-\fBHandling of DPI changes\fP (HandleDPI=1)
-By default, in Windows 10, when the window is moved to another monitor 
-that has a different DPI value ("scaling factor") configured, this is 
-considered to compensate by appropriate scaling.
-This option can be set to 0/false to suppress DPI adjustments,
-or to 2 to require DPI handling mode 2 and only enable DPI handling if
-this recently fixed Windows DPI handling mode is available.
+\fBHandling of DPI changes\fP (HandleDPI=2)
+When the window is moved to another monitor that has a different DPI 
+value ("scaling factor") configured, newer Windows 10 versions support 
+semi-automatic compensation by appropriate scaling.
+This option can be set to support either DPI handling modes 1 or 2 
+(if supported, respectively), or set to 0/false to suppress DPI adjustments.
 
 .TP
 \fBCheck availability of mintty version update\fP (CheckVersionUpdate=900)
@@ -2390,9 +2565,9 @@ to reduce the risk of injecting commands via tricky filenames.
 
 Examples:
 .br
-\(en \fBDropCommands=bash:cd '%s'^M;mined:^[fo^M%s^M;vim:^[:e %s^M\fP
+\(en \fBDropCommands=bash:cd \(aq%s\(aq^M;mined:^[fo^M%s^M;vim:^[:e %s^M\fP
 .br
-\(en \fBDropCommands=^_bash:cd '%s';echo $PWD^M^_vim:^[:e %s^M^_\fP
+\(en \fBDropCommands=^_bash:cd \(aq%s\(aq;echo $PWD^M^_vim:^[:e %s^M^_\fP
 
 \fINote:\fP An "Enter" key has to be specified with the CR character code, 
 control characters need to be embedded verbatim 
@@ -2403,7 +2578,7 @@ command invocations depending on file name pattern are desired, this should
 be handled by a suitable cooperating shell function.
 
 .TP
-\fBUser commands\fP (UserCommands=)
+\fBUser commands\fP (UserCommands=) [DEPRECATED, see \fBCtxMenuFunctions\fP]
 This setting lists user-defined commands for the extended context menu.
 The value is a series of semicolon-separated, colon-combined 
 pairs of menu item label and command pattern; the command is invoked and its 
@@ -2437,9 +2612,15 @@ MINTTY_CWD for the current working directory of the foreground process
 added to the localization file of the selected UI localization language 
 (in subdirectory \fIlang\fP of a mintty resource directory).
 
+\fINote:\fP Menu item labels can contain a \fB&\fP sign to indicate a 
+key shortcut for menu item selection.
+
 \fINote:\fP The previous command can be detected if prompt lines are marked 
 with the escape sequence ^[[?7711h.
 See the Control Sequences wiki page \fIhttps://github.com/mintty/mintty/wiki/CtrlSeqs#scroll-markers\fP.
+
+\fINote:\fP The PATH environment for the external command can be set up 
+with option \fBUserCommandsPath\fP.
 
 \fINote:\fP This is an experimental feature, with an experimental configuration format.
 
@@ -2453,9 +2634,67 @@ in order to avoid the risk of injecting commands via tricky selected text.
 
 Examples:
 .br
-\(en \fBUserCommands=Paste capital:echo -n "$MINTTY_SELECT" | tr 'a-z' 'A-Z';Paste small:echo -n "$MINTTY_SELECT" | tr 'A-Z' 'a-z'\fP
+\(en \fBUserCommands=Paste capital:echo -n "$MINTTY_SELECT" | tr \(aqa-z\(aq \(aqA-Z\(aq;Paste small:echo -n "$MINTTY_SELECT" | tr \(aqA-Z\(aq \(aqa-z\(aq\fP
+.br
+\(en \fBUserCommands=google:cygstart https://www.google.de/search?q="$MINTTY_SELECT"\fP
 
 \fINote:\fP Control characters need to be embedded verbatim; there is no escape notation.
+
+.TP
+\fBUser commands PATH expansion\fP (UserCommandsPath=/bin:%s)
+This setting defines the PATH environment for user-defined external commands,
+applicable to extended context menu commands (UserCommands=...:...)
+and key-attached external commands (KeyFunctions=...:\`...\`).
+If the value contains a single \fB%s\fP placeholder, the current 
+environment PATH is substituted for it.
+
+.TP
+\fBSystem menu user commands\fP (CtxMenuFunctions=)
+This setting lists user-defined functions or commands for the context menus 
+(right mouse click in text area).
+If it is configured, it is by default included in the extended context menu 
+(Control+right-click) but can be configured for other context menu 
+invocations as well (see configuration of \fIMenu contents\fP with options 
+\fBMenu*\fP), along with the deprecated configured user commands (\fBUserCommands\fP).
+
+The value is a series of semicolon-separated, colon-combined 
+pairs of key and action descriptors
+(if a semicolon shall be embedded into any of the action descriptors, 
+a non-whitespace control character (i.e. none of \fB^I^J^K^L^M\fP) can be 
+specified as an alternative separator by starting the whole setting with it).
+The definition list can be split over multiple lines if a separator is 
+followed by a backslash, newline, and optional whitespace indentation.
+
+The configuration is similar to the \fBUserCommands\fP setting with respect 
+to menu labels, and to \fBKeyFunctions\fP setting with respect to function 
+designations; respective notes and warnings apply.
+
+.TP
+\fBSystem menu user commands\fP (SysMenuFunctions=)
+This setting lists user-defined functions or commands for the system menu 
+(right mouse click on title bar or left click on title bar icon).
+If it is configured, the middle items of the menu (including Options... 
+and New) are replaced by the configured functions.
+
+The value is a series of semicolon-separated, colon-combined 
+pairs of key and action descriptors
+(if a semicolon shall be embedded into any of the action descriptors, 
+a non-whitespace control character (i.e. none of \fB^I^J^K^L^M\fP) can be 
+specified as an alternative separator by starting the whole setting with it).
+The definition list can be split over multiple lines if a separator is 
+followed by a backslash, newline, and optional whitespace indentation.
+
+The configuration is similar to the \fBUserCommands\fP setting with respect 
+to menu labels, and to \fBKeyFunctions\fP setting with respect to function 
+designations; respective notes and warnings apply.
+\fINote:\fP To include default items and keep their language localization 
+enabled, their label strings need to be reproduced exactly as registered 
+in the localization pattern file \fBmessages.pot\fP, including the position 
+of a \fB&\fP marker which indicates a key shortcut for menu item selection.
+
+Examples:
+.br
+\(en \fBSysMenuFunctions=&Lock Title:lock-title;Copy &Title:copy-title;&Options...:options;Ne&w:new-window\fP
 
 .TP
 \fBSession launcher commands\fP (SessionCommands=)
@@ -2551,7 +2790,7 @@ Menu contents can be configured by a sequence of characters with the following m
 .br
 \(en \fBe\fP: extended context menu with user commands (if configured)
 .br
-\(en \fBu\fP: user commands
+\(en \fBu\fP: user commands (\fBCtxMenuFunctions\fP, \fBUserCommands\fP)
 .br
 \(en \fBl\fP: session launcher
 .br

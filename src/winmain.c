@@ -43,6 +43,7 @@ char * mintty_debug;
 
 #include <sys/stat.h>
 #include <fcntl.h>  // open flags
+#include <sys/utsname.h>
 
 #ifndef INT16
 #define INT16 short
@@ -65,6 +66,7 @@ ATOM class_atom;
 static char **main_argv;
 static int main_argc;
 static bool invoked_from_shortcut = false;
+wstring shortcut = 0;
 static bool invoked_with_appid = false;
 
 
@@ -95,7 +97,7 @@ enum {
 };
 
 // Options
-static bool title_settable = true;
+bool title_settable = true;
 static string border_style = 0;
 static string report_geom = 0;
 static bool report_moni = false;
@@ -110,6 +112,7 @@ static bool maxheight = false;
 static bool store_taskbar_properties = false;
 static bool prevent_pinning = false;
 bool support_wsl = false;
+wchar * wslname = 0;
 wstring wsl_basepath = W("");
 static char * wsl_guid = 0;
 static bool wsl_launch = false;
@@ -137,6 +140,19 @@ typedef struct {
 #include <uxtheme.h>
 
 #endif
+
+
+unsigned long
+mtime(void)
+{
+#if CYGWIN_VERSION_API_MINOR >= 74
+  struct timespec tim;
+  clock_gettime(CLOCK_MONOTONIC, &tim);
+  return tim.tv_sec * 1000 + tim.tv_nsec / 1000000;
+#else
+  return time(0);
+#endif
+}
 
 
 #ifdef debug_resize
@@ -291,10 +307,11 @@ set_dpi_auto_scaling(bool on)
 static int
 set_per_monitor_dpi_aware(void)
 {
+  int res = DPI_UNAWARE;
   // DPI handling V2: make EnableNonClientDpiScaling work, at last
-  if (pSetThreadDpiAwarenessContext &&
+  if (pSetThreadDpiAwarenessContext && cfg.handle_dpichanged == 2 &&
       pSetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
-    return DPI_AWAREV2;
+    res = DPI_AWAREV2;
   else if (cfg.handle_dpichanged == 1 &&
            pSetProcessDpiAwareness && pGetProcessDpiAwareness) {
     HRESULT hr = pSetProcessDpiAwareness(Process_Per_Monitor_DPI_Aware);
@@ -307,9 +324,12 @@ set_per_monitor_dpi_aware(void)
     int awareness = 0;
     if (SUCCEEDED(pGetProcessDpiAwareness(NULL, &awareness)) &&
         awareness == Process_Per_Monitor_DPI_Aware)
-      return DPI_AWAREV1;
+      res = DPI_AWAREV1;
   }
-  return DPI_UNAWARE;
+#ifdef debug_dpi
+  printf("dpi_awareness %d\n", res);
+#endif
+  return res;
 }
 
 void
@@ -410,7 +430,8 @@ refresh_tab_titles(bool trace)
 {
   BOOL CALLBACK wnd_enum_tabs(HWND curr_wnd, LPARAM lp)
   {
-    (void)lp;
+    bool trace = (bool)lp;
+
     WINDOWINFO curr_wnd_info;
     curr_wnd_info.cbSize = sizeof(WINDOWINFO);
     GetWindowInfo(curr_wnd, &curr_wnd_info);
@@ -464,7 +485,7 @@ refresh_tab_titles(bool trace)
   }
 
   clear_tabinfo();
-  EnumWindows(wnd_enum_tabs, 0);
+  EnumWindows(wnd_enum_tabs, (LPARAM)trace);
   sort_tabinfo();
 #if defined(debug_tabbar) || defined(debug_win_switch)
   for (int w = 0; w < ntabinfo; w++)
@@ -502,6 +523,49 @@ update_tab_titles()
   }
 }
 
+
+/*
+   Window system colour configuration.
+   Applicable to current window if switched via WM_SETFOCUS/WM_KILLFOCUS.
+   This is not enabled as it causes unpleasant flickering of the taskbar;
+   also there is no visible effect on border or caption colours...
+ */
+static void
+win_sys_style(bool focus)
+{
+#ifdef switch_sys_colours
+  static INT elements[] = {
+    COLOR_ACTIVEBORDER,
+    COLOR_ACTIVECAPTION,
+    COLOR_GRADIENTACTIVECAPTION,
+    COLOR_CAPTIONTEXT  // proof of concept
+  };
+  static COLORREF colours[] = {
+    RGB(0, 255, 0),
+    RGB(0, 255, 0),
+    RGB(0, 255, 0),
+    RGB(255, 0, 0),
+  };
+  static COLORREF * save = 0;
+
+  if (!save) {
+    save = newn(COLORREF, lengthof(elements));
+    for (uint i = 0; i < lengthof(elements); i++)
+      save[i] = GetSysColor(elements[i]);
+  }
+  if (focus)
+    SetSysColors(lengthof(elements), elements, colours);
+  else
+    SetSysColors(lengthof(elements), elements, save);
+#else
+(void)focus;
+#endif
+}
+
+
+/*
+   Window title functions.
+ */
 
 void
 win_set_icon(char * s, int icon_index)
@@ -829,7 +893,8 @@ win_synctabs(int level)
 {
   BOOL CALLBACK wnd_enum_tabs(HWND curr_wnd, LPARAM lp)
   {
-    (void)lp;
+    int level = (int)lp;
+
     WINDOWINFO curr_wnd_info;
     curr_wnd_info.cbSize = sizeof(WINDOWINFO);
     GetWindowInfo(curr_wnd, &curr_wnd_info);
@@ -853,8 +918,9 @@ win_synctabs(int level)
     }
     return true;
   }
+
   if (cfg.geom_sync >= level)
-    EnumWindows(wnd_enum_tabs, 0);
+    EnumWindows(wnd_enum_tabs, (LPARAM)level);
 }
 
 
@@ -880,22 +946,33 @@ get_my_monitor_info(MONITORINFO *mip)
   GetMonitorInfo(mon, mip);
 }
 
+
 static void
 get_monitor_info(int moni, MONITORINFO *mip)
 {
   mip->cbSize = sizeof(MONITORINFO);
 
+  struct data_get_monitor_info {
+    int moni;
+    MONITORINFO *mip;
+  };
+
   BOOL CALLBACK
   monitor_enum(HMONITOR hMonitor, HDC hdcMonitor, LPRECT monp, LPARAM dwData)
   {
-    (void)hdcMonitor, (void)monp, (void)dwData;
+    (void)hdcMonitor, (void)monp;
+    struct data_get_monitor_info * pdata = (struct data_get_monitor_info *)dwData;
 
-    GetMonitorInfo(hMonitor, mip);
+    GetMonitorInfo(hMonitor, pdata->mip);
 
-    return --moni > 0;
+    return --(pdata->moni) > 0;
   }
 
-  EnumDisplayMonitors(0, 0, monitor_enum, 0);
+  struct data_get_monitor_info data = {
+    .moni = moni,
+    .mip = mip
+  };
+  EnumDisplayMonitors(0, 0, monitor_enum, (LPARAM)&data);
 }
 
 #define dont_debug_display_monitors_mockup
@@ -979,27 +1056,45 @@ search_monitors(int * minx, int * miny, HMONITOR lookup_mon, int get_primary, MO
   }
 #endif
 
-  int moni = 0;
-  int moni_found = 0;
+  struct data_search_monitors {
+    HMONITOR lookup_mon;
+    int moni;
+    int moni_found;
+    int *minx, *miny;
+    RECT vscr;
+    HMONITOR refmon, curmon;
+    int get_primary;
+    bool print_monitors;
+  };
+
+  struct data_search_monitors data = {
+    .moni = 0,
+    .moni_found = 0,
+    .minx = minx,
+    .miny = miny,
+    .vscr = (RECT){0, 0, 0, 0},
+    .refmon = 0,
+    .curmon = lookup_mon ? 0 : MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST),
+    .get_primary = get_primary,
+    .print_monitors = !lookup_mon && !mip && get_primary
+  };
+
   * minx = 0;
   * miny = 0;
-  RECT vscr = (RECT){0, 0, 0, 0};
-  HMONITOR refmon = 0;
-  HMONITOR curmon = lookup_mon ? 0 : MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST);
-  bool print_monitors = !lookup_mon && !mip && get_primary;
 #ifdef debug_display_monitors
-  print_monitors = !lookup_mon;
+  data.print_monitors = !lookup_mon;
 #endif
 
   BOOL CALLBACK
   monitor_enum(HMONITOR hMonitor, HDC hdcMonitor, LPRECT monp, LPARAM dwData)
   {
-    (void)hdcMonitor, (void)monp, (void)dwData;
+    struct data_search_monitors *data = (struct data_search_monitors *)dwData;
+    (void)hdcMonitor, (void)monp;
 
-    moni ++;
-    if (hMonitor == lookup_mon) {
+    (data->moni) ++;
+    if (hMonitor == data->lookup_mon) {
       // looking for index of specific monitor
-      moni_found = moni;
+      data->moni_found = data->moni;
       return FALSE;
     }
 
@@ -1007,26 +1102,26 @@ search_monitors(int * minx, int * miny, HMONITOR lookup_mon, int get_primary, MO
     mi.cbSize = sizeof(MONITORINFO);
     GetMonitorInfo(hMonitor, &mi);
 
-    if (get_primary && (mi.dwFlags & MONITORINFOF_PRIMARY)) {
-      moni_found = moni;  // fallback to be overridden by monitor found later
-      refmon = hMonitor;
+    if (data->get_primary && (mi.dwFlags & MONITORINFOF_PRIMARY)) {
+      data->moni_found = data->moni;  // fallback to be overridden by monitor found later
+      data->refmon = hMonitor;
     }
 
     // determining smallest monitor width and height
     RECT fr = mi.rcMonitor;
-    if (*minx == 0 || *minx > fr.right - fr.left)
-      *minx = fr.right - fr.left;
-    if (*miny == 0 || *miny > fr.bottom - fr.top)
-      *miny = fr.bottom - fr.top;
-    vscr.top = min(vscr.top, fr.top);
-    vscr.left = min(vscr.left, fr.left);
-    vscr.right = max(vscr.right, fr.right);
-    vscr.bottom = max(vscr.bottom, fr.bottom);
+    if (*(data->minx) == 0 || *(data->minx) > fr.right - fr.left)
+      *(data->minx) = fr.right - fr.left;
+    if (*(data->miny) == 0 || *(data->miny) > fr.bottom - fr.top)
+      *(data->miny) = fr.bottom - fr.top;
+    data->vscr.top = min(data->vscr.top, fr.top);
+    data->vscr.left = min(data->vscr.left, fr.left);
+    data->vscr.right = max(data->vscr.right, fr.right);
+    data->vscr.bottom = max(data->vscr.bottom, fr.bottom);
 
-    if (print_monitors) {
+    if (data->print_monitors) {
       printf("Monitor %d %s %s width,height %4d,%4d (%4d,%4d...%4d,%4d)\n", 
-             moni,
-             hMonitor == curmon ? "current" : "       ",
+             data->moni,
+             hMonitor == data->curmon ? "current" : "       ",
              mi.dwFlags & MONITORINFOF_PRIMARY ? "primary" : "       ",
              (int)(fr.right - fr.left), (int)(fr.bottom - fr.top),
              (int)fr.left, (int)fr.top, (int)fr.right, (int)fr.bottom);
@@ -1035,32 +1130,36 @@ search_monitors(int * minx, int * miny, HMONITOR lookup_mon, int get_primary, MO
     return TRUE;
   }
 
-  EnumDisplayMonitors(0, 0, monitor_enum, 0);
+  EnumDisplayMonitors(0, 0, monitor_enum, (LPARAM)&data);
 
   if (!lookup_mon && !mip && !get_primary) {
-    *minx = vscr.right - vscr.left;
-    *miny = vscr.bottom - vscr.top;
-    return moni;
+    *minx = data.vscr.right - data.vscr.left;
+    *miny = data.vscr.bottom - data.vscr.top;
+    return data.moni;
   }
   else if (lookup_mon) {
-    return moni_found;
+    return data.moni_found;
   }
   else if (mip) {
-    if (!refmon)  // not detected primary monitor as requested?
+    if (!data.refmon)  // not detected primary monitor as requested?
       // determine current monitor
-      refmon = MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST);
+      data.refmon = MonitorFromWindow(wnd, MONITOR_DEFAULTTONEAREST);
     mip->cbSize = sizeof(MONITORINFO);
-    GetMonitorInfo(refmon, mip);
+    GetMonitorInfo(data.refmon, mip);
     if (get_primary == 2) {
-      *minx = vscr.left;
-      *miny = vscr.top;
+      *minx = data.vscr.left;
+      *miny = data.vscr.top;
     }
-    return moni;  // number of monitors
+    return data.moni;  // number of monitors
   }
   else
-    return moni;  // number of monitors printed
+    return data.moni;  // number of monitors printed
 }
 
+
+/*
+   Window manipulation functions.
+ */
 
 /*
  * Minimise or restore the window in response to a server-side request.
@@ -1987,7 +2086,133 @@ win_close(void)
     child_kill((GetKeyState(VK_SHIFT) & 0x80) != 0);
 }
 
+
+/*
+   Diagnostic functions.
+ */
+
+void
+show_message(char * msg, UINT type)
+{
+  FILE * out = (type & (MB_ICONWARNING | MB_ICONSTOP)) ? stderr : stdout;
+  char * outmsg = cs__utftombs(msg);
+  if (fputs(outmsg, out) < 0 || fputs("\n", out) < 0 || fflush(out) < 0) {
+    wchar * wmsg = cs__utftowcs(msg);
+    message_box_w(0, wmsg, W(APPNAME), type, null);
+    delete(wmsg);
+  }
+  delete(outmsg);
+}
+
+void
+show_info(char * msg)
+{
+  show_message(msg, MB_OK);
+}
+
+static char *
+opterror_msg(string msg, bool utf8params, string p1, string p2)
+{
+  // Note: msg is in UTF-8,
+  // parameters are in current encoding unless utf8params is true
+  if (!utf8params) {
+    if (p1) {
+      wchar * w = cs__mbstowcs(p1);
+      p1 = cs__wcstoutf(w);
+      free(w);
+    }
+    if (p2) {
+      wchar * w = cs__mbstowcs(p2);
+      p2 = cs__wcstoutf(w);
+      free(w);
+    }
+  }
+
+  char * fullmsg;
+  int len = asprintf(&fullmsg, msg, p1, p2);
+  if (!utf8params) {
+    if (p1)
+      free((char *)p1);
+    if (p2)
+      free((char *)p2);
+  }
+
+  if (len > 0)
+    return fullmsg;
+  else
+    return null;
+}
+
+bool
+print_opterror(FILE * stream, string msg, bool utf8params, string p1, string p2)
+{
+  char * fullmsg = opterror_msg(msg, utf8params, p1, p2);
+  bool ok = false;
+  if (fullmsg) {
+    char * outmsg = cs__utftombs(fullmsg);
+    delete(fullmsg);
+    ok = fprintf(stream, "%s.\n", outmsg);
+    if (ok)
+      ok = fflush(stream);
+    delete(outmsg);
+  }
+  return ok;
+}
+
+static void
+print_error(string msg)
+{
+  print_opterror(stderr, msg, true, "", "");
+}
+
+static void
+option_error(char * msg, char * option, int err)
+{
+  finish_config();  // ensure localized message
+  // msg is in UTF-8, option is in current encoding
+  char * optmsg = opterror_msg(_(msg), false, option, null);
+  //char * fullmsg = asform("%s\n%s", optmsg, _("Try '--help' for more information"));
+  char * fullmsg = strdup(optmsg);
+  strappend(fullmsg, "\n");
+  if (err) {
+    strappend(fullmsg, asform("[Error info %d]\n", err));
+  }
+  strappend(fullmsg, _("Try '--help' for more information"));
+  show_message(fullmsg, MB_ICONWARNING);
+  exit(1);
+}
+
+static void
+show_iconwarn(wchar * winmsg)
+{
+  char * msg = _("Could not load icon");
+  char * in = cs__wcstoutf(cfg.icon);
+
+  char * fullmsg;
+  int len;
+  if (winmsg) {
+    char * wmsg = cs__wcstoutf(winmsg);
+    len = asprintf(&fullmsg, "%s '%s':\n%s", msg, in, wmsg);
+    free(wmsg);
+  }
+  else
+    len = asprintf(&fullmsg, "%s '%s'", msg, in);
+  free(in);
+  if (len > 0) {
+    show_message(fullmsg, MB_ICONWARNING);
+    free(fullmsg);
+  }
+  else
+    show_message(msg, MB_ICONWARNING);
+}
+
+
+/*
+   Message handling.
+ */
+
 #define dont_debug_messages
+#define dont_debug_only_focus_messages
 #define dont_debug_only_sizepos_messages
 #define dont_debug_mouse_messages
 
@@ -2014,9 +2239,13 @@ static struct {
       && message != WM_MOUSEMOVE && message != WM_NCMOUSEMOVE
 # endif
      )
-#ifdef debug_only_sizepos_messages
+# ifdef debug_only_sizepos_messages
     if (strstr(wm_name, "POSCH") || strstr(wm_name, "SIZ"))
-#endif
+# else
+# ifdef debug_only_focus_messages
+    if (strstr(wm_name, "ACTIVATE") || strstr(wm_name, "FOCUS"))
+# endif
+# endif
     printf("[%d]->%8p %04X %s (%04X %08X)\n", (int)time(0), wnd, message, wm_name, (unsigned)wp, (unsigned)lp);
 #endif
   switch (message) {
@@ -2143,15 +2372,24 @@ static struct {
         ; // skip WM_SYSCOMMAND from Windows here (but process own ones)
       else if ((wp & ~0xF) >= IDM_GOTAB)
         win_gotab(wp - IDM_GOTAB);
+      else if ((wp & ~0xF) >= IDM_CTXMENUFUNCTION)
+        user_function(cfg.ctx_user_commands, wp - IDM_CTXMENUFUNCTION);
+      else if ((wp & ~0xF) >= IDM_SYSMENUFUNCTION)
+        user_function(cfg.sys_user_commands, wp - IDM_SYSMENUFUNCTION);
       else if ((wp & ~0xF) >= IDM_SESSIONCOMMAND)
         win_launch(wp - IDM_SESSIONCOMMAND);
       else if ((wp & ~0xF) >= IDM_USERCOMMAND)
-        user_command(wp - IDM_USERCOMMAND);
+        user_command(cfg.user_commands, wp - IDM_USERCOMMAND);
       else
       switch (wp & ~0xF) {  /* low 4 bits reserved to Windows */
         when IDM_BREAK: child_break();
         when IDM_OPEN: term_open();
         when IDM_COPY: term_copy();
+        when IDM_COPY_TEXT: term_copy_as('t');
+        when IDM_COPY_RTF: term_copy_as('r');
+        when IDM_COPY_HTXT: term_copy_as('h');
+        when IDM_COPY_HFMT: term_copy_as('f');
+        when IDM_COPY_HTML: term_copy_as('H');
         when IDM_COPASTE: term_copy(); win_paste();
         when IDM_CLRSCRLBCK: term_clear_scrollback(); term.disptop = 0;
         when IDM_TOGLOG: toggle_logging();
@@ -2198,7 +2436,10 @@ static struct {
           int moni = search_monitors(&x, &y, mon, true, 0);
           child_fork(main_argc, main_argv, moni);
         }
-        when IDM_NEW_MONI: child_fork(main_argc, main_argv, (int)lp);
+        when IDM_NEW_MONI: {
+          int moni = lp;
+          child_fork(main_argc, main_argv, moni);
+        }
         when IDM_COPYTITLE: win_copy_title();
       }
     }
@@ -2246,6 +2487,7 @@ static struct {
       }
 
     when WM_KEYDOWN or WM_SYSKEYDOWN:
+      //printf("[%ld] WM_KEY %02X\n", mtime(), (int)wp);
       if (win_key_down(wp, lp))
         return 0;
 
@@ -2365,6 +2607,7 @@ static struct {
     when WM_SETFOCUS:
       trace_resize(("# WM_SETFOCUS VK_SHIFT %02X\n", (uchar)GetKeyState(VK_SHIFT)));
       term_set_focus(true, false);
+      win_sys_style(true);
       CreateCaret(wnd, caretbm, 0, 0);
       //flash_taskbar(false);  /* stop; not needed when leaving search bar */
       win_update(false);
@@ -2374,6 +2617,7 @@ static struct {
     when WM_KILLFOCUS:
       win_show_mouse();
       term_set_focus(false, false);
+      win_sys_style(false);
       DestroyCaret();
       win_update(false);
 
@@ -2382,7 +2626,7 @@ static struct {
       // which is supposed to initiate this message;
       // however, if we skip the call here, the "New" item will 
       // not be initialised !?!
-      win_update_menus();
+      win_update_menus(true);
       return 0;
 
     when WM_MOVING:
@@ -2526,8 +2770,14 @@ static struct {
       }
     }
 
-    when WM_GETDPISCALEDSIZE:
+    when WM_GETDPISCALEDSIZE: {
       // here we could adjust the RECT passed to WM_DPICHANGED ...
+#ifdef debug_dpi
+      SIZE * sz = (SIZE *)lp;
+      printf("WM_GETDPISCALEDSIZE dpi %d w/h %d/%d\n", (int)wp, (int)sz->cx, (int)sz->cy);
+#endif
+      return 0;
+    }
 
     when WM_DPICHANGED: {
       if (!cfg.handle_dpichanged) {
@@ -2544,14 +2794,26 @@ static struct {
         LPRECT r = (LPRECT) lp;
 
 #ifdef debug_dpi
-        printf("WM_DPICHANGED %d -> %d (handled) (aware %d handle %d)\n", dpi, new_dpi, per_monitor_dpi_aware, cfg.handle_dpichanged);
+        printf("WM_DPICHANGED %d -> %d (handled) (aware %d handle %d) w/h %d/%d\n",
+               dpi, new_dpi, per_monitor_dpi_aware, cfg.handle_dpichanged,
+               (int)(r->right - r->left), (int)(r->bottom - r->top));
 #endif
         dpi = new_dpi;
 
+        int y = term.rows, x = term.cols;
         SetWindowPos(wnd, 0, r->left, r->top, r->right - r->left, r->bottom - r->top,
                      SWP_NOZORDER | SWP_NOACTIVATE);
 
         font_cs_reconfig(true);
+
+        // reestablish terminal size
+        if (term.rows != y || term.cols != x) {
+#ifdef debug_dpi
+          printf("term w/h %d/%d -> %d/%d, fixing\n", x, y, term.cols, term.rows);
+#endif
+          // win_fix_position also clips the window to desktop size
+          win_set_chars(y, x);
+        }
 
         is_in_dpi_change = false;
         return 0;
@@ -2627,121 +2889,6 @@ static struct {
   return DefWindowProcW(wnd, message, wp, lp);
 }
 
-
-void
-show_message(char * msg, UINT type)
-{
-  FILE * out = (type & (MB_ICONWARNING | MB_ICONSTOP)) ? stderr : stdout;
-  char * outmsg = cs__utftombs(msg);
-  if (fputs(outmsg, out) < 0 || fputs("\n", out) < 0 || fflush(out) < 0) {
-    wchar * wmsg = cs__utftowcs(msg);
-    message_box_w(0, wmsg, W(APPNAME), type, null);
-    delete(wmsg);
-  }
-  delete(outmsg);
-}
-
-static void
-show_info(char * msg)
-{
-  show_message(msg, MB_OK);
-}
-
-static char *
-opterror_msg(string msg, bool utf8params, string p1, string p2)
-{
-  // Note: msg is in UTF-8,
-  // parameters are in current encoding unless utf8params is true
-  if (!utf8params) {
-    if (p1) {
-      wchar * w = cs__mbstowcs(p1);
-      p1 = cs__wcstoutf(w);
-      free(w);
-    }
-    if (p2) {
-      wchar * w = cs__mbstowcs(p2);
-      p2 = cs__wcstoutf(w);
-      free(w);
-    }
-  }
-
-  char * fullmsg;
-  int len = asprintf(&fullmsg, msg, p1, p2);
-  if (!utf8params) {
-    if (p1)
-      free((char *)p1);
-    if (p2)
-      free((char *)p2);
-  }
-
-  if (len > 0)
-    return fullmsg;
-  else
-    return null;
-}
-
-bool
-print_opterror(FILE * stream, string msg, bool utf8params, string p1, string p2)
-{
-  char * fullmsg = opterror_msg(msg, utf8params, p1, p2);
-  bool ok = false;
-  if (fullmsg) {
-    char * outmsg = cs__utftombs(fullmsg);
-    delete(fullmsg);
-    ok = fprintf(stream, "%s.\n", outmsg);
-    if (ok)
-      ok = fflush(stream);
-    delete(outmsg);
-  }
-  return ok;
-}
-
-static void
-print_error(string msg)
-{
-  print_opterror(stderr, msg, true, "", "");
-}
-
-static void
-option_error(char * msg, char * option, int err)
-{
-  finish_config();  // ensure localized message
-  // msg is in UTF-8, option is in current encoding
-  char * optmsg = opterror_msg(_(msg), false, option, null);
-  //char * fullmsg = asform("%s\n%s", optmsg, _("Try '--help' for more information"));
-  char * fullmsg = strdup(optmsg);
-  strappend(fullmsg, "\n");
-  if (err) {
-    strappend(fullmsg, asform("[Error info %d]\n", err));
-  }
-  strappend(fullmsg, _("Try '--help' for more information"));
-  show_message(fullmsg, MB_ICONWARNING);
-  exit(1);
-}
-
-static void
-show_iconwarn(wchar * winmsg)
-{
-  char * msg = _("Could not load icon");
-  char * in = cs__wcstoutf(cfg.icon);
-
-  char * fullmsg;
-  int len;
-  if (winmsg) {
-    char * wmsg = cs__wcstoutf(winmsg);
-    len = asprintf(&fullmsg, "%s '%s':\n%s", msg, in, wmsg);
-    free(wmsg);
-  }
-  else
-    len = asprintf(&fullmsg, "%s '%s'", msg, in);
-  free(in);
-  if (len > 0) {
-    show_message(fullmsg, MB_ICONWARNING);
-    free(fullmsg);
-  }
-  else
-    show_message(msg, MB_ICONWARNING);
-}
 
 void
 report_pos(void)
@@ -2918,6 +3065,64 @@ get_shortcut_icon_location(wchar * iconfile, bool * wdpresent)
   return result;
 }
 
+static wchar *
+get_shortcut_appid(wchar * shortcut)
+{
+#if CYGWIN_VERSION_API_MINOR >= 74
+  DWORD win_version = GetVersion();
+  win_version = ((win_version & 0xff) << 8) | ((win_version >> 8) & 0xff);
+  if (win_version < 0x0601)
+    return 0;  // PropertyStore not supported on Windows XP
+
+  HRESULT hres = OleInitialize(NULL);
+  if (hres != S_FALSE && hres != S_OK)
+    return 0;
+
+  IShellLink * link;
+  hres = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, 
+                          &IID_IShellLink, (voidrefref) &link);
+  if (!SUCCEEDED(hres))
+    return 0;
+
+  wchar * res = 0;
+
+  IPersistFile * file;
+  hres = link->lpVtbl->QueryInterface(link, &IID_IPersistFile, (voidrefref) &file);
+  if (!SUCCEEDED(hres))
+    goto rel1;
+
+  hres = file->lpVtbl->Load(file, (LPCOLESTR)shortcut, STGM_READ | STGM_SHARE_DENY_NONE);
+  if (!SUCCEEDED(hres))
+    goto rel2;
+
+  IPropertyStore * store;
+  hres = link->lpVtbl->QueryInterface(link, &IID_IPropertyStore, (voidrefref) &store);
+  if (!SUCCEEDED(hres))
+    goto rel3;
+
+  PROPVARIANT pv;
+  hres = store->lpVtbl->GetValue(store, &PKEY_AppUserModel_ID, &pv);
+  if (!SUCCEEDED(hres))
+    goto rel3;
+
+  if (pv.vt == VT_LPWSTR)
+    res = wcsdup(pv.pwszVal);
+
+  PropVariantClear(&pv);
+rel3:
+  store->lpVtbl->Release(store);
+rel2:
+  file->lpVtbl->Release(file);
+rel1:
+  link->lpVtbl->Release(link);
+
+  return res;
+#else
+  (void)shortcut;
+  return 0;
+#endif
+}
+
 
 #if CYGWIN_VERSION_API_MINOR >= 74
 
@@ -3092,7 +3297,7 @@ waccess(wstring fn, int amode)
 static int
 select_WSL(char * wsl)
 {
-  wchar * wslname = cs__mbstowcs(wsl ?: "");
+  wslname = cs__mbstowcs(wsl ?: "");
   wstring wsl_icon;
   // set --rootfs implicitly
   int err = getlxssinfo(false, wslname, &wsl_guid, &wsl_basepath, &wsl_icon);
@@ -3113,7 +3318,10 @@ select_WSL(char * wsl)
       // so an explicit config value derives AppID from wsl distro name
       set_arg_option("AppID", asform("%s.%s", APPNAME, wsl ?: "WSL"));
   }
-  free(wslname);
+  else {
+    free(wslname);
+    wslname = 0;
+  }
   return err;
 }
 
@@ -3239,53 +3447,20 @@ enum_commands(wstring commands, CMDENUMPROC cmdenum)
 
 
 static void
-configure_taskbar(void)
+configure_taskbar(wchar * app_id)
 {
   if (*cfg.task_commands) {
     enum_commands(cfg.task_commands, cmd_enum);
-    setup_jumplist(cfg.app_id, jumplist_len, jumplist_title, jumplist_cmd, jumplist_icon, jumplist_ii);
+    setup_jumplist(app_id, jumplist_len, jumplist_title, jumplist_cmd, jumplist_icon, jumplist_ii);
   }
 
 #if CYGWIN_VERSION_DLL_MAJOR >= 1007
   // initial patch (issue #471) contributed by Johannes Schindelin
-  wchar * app_id = (wchar *) cfg.app_id;
   wchar * relaunch_icon = (wchar *) cfg.icon;
   wchar * relaunch_display_name = (wchar *) cfg.app_name;
   wchar * relaunch_command = (wchar *) cfg.app_launch_cmd;
 
 #define dont_debug_properties
-
-#ifdef two_witty_ideas_with_bad_side_effects
-#warning automatic derivation of an AppId is likely not a good idea
-  // If an icon is configured but no app_id, we can derive one from the 
-  // icon in order to enable proper taskbar grouping by common icon.
-  // However, this has an undesirable side-effect if a shortcut is 
-  // pinned (presumably getting some implicit AppID from Windows) and 
-  // instances are started from there (with a different AppID...).
-  // Disabled.
-  if (relaunch_icon && *relaunch_icon && (!app_id || !*app_id)) {
-    const char * iconbasename = strrchr(cfg.icon, '/');
-    if (iconbasename)
-      iconbasename ++;
-    else {
-      iconbasename = strrchr(cfg.icon, '\\');
-      if (iconbasename)
-        iconbasename ++;
-      else
-        iconbasename = cfg.icon;
-    }
-    char * derived_app_id = malloc(strlen(iconbasename) + 7 + 1);
-    strcpy(derived_app_id, "Mintty.");
-    strcat(derived_app_id, iconbasename);
-    app_id = derived_app_id;
-  }
-  // If app_name is configured but no app_launch_cmd, we need an app_id 
-  // to make app_name effective as taskbar title, so invent one.
-  if (relaunch_display_name && *relaunch_display_name && 
-      (!app_id || !*app_id)) {
-    app_id = "Mintty.AppID";
-  }
-#endif
 
   // Set the app ID explicitly, as well as the relaunch command and display name
   if (prevent_pinning || (app_id && *app_id)) {
@@ -3376,6 +3551,43 @@ DEFINE_PROPERTYKEY(PKEY_AppUserModel_StartPinOption, 0x9f4c2855,0x9f79,0x4B39,0x
     }
   }
 #endif
+}
+
+
+/*
+   Expand window group id (AppID or Class) by placeholders.
+ */
+static wchar *
+group_id(wstring id)
+{
+  if (wcschr(id, '%')) {
+    wchar * pc = (wchar *)id;
+    int pcn = 0;
+    while (*pc)
+      if (*pc++ == '%')
+        pcn++;
+    struct utsname name;
+    if (pcn <= 5 && uname(&name) >= 0) {
+      char * _ = strchr(name.sysname, '_');
+      if (_)
+        *_ = 0;
+      char * fmt = cs__wcstoutf(id);
+      char * icon = cs__wcstoutf(icon_is_from_shortcut ? cfg.icon : W(""));
+      char * wsln = cs__wcstoutf(wslname ?: W(""));
+      char * ai = asform(fmt,
+                         name.sysname,
+                         name.release,
+                         name.machine,
+                         icon,
+                         wsln);
+      id = cs__utftowcs(ai);
+      free(ai);
+      free(wsln);
+      free(icon);
+      free(fmt);
+    }
+  }
+  return (wchar *)id;
 }
 
 
@@ -3605,9 +3817,18 @@ main(int argc, char *argv[])
     icon_is_from_shortcut = true;
     unsetenv("MINTTY_ICON");
   }
+  if (getenv("MINTTY_PWD")) {
+    // if cloned and then launched from Windows shortcut 
+    // (by sanitizing taskbar icon grouping, #784, mintty/wsltty#96) 
+    // set proper directory
+    chdir(getenv("MINTTY_PWD"));
+    unsetenv("MINTTY_PWD");
+  }
 
   bool wdpresent = true;
   if (invoked_from_shortcut) {
+    shortcut = wcsdup(sui.lpTitle);
+    setenv("MINTTY_SHORTCUT", path_win_w_to_posix(shortcut), true);
     wchar * icon = get_shortcut_icon_location(sui.lpTitle, &wdpresent);
 # ifdef debuglog
     fprintf(mtlog, "icon <%ls>\n", icon); fflush(mtlog);
@@ -3616,6 +3837,12 @@ main(int argc, char *argv[])
       cfg.icon = icon;
       icon_is_from_shortcut = true;
     }
+  }
+  else {
+    // We should check whether we've inherited a MINTTY_SHORTCUT setting
+    // from a previous invocation, and if so we should check whether the
+    // referred shortcut actually runs the same binary as we're running.
+    // If that's not the case, we should unset MINTTY_SHORTCUT here.
   }
 
   for (;;) {
@@ -4123,14 +4350,21 @@ main(int argc, char *argv[])
     delete(icon_file);
   }
 
+  // Expand AppID placeholders
+  wchar * app_id = 0;
+  if (invoked_from_shortcut)
+    app_id = get_shortcut_appid(sui.lpTitle);
+  if (!app_id)
+    app_id = group_id(cfg.app_id);
+
   // Set the AppID if specified and the required function is available.
-  if (*cfg.app_id && wcscmp(cfg.app_id, W("@")) != 0) {
+  if (*app_id && wcscmp(app_id, W("@")) != 0) {
     HMODULE shell = load_sys_library("shell32.dll");
     HRESULT (WINAPI *pSetAppID)(PCWSTR) =
       (void *)GetProcAddress(shell, "SetCurrentProcessExplicitAppUserModelID");
 
     if (pSetAppID)
-      pSetAppID(cfg.app_id);
+      pSetAppID(app_id);
   }
 
   inst = GetModuleHandle(NULL);
@@ -4138,7 +4372,7 @@ main(int argc, char *argv[])
   // Window class name.
   wstring wclass = W(APPNAME);
   if (*cfg.class)
-    wclass = cfg.class;
+    wclass = group_id(cfg.class);
 
   // Put child command line into window title if we haven't got one already.
   wstring wtitle = cfg.title;
@@ -4412,7 +4646,7 @@ main(int argc, char *argv[])
     }
   }
 
-  configure_taskbar();
+  configure_taskbar(app_id);
 
   // The input method context.
   imc = ImmGetContext(wnd);

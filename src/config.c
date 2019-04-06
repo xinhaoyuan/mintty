@@ -83,6 +83,8 @@ const config default_cfg = {
   .ctrl_alt_is_altgr = false,
   .ctrl_alt_delay_altgr = 0,
   .old_altgr_detection = false,
+  .auto_repeat = true,
+  .external_hotkeys = 2,
   .clip_shortcuts = true,
   .window_shortcuts = true,
   .switch_shortcuts = true,
@@ -102,6 +104,7 @@ const config default_cfg = {
   // Mouse
   .copy_on_select = true,
   .copy_as_rtf = true,
+  .copy_as_html = 0,
   .clicks_place_cursor = false,
   .middle_click_action = MC_PASTE,
   .right_click_action = RC_MENU,
@@ -152,6 +155,7 @@ const config default_cfg = {
   // "Hidden"
   .bidi = 2,
   .disable_alternate_screen = false,
+  .display_speedup = 6,
   .suppress_sgr = "",
   .suppress_dec = "",
   .suppress_win = "",
@@ -160,6 +164,7 @@ const config default_cfg = {
   .suppress_wheel = "",
   .filter_paste = "",
   .input_clears_selection = true,
+  .suspbuf_max = 8080,
   .trim_selection = true,
   .charwidth = 0,
   .emojis = 0,
@@ -169,6 +174,9 @@ const config default_cfg = {
   .app_launch_cmd = W(""),
   .drop_commands = W(""),
   .user_commands = W(""),
+  .ctx_user_commands = W(""),
+  .sys_user_commands = W(""),
+  .user_commands_path = W("/bin:%s"),
   .session_commands = W(""),
   .task_commands = W(""),
   .menu_mouse = "b",
@@ -181,7 +189,7 @@ const config default_cfg = {
   .row_spacing = 0,
   .padding = 1,
   .ligatures_support = 0,
-  .handle_dpichanged = true,
+  .handle_dpichanged = 2,
   .check_version_update = 900,
   .word_chars = "",
   .word_chars_excl = "",
@@ -189,6 +197,7 @@ const config default_cfg = {
   .short_long_opts = false,
   .bold_as_special = false,
   .selection_show_size = false,
+  .hover_title = true,
   .old_bold = false,
   .ime_cursor_colour = DEFAULT_COLOUR,
   .ansi_colours = {
@@ -305,6 +314,8 @@ options[] = {
   {"CtrlAltIsAltGr", OPT_BOOL, offcfg(ctrl_alt_is_altgr)},
   {"CtrlAltDelayAltGr", OPT_INT, offcfg(ctrl_alt_delay_altgr)},
   {"OldAltGrDetection", OPT_BOOL, offcfg(old_altgr_detection)},
+  {"AutoRepeat", OPT_BOOL, offcfg(auto_repeat)},
+  {"SupportExternalHotkeys", OPT_INT, offcfg(external_hotkeys)},
   {"ClipShortcuts", OPT_BOOL, offcfg(clip_shortcuts)},
   {"WindowShortcuts", OPT_BOOL, offcfg(window_shortcuts)},
   {"SwitchShortcuts", OPT_BOOL, offcfg(switch_shortcuts)},
@@ -327,6 +338,7 @@ options[] = {
   // Mouse
   {"CopyOnSelect", OPT_BOOL, offcfg(copy_on_select)},
   {"CopyAsRTF", OPT_BOOL, offcfg(copy_as_rtf)},
+  {"CopyAsHTML", OPT_INT, offcfg(copy_as_html)},
   {"ClicksPlaceCursor", OPT_BOOL, offcfg(clicks_place_cursor)},
   {"MiddleClickAction", OPT_MIDDLECLICK, offcfg(middle_click_action)},
   {"RightClickAction", OPT_RIGHTCLICK, offcfg(right_click_action)},
@@ -384,6 +396,7 @@ options[] = {
   // "Hidden"
   {"Bidi", OPT_INT, offcfg(bidi)},
   {"NoAltScreen", OPT_BOOL, offcfg(disable_alternate_screen)},
+  {"DisplaySpeedup", OPT_INT, offcfg(display_speedup)},
   {"SuppressSGR", OPT_STRING, offcfg(suppress_sgr)},
   {"SuppressDEC", OPT_STRING, offcfg(suppress_dec)},
   {"SuppressWIN", OPT_STRING, offcfg(suppress_win)},
@@ -392,6 +405,7 @@ options[] = {
   {"SuppressMouseWheel", OPT_STRING, offcfg(suppress_wheel)},
   {"FilterPasteControls", OPT_STRING, offcfg(filter_paste)},
   {"ClearSelectionOnInput", OPT_BOOL, offcfg(input_clears_selection)},
+  {"SuspendWhileSelecting", OPT_INT, offcfg(suspbuf_max)},
   {"TrimSelection", OPT_BOOL, offcfg(trim_selection)},
   {"Charwidth", OPT_CHARWIDTH, offcfg(charwidth)},
   {"Emojis", OPT_EMOJIS, offcfg(emojis)},
@@ -401,6 +415,9 @@ options[] = {
   {"AppLaunchCmd", OPT_WSTRING, offcfg(app_launch_cmd)},
   {"DropCommands", OPT_WSTRING | OPT_KEEPCR, offcfg(drop_commands)},
   {"UserCommands", OPT_WSTRING | OPT_KEEPCR, offcfg(user_commands)},
+  {"CtxMenuFunctions", OPT_WSTRING | OPT_KEEPCR, offcfg(ctx_user_commands)},
+  {"SysMenuFunctions", OPT_WSTRING | OPT_KEEPCR, offcfg(sys_user_commands)},
+  {"UserCommandsPath", OPT_WSTRING, offcfg(user_commands_path)},
   {"SessionCommands", OPT_WSTRING | OPT_KEEPCR, offcfg(session_commands)},
   {"TaskCommands", OPT_WSTRING | OPT_KEEPCR, offcfg(task_commands)},
   {"MenuMouse", OPT_STRING, offcfg(menu_mouse)},
@@ -413,7 +430,7 @@ options[] = {
   {"RowSpacing", OPT_INT, offcfg(row_spacing)},
   {"Padding", OPT_INT, offcfg(padding)},
   {"LigaturesSupport", OPT_INT, offcfg(ligatures_support)},
-  {"HandleDPI", OPT_BOOL, offcfg(handle_dpichanged)},
+  {"HandleDPI", OPT_INT, offcfg(handle_dpichanged)},
   {"CheckVersionUpdate", OPT_INT, offcfg(check_version_update)},
   {"WordChars", OPT_STRING, offcfg(word_chars)},
   {"WordCharsExcl", OPT_STRING, offcfg(word_chars_excl)},
@@ -423,6 +440,7 @@ options[] = {
   {"ShortLongOpts", OPT_BOOL, offcfg(short_long_opts)},
   {"BoldAsRainbowSparkles", OPT_BOOL, offcfg(bold_as_special)},
   {"SelectionShowSize", OPT_INT, offcfg(selection_show_size)},
+  {"HoverTitle", OPT_BOOL, offcfg(hover_title)},
 
   // ANSI colours
   {"Black", OPT_COLOUR, offcfg(ansi_colours[BLACK_I])},
@@ -493,6 +511,7 @@ static opt_val
     {"shift", MDK_SHIFT},
     {"alt", MDK_ALT},
     {"ctrl", MDK_CTRL},
+    {"win", MDK_WIN},
     {0, 0}
   },
   [OPT_TRANS] = (opt_val[]) {
@@ -800,6 +819,7 @@ parse_option(string option, bool from_file)
 {
   const char *eq = strchr(option, '=');
   if (!eq) {
+    ((char *)option)[strcspn(option, "\r")] = 0;
     //__ %s: option name
     opterror(_("Ignoring option '%s' with missing value"), 
              from_file, option, 0);
@@ -1619,6 +1639,7 @@ getregstr(HKEY key, wstring subkey, wstring attribute)
     return 0;
   wchar * val = malloc (len);
   res = RegQueryValueExW(sk, attribute, 0, &type, (void *)val, &len);
+  RegCloseKey(sk);
   if (res) {
     free(val);
     return 0;
@@ -2261,7 +2282,7 @@ url_opener(control *ctrl, int event)
 {
   if (event == EVENT_ACTION) {
     wstring url = ctrl->context;
-    win_open(wcsdup(url));
+    win_open(wcsdup(url), true);  // win_open frees its argument
   }
   else if (event == EVENT_DROP) {
     theme_handler(theme, EVENT_DROP);
@@ -2468,44 +2489,51 @@ font_size_handler(control *ctrl, int event)
   }
 }
 
-void
-list_fonts(bool report)
+struct data_fontenum {
+  HDC dc;
+  bool report;
+  bool outer;
+};
+
+static int CALLBACK
+fontenum(const ENUMLOGFONTW *lpelf, const NEWTEXTMETRICW *lpntm, DWORD fontType, LPARAM lParam)
 {
-  HDC dc = GetDC(0);
+  const LOGFONTW * lfp = &lpelf->elfLogFont;
+  struct data_fontenum * pdata = (struct data_fontenum *)lParam;
+  (void)lpntm, (void)fontType;
 
-  int CALLBACK fontenum(const ENUMLOGFONTW *lpelf, const NEWTEXTMETRICW *lpntm, DWORD fontType, LPARAM lParam)
-  {
-    const LOGFONTW * lfp = &lpelf->elfLogFont;
-    (void)lpntm, (void)fontType;
+  if (pdata->outer) {
+    // here we recurse into the fonts of one font family
+    struct data_fontenum rdata = {
+      .dc = pdata->dc, .report = pdata->report, .outer = false
+    };
+    if ((lfp->lfPitchAndFamily & 3) == FIXED_PITCH && !lfp->lfCharSet)
+      EnumFontFamiliesW(pdata->dc, lfp->lfFaceName, (FONTENUMPROCW)fontenum, (LPARAM)&rdata);
+  }
+  else if (!lfp->lfItalic && !lfp->lfCharSet) {
+    if (lfp->lfFaceName[0] == '@')
+      // skip vertical font families
+      return 1;
 
-    if (lParam) {
-      if ((lfp->lfPitchAndFamily & 3) == FIXED_PITCH && !lfp->lfCharSet)
-        EnumFontFamiliesW(dc, lfp->lfFaceName, (FONTENUMPROCW)fontenum, 0);
-    }
-    else if (!lfp->lfItalic && !lfp->lfCharSet) {
-      if (lfp->lfFaceName[0] == '@')
-        // skip vertical font families
-        return 1;
-
-      wchar * tagsplit(wchar * fn, wstring style)
-      {
+    wchar * tagsplit(wchar * fn, wstring style)
+    {
 #if CYGWIN_VERSION_API_MINOR >= 74
-        wchar * tag = wcsstr(fn, style);
-        if (tag) {
-          int n = wcslen(style);
-          if (tag[n] <= ' ' && tag != fn && tag[-1] == ' ') {
-            tag[-1] = 0;
-            tag[n] = 0;
-            return tag;
-          }
+      wchar * tag = wcsstr(fn, style);
+      if (tag) {
+        int n = wcslen(style);
+        if (tag[n] <= ' ' && tag != fn && tag[-1] == ' ') {
+          tag[-1] = 0;
+          tag[n] = 0;
+          return tag;
         }
-#else
-        (void)fn; (void)style;
-#endif
-        return 0;
       }
+#else
+      (void)fn; (void)style;
+#endif
+      return 0;
+    }
 
-      /**
+    /**
 	Courier|
 	FreeMono|Medium
 	Inconsolata|Medium
@@ -2516,46 +2544,55 @@ list_fonts(bool report)
 	TIFAX|Alpha
 	HanaMinA|Regular
 	DejaVu Sans Mono|Book
-       */
-      wchar * fn = wcsdup(lfp->lfFaceName);
-      wchar * st = tagsplit(fn, W("Oblique"));
-      if ((st = tagsplit(fn, lpelf->elfStyle))) {
-        //   Source Code Pro ExtraLight|ExtraLight
-        //-> Source Code Pro|ExtraLight
-      }
-      else {
-        wchar * fnst = fn;
-#if CYGWIN_VERSION_API_MINOR >= 74
-        int digsi = wcscspn(fn, W("0123456789"));
-        int nodigsi = wcsspn(&fn[digsi], W("0123456789"));
-        if (nodigsi)
-          fnst = &fn[digsi + nodigsi];
-#endif
-        for (uint i = 0; i < lengthof(weights); i++)
-          if ((st = tagsplit(fnst, weights[i]))) {
-            //   Iosevka Term Slab Medium Obliqu|Regular
-            //-> Iosevka Term Slab|Medium
-            break;
-          }
-      }
-      if (!st || !*st)
-        st = (wchar *)lpelf->elfStyle;
-      if (!*st)
-        st = W("Regular");
-      st = wcsdup(st);
-      fn = renewn(fn, wcslen(fn) + 1);
-
-      if (report)
-        printf("%03ld %ls|%ls [2m[%ls|%ls][0m\n", (long int)lfp->lfWeight, fn, st, lfp->lfFaceName, lpelf->elfStyle);
-      else
-        enterfontlist(fn, lfp->lfWeight, st);
+     */
+    wchar * fn = wcsdup(lfp->lfFaceName);
+    wchar * st = tagsplit(fn, W("Oblique"));
+    if ((st = tagsplit(fn, lpelf->elfStyle))) {
+      //   Source Code Pro ExtraLight|ExtraLight
+      //-> Source Code Pro|ExtraLight
     }
+    else {
+      wchar * fnst = fn;
+#if CYGWIN_VERSION_API_MINOR >= 74
+      int digsi = wcscspn(fn, W("0123456789"));
+      int nodigsi = wcsspn(&fn[digsi], W("0123456789"));
+      if (nodigsi)
+        fnst = &fn[digsi + nodigsi];
+#endif
+      for (uint i = 0; i < lengthof(weights); i++)
+        if ((st = tagsplit(fnst, weights[i]))) {
+          //   Iosevka Term Slab Medium Obliqu|Regular
+          //-> Iosevka Term Slab|Medium
+          break;
+        }
+    }
+    if (!st || !*st)
+      st = (wchar *)lpelf->elfStyle;
+    if (!*st)
+      st = W("Regular");
+    st = wcsdup(st);
+    fn = renewn(fn, wcslen(fn) + 1);
 
-    return 1;
+    if (pdata->report)
+      printf("%03ld %ls|%ls [2m[%ls|%ls][0m\n", (long int)lfp->lfWeight, fn, st, lfp->lfFaceName, lpelf->elfStyle);
+    else
+      enterfontlist(fn, lfp->lfWeight, st);
   }
 
-  EnumFontFamiliesW(dc, 0, (FONTENUMPROCW)fontenum, 1);
-  ReleaseDC(0, dc);
+  return 1;
+}
+
+void
+list_fonts(bool report)
+{
+  struct data_fontenum data = {
+    .dc = GetDC(0),
+    .report = report,
+    .outer = true
+  };
+
+  EnumFontFamiliesW(data.dc, 0, (FONTENUMPROCW)fontenum, (LPARAM)&data);
+  ReleaseDC(0, data.dc);
 }
 
 static void
@@ -2890,6 +2927,7 @@ setup_config_box(controlbox * b)
   //__ Options - Mouse: panel title
                       _("Mouse functions"), null);
   ctrl_columns(s, 2, 50, 50);
+#ifdef copy_as_html_checkbox
   ctrl_checkbox(
     //__ Options - Mouse:
     s, _("Cop&y on select"),
@@ -2900,6 +2938,59 @@ setup_config_box(controlbox * b)
     s, _("Copy as &rich text"),
     dlg_stdcheckbox_handler, &new_cfg.copy_as_rtf
   )->column = 1;
+  ctrl_columns(s, 2, 50, 50);
+  ctrl_checkbox(
+    //__ Options - Mouse:
+    s, _("Copy as &HTML"),
+    dlg_stdcheckbox_handler, &new_cfg.copy_as_html
+  )->column = 1;
+#else
+#ifdef copy_as_html_right
+  ctrl_radiobuttons(
+    //__ Options - Mouse:
+    s, _("Copy as &HTML"), 2,
+    dlg_stdradiobutton_handler, &new_cfg.copy_as_html,
+    _("&None"), 0,
+    _("&Partial"), 1,
+    _("&Default"), 2,
+    _("&Full"), 3,
+    null
+  )->column = 1;
+  ctrl_checkbox(
+    //__ Options - Mouse:
+    s, _("Cop&y on select"),
+    dlg_stdcheckbox_handler, &new_cfg.copy_on_select
+  )->column = 0;
+  ctrl_checkbox(
+    //__ Options - Mouse:
+    s, _("Copy as &rich text"),
+    dlg_stdcheckbox_handler, &new_cfg.copy_as_rtf
+  )->column = 0;
+#else
+  ctrl_checkbox(
+    //__ Options - Mouse:
+    s, _("Cop&y on select"),
+    dlg_stdcheckbox_handler, &new_cfg.copy_on_select
+  )->column = 0;
+  ctrl_checkbox(
+    //__ Options - Mouse:
+    s, _("Copy as &rich text"),
+    dlg_stdcheckbox_handler, &new_cfg.copy_as_rtf
+  )->column = 1;
+  ctrl_columns(s, 1, 100);  // reset column stuff so we can rearrange them
+  ctrl_columns(s, 2, 100, 0);
+  ctrl_radiobuttons(
+    //__ Options - Mouse:
+    s, _("Copy as &HTML"), 4,
+    dlg_stdradiobutton_handler, &new_cfg.copy_as_html,
+    _("&None"), 0,
+    _("&Partial"), 1,
+    _("&Default"), 2,
+    _("&Full"), 3,
+    null
+  );
+#endif
+#endif
   ctrl_checkbox(
     //__ Options - Mouse:
     s, _("Clic&ks place command line cursor"),
@@ -2953,7 +3044,7 @@ setup_config_box(controlbox * b)
   );
   ctrl_radiobuttons(
     //__ Options - Mouse:
-    s, _("Modifier for overriding default"), 4,
+    s, _("Modifier for overriding default"), 5,
     dlg_stdradiobutton_handler, &new_cfg.click_target_mod,
     //__ Options - Mouse:
     _("&Shift"), MDK_SHIFT,
@@ -2961,6 +3052,8 @@ setup_config_box(controlbox * b)
     _("&Ctrl"), MDK_CTRL,
     //__ Options - Mouse:
     _("&Alt"), MDK_ALT,
+    //__ Options - Window:
+    _("&Win"), MDK_WIN,
     //__ Options - Mouse:
     _("&Off"), 0,
     null
@@ -3010,7 +3103,7 @@ setup_config_box(controlbox * b)
   );
   ctrl_radiobuttons(
     //__ Options - Window:
-    s, _("Modifier for scrolling"), 4,
+    s, _("Modifier for scrolling"), 5,
     dlg_stdradiobutton_handler, &new_cfg.scroll_mod,
     //__ Options - Window:
     _("&Shift"), MDK_SHIFT,
@@ -3018,6 +3111,8 @@ setup_config_box(controlbox * b)
     _("&Ctrl"), MDK_CTRL,
     //__ Options - Window:
     _("&Alt"), MDK_ALT,
+    //__ Options - Window:
+    _("&Win"), MDK_WIN,
     //__ Options - Window:
     _("&Off"), 0,
     null

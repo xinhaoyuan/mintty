@@ -89,7 +89,12 @@ rc_srcs := $(wildcard *.rc)
 objs := $(c_srcs:.c=.o) $(rc_srcs:.rc=.o)
 bins := $(patsubst %.o,$(BINDIR)/%.o,$(objs))
 
-CFLAGS := -std=gnu99 -include std.h -Wall -Wextra -Wundef -Werror
+ifneq ($(platform), msys)
+  # ensure avoidance of trampolines (a gcc mechanism to implement 
+  # some nested functions) as they cause some security software to choke
+  SECUR=-Wtrampolines
+endif
+CFLAGS := -std=gnu99 -include std.h -Wall -Wextra -Wundef -Werror $(SECUR)
 
 ifeq ($(shell VER=`$(CC) -dumpversion`; expr $${VER%.*} '>=' 4.5), 1)
   CFLAGS += -mtune=atom
@@ -170,18 +175,24 @@ $(bin): $(bins)
 WGET=curl -R -O --connect-timeout 55
 WGET+=-z $@
 
-rgb.t:	# /usr/share/X11/rgb.txt # X11 color names
+rgb.t:	# /usr/share/X11/rgb.txt # X11 color names, from package 'rgb'
 #	255 250 250		snow
 #	->
 #		{255, 250, 250, "snow"},
 	sed -e 's,	, ,g' -e 's/ *\([0-9][0-9]*\) *\([0-9][0-9]*\) *\([0-9][0-9]*\) *\([^ ].*[^ ]\) */	{\1, \2, \3, "\4"},/' /usr/share/X11/rgb.txt > rgb.t
 
 combdata=combining.t combdouble.t combined.t
-unidata=$(combdata) ambiguous.t casefold.t bidiclasses.t wide.t
+unidata=$(combdata) ambiguous.t casefold.t bidiclasses.t mirroring.t wide.t
 emojidata=emojibase.t emojiseqs.t
+
+unicodedata=UnicodeData.txt EastAsianWidth.txt Blocks.txt CaseFolding.txt BidiMirroring.txt
+unicodeemoji=emoji-data.txt emoji-sequences.txt emoji-variation-sequences.txt emoji-zwj-sequences.txt
 
 clean-unicode:
 	rm -f $(unidata) $(emojidata)
+
+clean-unicode-data:	clean-unicode
+	rm -f $(unicodedata) $(unicodeemoji)
 
 combining.t:	# UnicodeData.txt Blocks.txt
 	uniset +cat=Me +cat=Mn +cat=Cf -00AD +1160-11FF +200B +D7B0-D7C6 +D7CB-D7FB c > combining.t
@@ -210,14 +221,21 @@ combined.t:	# UnicodeData.txt
 bidiclasses.t:	# UnicodeData.txt
 	sh ./mkbidiclasses > bidiclasses.t
 
+mirroring.t:	# BidiMirroring.txt
+	sh ./mkmirroring > mirroring.t
+
 unicode:	UnicodeData.txt Blocks.txt EastAsianWidth.txt
 
 full-emoji-list.html:
-	#$(WGET) http://www.unicode.org/emoji/charts-11.0/$@
 	$(WGET) http://www.unicode.org/emoji/charts/$@
 
-emoji-%.txt:
-	$(WGET) http://www.unicode.org/Public/emoji/11.0/$@
+univer = `sed -e '/^\# Blocks-/ s,[^0-9]*\([0-9]*\)\.\([0-9]\)\.[0-9][^0-9]*,\1.\2,' -e t -e d Blocks.txt`
+
+univer:	Blocks.txt
+	echo $(univer)
+
+emoji-%.txt:	Blocks.txt
+	$(WGET) http://www.unicode.org/Public/emoji/$(univer)/$@
 
 %.txt:
 	$(WGET) http://www.unicode.org/Public/UNIDATA/$@
@@ -278,7 +296,6 @@ $(pdf): ../docs/$(NAME).1
 html := ../docs/$(NAME).1.html
 html: $(html)
 $(html): ../docs/$(NAME).1
-#	manserver ... $< > $@
 	groff -t -man -Thtml $< > $@
 
 clean:

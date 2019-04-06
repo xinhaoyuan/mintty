@@ -59,6 +59,8 @@ items automatically based on their icon and command line.  This can be
 overridden by setting the AppID to a custom string, in which case windows
 with the same AppID are grouped together.
 
+The AppID supports placeholder parameters for a flexible grouping 
+configuration (see manual).
 The special value `AppID=@` causes mintty to derive an implicit AppID 
 from the WSL system name, in order to achieve WSL distribution-specific 
 taskbar grouping. This resolves taskbar grouping problems in some cases 
@@ -68,14 +70,32 @@ _Warning:_ Using this option in a Windows desktop shortcut may
 cause trouble with taskbar grouping behaviour. If you need to do that, 
 the shortcut itself should also get attached with the same AppId.
 
+_Note:_ Since 2.9.6, if mintty is started via a Windows shortcut 
+which has its own AppID, it is reused for the new mintty window in order 
+to achieve proper taskbar icon grouping. This takes precedence over an 
+explicit setting of the AppID option.
+
 _Explanation:_ Note that Windows shortcut files have their own AppID.
 Hence, if an AppID is specified in the mintty settings, but not on a 
 taskbar-pinned shortcut for invoking mintty, clicking the pinned 
 shortcut will result in a separate taskbar item for the new mintty window, 
 rather than being grouped with the shortcut.
-To avoid this, the shortcut's AppID has to be set to the same string, 
-which can be done using the `Win7AppId` utility available cloned in 
+
+_Hint:_ To avoid AppID inconsistence and thus ungrouped taskbar icons,
+the shortcut's AppID should to be set to the same string as the mintty AppID, 
+which can be done using the `winappid` utility available in 
 the mintty [utils repository](https://github.com/mintty/utils).
+As noted above, since mintty 2.9.6, the mintty AppID does not need to be set 
+anymore in this case.
+
+
+## Window session grouping ##
+
+For grouping of window icons in the taskbar, Windows uses the intricate 
+AppID concept as explained above. For grouping of desktop windows, as 
+used by the mintty session switcher or external window manipulation tools, 
+Windows uses the distinct but likewise intricate Class concept.
+Mintty provides flexible configuration to set up either of them, see manual.
 
 
 ## Window icons ##
@@ -114,7 +134,6 @@ Note, the `wslbridge` tool needs to be installed in `/bin` for this purpose
 A WSL terminal session can be configured for the mintty session launcher 
 in the config file, like:
 * `SessionCommands=Ubuntu:--WSL=Ubuntu`
-
 
 ### WSLtty, the standalone WSL mintty terminal ###
 
@@ -319,7 +338,7 @@ Finally, a couple of bindings for convenient searching of the command history. J
 ```
 
 
-## Keyboard not working as expected in certain applications (e.g. vim) ##
+## Unexpected behaviour with certain applications (e.g. vim) ##
 
 If for example the PgUp and PgDn keys do not work in your editor, the reason 
 may be that in the mintty Options, the Terminal Type was set to "vt100" 
@@ -348,6 +367,28 @@ let &t_SI.="\e[5 q"
 let &t_EI.="\e[1 q"
 let &t_te.="\e[0 q"
 ```
+
+### Enabling full mouse functionality in vim ###
+
+Before vim 8.1.0566, full mouse mode is not automatically enabled in mintty.
+Add this to _~/.vimrc_ for a workaround:
+
+```
+set mouse=a
+if has("mouse_sgr")
+    set ttymouse=sgr
+else
+    set ttymouse=xterm2
+end
+```
+
+### Blinking cursor reset ###
+
+Some applications may reset cursor style, especially cursor blinking, 
+after terminating, caused by the 
+[terminfo database](http://invisible-island.net/ncurses/man/terminfo.5.html) 
+including the corresponding reset sequence in the “normal cursor” setting.
+This is avoided with mintty option `SuppressDEC=12`.
 
 ### Avoiding escape timeout issues in vim ###
 
@@ -437,7 +478,9 @@ For a separate compose key solution, the most seamless and stable
 **[WinCompose](https://github.com/SamHocevar/wincompose)**.
 
 
-## Changing colours ##
+## Appearance ##
+
+### Changing colours ###
 
 The default foreground, background and cursor colours can be changed in the options dialog, or by specifying the _ForegroundColour_, _BackgroundColour_ and _CursorColour_ settings in the configuration file or on the command line.
 
@@ -489,8 +532,7 @@ Different notations are accepted for colour specifications:
 * ```cmyk:C.C/M.M/Y.Y/K.K``` (float values between 0 and 1)
 * _color-name_ (using X11 color names, e.g. ```echo -ne '\e]10;bisque2\a'```)
 
-
-## Using colour schemes (“Themes”) ##
+### Using colour schemes (“Themes”) ###
 
 Colour schemes (that redefine ANSI colours and possibly foreground/background 
 colours) can be loaded with the option ```-C``` (capital C) or ```--loadconfig``` 
@@ -526,13 +568,44 @@ click the “Store” button to store the colour scheme.
 
 A number of colour schemes have been published for mintty, e.g.
 * https://github.com/oumu/mintty-color-schemes
-* https://github.com/PhilipDaniels/mintty/tree/master/themes
 * https://github.com/goreliu/wsl-terminal/tree/master/src/etc/themes
 
 Mintty also provides the command-line script ```mintheme``` which can 
 display the themes available in the mintty configuration directories or 
 activate one of them in the current mintty window.
 
+### Background image ###
+
+As an alternative to a background colour, mintty also supports graphic 
+background. This can be configured with the option `Background` or 
+set dynamically using special syntax of the colour background OSC sequence.
+The respective parameter addresses an image file, preceded by a mode 
+prefix and optionally followed by a transparancy value.
+Prefixes are:
+* `*` use image file as tiled background
+* `_` (optional with option Background) use image as picture background, scaled to window
+* `%` use image as picture background and scale window to its aspect ratio
+* `=` use desktop background (if tiled and unscaled), for a virtual floating window
+
+If the background filename is followed by a comma and a number between 1 and 254, 
+the background image will be dimmed towards the background colour;
+with a value of 255, the alpha transparency values of the image will be used.
+
+Examples:
+```
+Background=C:\cygwin\usr\share\backgrounds\tiles\rough_paper.png
+-o Background='C:\cygwin\usr\share\backgrounds\tiles\rough_paper.png'
+echo -ne '\e]11;*/usr/share/backgrounds/tiles/rough_paper.png\a'
+echo -ne '\e]11;_pontneuf.png,99\a'
+echo -ne '\e]11;=,99\a'
+```
+
+Note that relative pathnames depend on proper detection of the current directory 
+of the foreground process.
+Note that absolute pathnames within the cygwin file system are likely 
+not to work among different cygwin installations. 
+To configure a background in `$APPDATA/mintty/config` (or 
+`%APPDATA%/wsltty/config`), Windows pathname syntax should be used.
 
 ## Providing and selecting fonts ##
 
@@ -675,7 +748,7 @@ ISO/IEC 8613-6 sub-parameters are supported.
 | 2                      | 22                | dim                           |
 | 3                      | 23                | italic                        |
 | 4 _or_ 4:1             | 24 _or_ 4:0       | solid underline               |
-| 4:2                    | 24 _or_ 4:0       | double underline              |
+| 4:2 _or_ 21            | 24 _or_ 4:0       | double underline              |
 | 4:3                    | 24 _or_ 4:0       | wavy underline                |
 | 4:4                    | 24 _or_ 4:0       | dotted underline              |
 | 4:5                    | 24 _or_ 4:0       | dashed underline              |
@@ -684,7 +757,7 @@ ISO/IEC 8613-6 sub-parameters are supported.
 | 7                      | 27                | inverse                       |
 | 8                      | 28                | invisible                     |
 | 9                      | 29                | strikeout                     |
-| 11                     | 10                | alternative font 1 (*)        |
+| 11 (*)                 | 10                | alternative font 1 (*)        |
 | 12                     | 10                | alternative font 2            |
 | ...                    | 10                | alternative fonts 3...8       |
 | 19                     | 10                | alternative font 9            |
@@ -710,7 +783,7 @@ ISO/IEC 8613-6 sub-parameters are supported.
 | 58:2::R:G:B            | 59                | underline RGB colour          |
 | 58:3:F:C:M:Y           | 59                | underline CMY colour (*)      |
 | 58:4:F:C:M:Y:K         | 59                | underline CMYK colour (*)     |
-| _any_                  | 0                 |                               |
+| _any_                  | 0 _or empty_      |                               |
 
 Note: Alternative fonts are configured with options Font1 ... Font10.
 They can also be dynamically changed with OSC sequence 50 which refers 
@@ -722,7 +795,10 @@ font 1 is therefore discouraged.
 
 Note: The control sequences for Fraktur (“Gothic”) font are described 
 in ECMA-48, see also [wiki:ANSI code](https://en.wikipedia.org/wiki/ANSI_escape_code).
-To use this feature, it is suggested to install `F25 Blackletter Typewriter`.
+To use this feature, it is suggested to install `F25 Blackletter Typewriter`,
+e.g. from:
+* https://www.dafont.com/f25-blacklettertypewriter.font
+* https://fontmeme.com/fonts/f25-blackletter-typewriter-font/
 
 Note: RGB colour values are scaled to a maximum of 255 (=100%).
 CMY(K) colour values are scaled to a maximum of the given parameter F (=100%).
@@ -746,6 +822,7 @@ background colours and inverse mode are ignored.
 
 Mintty supports display of emojis as defined by Unicode using 
 emoji presentation, emoji style variation and emoji sequences.
+(Note that the tty must be in a UTF-8 locale to support emoji codes.)
 
 The option `Emojis` can choose among sets of emoji graphics if 
 deployed in a mintty configuration directory.
@@ -760,7 +837,7 @@ Note that up to cygwin 2.10.0, it may be useful to set `Charwidth=unicode` in ad
 
 Emojis are displayed in the rectangular character cell group determined 
 by the cumulated width of the emoji sequence characters. The option 
-`EmojiPlacement` can adjust the location of emoji graphis within that area.
+`EmojiPlacement` can adjust the location of emoji graphics within that area.
 
 ### Installing emoji resources ###
 
@@ -775,8 +852,8 @@ Emoji data can be found at the following sources:
 * [Noto Emoji font](https://github.com/googlei18n/noto-emoji), subdirectory `png/128`
   * “Clone or download” the repository or download a release archive
   * Deploy subdirectory noto-emoji/png/128 as `noto`
-* [Unicode.org](http://www.unicode.org/emoji/charts-11.0/) Full Emoji List (~50MB)
-  * Download the [Full Emoji List](http://www.unicode.org/emoji/charts-11.0/full-emoji-list.html) (with all emoji data embedded)
+* [Unicode.org](http://www.unicode.org/emoji/charts/) Full Emoji List (~50MB)
+  * Download the [Full Emoji List](http://www.unicode.org/emoji/charts/full-emoji-list.html) (with all emoji data embedded)
   * Use the [extraction script `getemojis`](getemojis) to extract emoji data (call it without parameters for instructions)
   * Deploy the desired subdirectories (e.g. `apple`)
   * Includes apple, emojione, facebook, google, twitter, samsung, windows emojis (and some limited low-resolution sets that we shall ignore)
@@ -870,6 +947,8 @@ and the Ctrl+Shift+I shortcut (if enabled).
 For configuration, see settings `SessionCommands`, `Menu*`, 
 and `SessionGeomSync`.
 Distinct sets of sessions can be set up with the setting `-o Class=...`.
+For flexible window grouping, this setting supports the same placeholders 
+as the `AppID` option.
 
 
 ## Multi-monitor support ##
@@ -965,9 +1044,11 @@ and the character information output simply overwrite each other.
 
 ## User-defined behaviour ##
 
-Mintty supports two extension features:
+Mintty supports a few extension features:
 * Application-specific drag-and-drop transformations (option `DropCommands`)
-* User-defined commands and filter functions (option `UserCommands`)
+* User-defined commands and filters for context menu (option `UserCommands`)
+* User-defined functions for key combinations (option `KeyFunctions`)
+* User-defined function entries for system menu (option `SysMenuFunctions`)
 
 See the manual page for details.
 

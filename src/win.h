@@ -14,6 +14,7 @@
 extern char * home;
 extern char * cmd;
 extern bool icon_is_from_shortcut;
+extern wstring shortcut;
 
 extern void exit_mintty(void);
 extern void report_pos(void);
@@ -66,8 +67,9 @@ extern uint win_get_font_size(void);
 
 extern void win_check_glyphs(wchar *wcs, uint num);
 
-extern void win_open(wstring path);
+extern void win_open(wstring path, bool adjust_dir);
 extern void win_copy(const wchar *data, cattr *cattrs, int len);
+extern void win_copy_as(const wchar *data, cattr *cattrs, int len, char what);
 extern void win_paste(void);
 
 extern void win_set_timer(void_fn cb, uint ticks);

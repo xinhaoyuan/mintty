@@ -10,6 +10,10 @@
 #include "charset.h"
 #include "child.h"
 #include "winsearch.h"
+#if CYGWIN_VERSION_API_MINOR >= 66
+#include <langinfo.h>
+#endif
+
 
 struct term term;
 
@@ -31,14 +35,80 @@ static bool markpos_valid = false;
 
 const cattr CATTR_DEFAULT =
             {.attr = ATTR_DEFAULT,
-             .truefg = 0, .truebg = 0, .ulcolr = (colour)-1};
+             .truefg = 0, .truebg = 0, .ulcolr = (colour)-1,
+             .link = -1
+            };
 
 termchar basic_erase_char =
    {.cc_next = 0, .chr = ' ',
             /* CATTR_DEFAULT */
     .attr = {.attr = ATTR_DEFAULT | TATTR_CLEAR,
-             .truefg = 0, .truebg = 0, .ulcolr = (colour)-1}
+             .truefg = 0, .truebg = 0, .ulcolr = (colour)-1,
+             .link = -1
+            }
    };
+
+
+#define dont_debug_hyperlinks
+
+static char * * links = 0;
+static int nlinks = 0;
+static int linkid = 0;
+
+int
+putlink(char * link)
+{
+#if CYGWIN_VERSION_API_MINOR >= 66
+  bool utf8 = strcmp(nl_langinfo(CODESET), "UTF-8") == 0;
+#else
+  bool utf8 = strstr(cs_get_locale(), ".65001");
+#endif
+  if (!utf8) {
+    wchar * wlink = cs__mbstowcs(link);
+    link = cs__wcstoutf(wlink);
+    free(wlink);
+  }
+
+  if (*link != ';')
+    for (int i = 0; i < nlinks; i++)
+      if (0 == strcmp(link, links[i])) {
+        if (!utf8)
+          free(link);
+        return i;
+      }
+
+  char * link1;
+  if (*link == ';')
+    link1 = asform("=%d%s", ++linkid, link);
+  else
+    link1 = strdup(link);
+#ifdef debug_hyperlinks
+  printf("[%d] link <%s>\n", nlinks, link1);
+#endif
+  if (!utf8)
+    free(link);
+
+  nlinks++;
+  links = renewn(links, nlinks);
+  links[nlinks - 1] = link1;
+  return nlinks - 1;
+}
+
+char *
+geturl(int n)
+{
+  if (n >= 0 && n < nlinks) {
+    char * url = strchr(links[n], ';');
+    if (url) {
+      url++;
+#ifdef debug_hyperlinks
+      printf("[%d] url <%s> link <%s>\n", n, url, links[n]);
+#endif
+      return url;
+    }
+  }
+  return 0;
+}
 
 
 static bool
@@ -109,7 +179,7 @@ void
 term_schedule_cblink(void)
 {
   if (term_cursor_blinks() && term.has_focus)
-    win_set_timer(cblink_cb, cursor_blink_ticks());
+    win_set_timer(cblink_cb, term.cursor_blink_interval ?: cursor_blink_ticks());
   else
     term.cblinker = 1;  /* reset when not in use */
 }
@@ -163,6 +233,7 @@ term_cursor_reset(term_cursor *curs)
 
   curs->autowrap = true;
   curs->rev_wrap = cfg.old_wrapmodes;
+  curs->bidimode = 0;
 
   curs->origin = false;
 }
@@ -198,6 +269,7 @@ term_reset(bool full)
     term.app_keypad = false;  // xterm only with RIS
     term.app_wheel = false;
     term.app_control = 0;
+    term.auto_repeat = cfg.auto_repeat;  // not supported by xterm
   }
   term.modify_other_keys = 0;  // xterm resets this
 
@@ -244,14 +316,17 @@ term_reset(bool full)
 
   term.cursor_type = -1;
   term.cursor_blinks = -1;
+  term.cursor_blink_interval = 0;
   if (full) {
     term.blink_is_real = cfg.allow_blinking;
-	term.even_line_highlight_delta = cfg.even_line_highlight_delta;
+    term.even_line_highlight_delta = cfg.even_line_highlight_delta;
+    term.hide_mouse = cfg.hide_mouse;
   }
 
   if (full) {
     term.selected = false;
     term.hovering = false;
+    term.hoverlink = -1;
     term.on_alt_screen = false;
     term_print_finish();
     if (term.lines) {
@@ -1064,6 +1139,8 @@ term_do_scroll(int topline, int botline, int lines, bool sb)
   bool down = lines < 0; // Scrolling downwards?
   lines = abs(lines);    // Number of lines to scroll by
 
+  lines_scrolled += lines;
+
   botline++; // One below the scroll region: easier to calculate with
 
   // Don't try to scroll more than the number of lines in the scroll region.
@@ -1155,6 +1232,15 @@ term_do_scroll(int topline, int botline, int lines, bool sb)
 
 #define inclpos(p, size) ((p).x == size ? ((p).x = 0, (p).y++, 1) : ((p).x++, 0))
 
+void
+clear_wrapcontd(termline * line, int y)
+{
+  if (y < term.rows - 1 && (line->lattr & LATTR_WRAPPED)) {
+    line = term.lines[y + 1];
+    line->lattr &= ~(LATTR_WRAPCONTD | LATTR_AUTOSEL);
+  }
+}
+
 /*
  * Erase a large portion of the screen: the whole screen, or the
  * whole line, or parts thereof.
@@ -1219,10 +1305,11 @@ term_erase(bool selective, bool line_only, bool from_begin, bool to_end)
     while (poslt(start, end)) {
       int cols = min(line->cols, line->size);
       if (start.x == cols) {
+        clear_wrapcontd(line, start.y);
         if (line_only)
           line->lattr &= ~(LATTR_WRAPPED | LATTR_WRAPPED2);
         else
-          line->lattr = LATTR_NORM;
+          line->lattr = LATTR_NORM | (line->lattr & LATTR_BIDIMASK);
       }
       else if (!selective ||
                !(line->chars[start.x].attr.attr & ATTR_PROTECTED)
@@ -1230,6 +1317,8 @@ term_erase(bool selective, bool line_only, bool from_begin, bool to_end)
       {
         line->chars[start.x] = term.erase_char;
         line->chars[start.x].attr.attr |= TATTR_CLEAR;
+        if (!start.x)
+          clear_cc(line, -1);
       }
       if (inclpos(start, cols) && start.y < term.rows)
         line = term.lines[start.y];
@@ -1659,6 +1748,8 @@ emoji_show(int x, int y, struct emoji e, int elen, cattr eattr, ushort lattr)
 void
 term_paint(void)
 {
+  //if (kb_trace) printf("[%ld] term_paint\n", mtime());
+
 #ifdef use_display_scrolling
   if (dispscroll_lines) {
     disp_do_scroll(dispscroll_top, dispscroll_bot, dispscroll_lines);
@@ -1739,7 +1830,12 @@ term_paint(void)
       }
 
       if (term.hovering &&
-          posle(term.hover_start, scrpos) && poslt(scrpos, term.hover_end)) {
+          (term.hoverlink >= 0
+           ? term.hoverlink == tattr.link
+           : posle(term.hover_start, scrpos) && poslt(scrpos, term.hover_end)
+          )
+         )
+      {
         tattr.attr &= ~UNDER_MASK;
         tattr.attr |= ATTR_UNDER;
         if (cfg.hover_colour != (colour)-1) {
@@ -2016,6 +2112,32 @@ term_paint(void)
       // clear overhang into left padding border
       win_text(-1, i, W(" "), 1, CATTR_DEFAULT, (cattr*)&CATTR_DEFAULT, line->lattr | LATTR_CLEARPAD, false);
     }
+
+#define dont_debug_bidi_paragraphs
+#ifdef debug_bidi_paragraphs
+    static cattr CATTR_WRAPPED = {.truebg = RGB(255, 0, 0),
+                             .attr = ATTR_DEFFG | TRUE_COLOUR << ATTR_BGSHIFT,
+                             .truefg = 0, .ulcolr = (colour)-1, .link = -1};
+    static cattr CATTR_CONTD = {.truebg = RGB(0, 0, 255),
+                             .attr = ATTR_DEFFG | TRUE_COLOUR << ATTR_BGSHIFT,
+                             .truefg = 0, .ulcolr = (colour)-1, .link = -1};
+    static cattr CATTR_CONTWRAPD = {.truebg = RGB(255, 0, 255),
+                             .attr = ATTR_DEFFG | TRUE_COLOUR << ATTR_BGSHIFT,
+                             .truefg = 0, .ulcolr = (colour)-1, .link = -1};
+    wchar diag = ((line->lattr & 0x0F00) >> 8) + '0';
+    if (diag > '9')
+      diag += 'A' - '0' - 10;
+    if (line->lattr & (LATTR_WRAPPED | LATTR_WRAPCONTD)) {
+      if ((line->lattr & (LATTR_WRAPPED | LATTR_WRAPCONTD)) == (LATTR_WRAPPED | LATTR_WRAPCONTD))
+        win_text(-1, i, &diag, 1, CATTR_CONTWRAPD, (cattr*)&CATTR_CONTWRAPD, line->lattr | LATTR_CLEARPAD, false);
+      else if (line->lattr & LATTR_WRAPPED)
+        win_text(-1, i, &diag, 1, CATTR_WRAPPED, (cattr*)&CATTR_WRAPPED, line->lattr | LATTR_CLEARPAD, false);
+      else
+        win_text(-1, i, &diag, 1, CATTR_CONTD, (cattr*)&CATTR_CONTD, line->lattr | LATTR_CLEARPAD, false);
+    }
+    else if (displine->lattr & (LATTR_WRAPPED | LATTR_WRAPCONTD))
+      win_text(-1, i, W(" "), 1, CATTR_DEFAULT, (cattr*)&CATTR_DEFAULT, line->lattr | LATTR_CLEARPAD, false);
+#endif
 
    /*
     * Finally, loop once more and actually do the drawing.
@@ -2422,7 +2544,9 @@ term_scroll(int rel, int where)
     int y = markpos;
     while ((rel == SB_PRIOR) ? y-- > sbtop : y++ < sbbot) {
       termline * line = fetch_line(y);
-      if (line->lattr & LATTR_MARKED) {
+      ushort lattr = line->lattr;
+      release_line(line);
+      if (lattr & LATTR_MARKED) {
         markpos = y;
         term.disptop = y;
         break;

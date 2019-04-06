@@ -1,5 +1,156 @@
+Character processing
+  * Fixed wide character width and cursor position handling.
+
+Keyboard handling
+  * Switchable auto-repeat; DECSET 8 (DECARM), option AutoRepeat, toggle function.
+
+Terminal features
+  * Cursor style control (DECSCUSR) can set the blinking interval with an optional second parameter.
+
+Configuration
+  * Option AutoRepeat.
+  * New user-definable function toggle-auto-repeat.
+
+### 2.9.9 (16 March 2019) ###
+
+Keyboard handling
+  * Fixed modifyOtherKeys mode 1 to use verbatim control keys again (#860).
+
+### 2.9.8 (15 March 2019) ###
+
+Unicode and Emoji data
+  * Unicode 12.0 update.
+
+Keyboard handling
+  * Fixed control-key reporting in modifyOtherKeys mode to use small letters.
+
+### 2.9.7 (15 March 2019) ###
+
+Highlights (details see below)
+  * Significant improvements in bidirectional handling.
+  * Text can be selected with the keyboard.
+  * Explicit hyperlink attributes.
+  * Avoid keyboard/echo latency.
+
+Bidirectional rendering
+  * Fixed handling of double-width chars within RTL.
+  * Fixed handling of neutral chars in first or last position (UBA rule N1).
+  * Updated RTL mirroring data, generating them from Unicode.
+
+Terminal features for ECMA-48 and other bidi control
+  * Support BDSM control sequence (SM/RM bidirectional support, CSI 8 h/l).
+  * Private mode DECSET 2501 for "autodetection of direction" (UBA rules P2/P3).
+  * Support SCP control sequences (LTR/RTL "Character Path").
+  * Private mode DECSET 2500 for "box mirroring".
+  * Bidi direction detection on paragraph level (wrapped lines).
+
+Other terminal features
+  * Support for OSC 8 hyperlink attribute (~#823).
+  * Providing DECTABSR tab stop report.
+  * Fixed DECRQM 12 which was inverted.
+  * DEC Cyrillic NRCS (xterm 344).
+
+Character rendering
+  * Fixed and tweaked wavy underline / undercurl (#847).
+
+Keyboard handling
+  * Keyboard selecting mode (#84).
+  * Avoid keyboard/echo/display update latency.
+  * modifyOtherKeys mode supports control chars in non-Latin keyboard layout.
+  * Fix modifyOtherKeys mode 1 to support Ctrl+AltGr.
+
+Mouse link hover and click handling
+  * Consistent hover highlighting.
+  * Overriding modifier is also accepted in non-application mouse mode (#694).
+
+Window handling
+  * Fixed option --Border=void/frame (#843).
+  * Fixed start from shortcut in Windows XP.
+
+Documentation
+  * Wiki Tips: note about UTF-8 requirement for emoji support (#842).
+  * Fixed description of option HandleDPI (#824, #774, #853).
+
+Configuration
+  * Support for Win key modifier for user-defined keys (option KeyFunctions).
+  * Support for Win key modifier for options ScrollMod and ClickTargetMod.
+  * New option HoverTitle.
+  * New user-definable function toggle-bidi.
+  * Dropping CR from missing option error message.
+  * Added FF and ESC to FilterPasteControls characters (xterm 344).
+
+### 2.9.6 (20 January 2019) ###
+
+Terminal features
+  * Fixed bidi "run" handling (~#837).
+  * Fixed bidi embedding handling (#837).
+  * HTML export/copy: Fixed HTML style attributes.
+
+Window handling
+  * Flexible window grouping configuration (#789).
+  * If started from desktop shortcut, clone AppID from it (#784, mintty/wsltty#96).
+  * Display speedup by skipping refresh intervals (#835).
+  * Support for pasting from Windows clipboard history (mintty/wsltty#139).
+  * Option to lock title from being changed (mintty/wsltty#138).
+
+Keyboard handling
+  * Workaround for buggy StrokeIt tool sending right-Alt+Fn key events (#833).
+  * Optional support for external hotkeys (esp. to close window), overriding disabled Alt+Fn shortcuts.
+  * Workaround for Windows clipboard history pasting implementation (mintty/wsltty#139).
+  * Unified environment for external commands attached to keys (KeyFunctions) with those in context menu (UserCommands).
+
+Configuration
+  * New option UserCommandsPath to configure PATH for UserCommands, KeyFunctions, SysMenuFunctions.
+  * Option Class supports the same placeholders as AppID (#789).
+  * New option SupportExternalHotkeys.
+  * New option DisplaySpeedup (#835).
+  * New options CtxMenuFunctions and SysMenuFunctions to customize menus (#820).
+  * New user-definable functions lock-title, new-window, win-toggle-max.
+
+### 2.9.5 (5 December 2018) ###
+
+Window handling
+  * Fixed startup directory after cloning new window after starting from desktop shortcut (#784, mintty/wsltty#96).
+  * Avoiding stale hover indication in unfocussed window.
+  * Changed default handling of resolution change to HandleDPI=2 (#824).
+
+Tweaks to HTML clipboard/export feature
+  * Flexible HTML formatting levels.
+  * Configurable, also in Options dialog.
+  * No more table cell container.
+  * HTML escaping.
+  * Apply styles individually and other tweaks for increased compatibility.
+  * Font fallback 'monospace'.
+  * Find relative HTML file name on Shift+"HTML Screen Dump".
+
+Configuration
+  * CopyAsHTML (#825, #811).
+
+Other
+  * Ensuring /bin in PATH for user commands.
+
+### 2.9.4 (10 November 2018) ###
+
+Terminal features
+  * Copy as HTML (#811).
+  * Mitigate stalling on very long paste buffer lines (#810).
+  * New CSI DECLL (VT100, xterm) to switch keyboard LEDs (and their associated modifier function).
+  * New CSI > 0/2 p to switch option HideMouse (xterm pointerMode).
+
+Appearance
+  * Option Background== for floating window effect (using desktop wallpaper as background) (#18, ~#666, ~~#501).
+
+Window handling
+  * Fixed suspend-output-while-selecting buffer, size is configurable (#816, ~#799).
   * Consider glyph width for font width determination (#808).
-  * Do not start process to construct exit confirmation.
+  * Do not start process to construct process list for exit confirmation (~#448).
+  * Enhanced taskbar icon grouping behaviour (#784, mintty/wsltty#96, ?#495, ?#420, ??#801).
+  * Setting MINTTY_SHORTCUT when started from a desktop shortcut.
+  * Maintain proper terminal size after DPI change in DPI awareness mode V2 (#774).
+
+Configuration
+  * AppID supports placeholders for flexible customization of taskbar icon grouping behaviour (#784, mintty/wsltty#96, ?#495, ?#420, ??#801).
+  * Option SuspendWhileSelecting to set the max size of the suspend-output-while-selecting buffer (#816, ~#799).
 
 ### 2.9.3 (4 October 2018) ###
 

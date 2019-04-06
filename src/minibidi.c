@@ -17,22 +17,28 @@
  *
  * Modified: Thomas Wolff:
  * - extended bidi class detection to consider non-BMP characters
- * - fixed mirroring of '('
+ * - generating mirroring data from Unicode
+ * - fixed recognition of runs
+ * - sanitized handling of directional markers
+ * - support bidi mode model of «BiDi in Terminal Emulators» recommendation
+     (https://terminal-wg.pages.freedesktop.org/bidi/):
+ * -  return resolved paragraph level (or -1 if none)
+ * -  switchable options for:
+ * -   autodetection (rules P2, P3)
+ * -   LTR/RTL fallback for autodetection
+ * -   explicit RTL
+ * -   mirroring of additional characters (Box drawing, quadrant blocks)
  *
  ************************************************************************/
 
 /*
  * TODO:
  * =====
- * - Explicit marks need to be handled (they are not 100% now)
- * - Ligatures
+ * - Explicit markers need to be handled (they are not 100% now),
+     esp. isolate markers
+ * - Ligatures (?)
  */
 
-
-#define LMASK	0x3F    /* Embedding Level mask */
-#define OMASK	0xC0    /* Override mask */
-#define OISL	0x80    /* Override is L */
-#define OISR	0x40    /* Override is R */
 
 /* Shaping Helpers */
 #define STYPE(xh) ((((xh) >= SHAPE_FIRST) && ((xh) <= SHAPE_LAST)) ? \
@@ -111,14 +117,13 @@ static const shape_node shapetypes[] = {
 
 
 /*
- * Finds the index of a run with level equals tlevel
+ * Finds the index of a run with level tlevel or higher (!)
  */
 static int
-findIndexOfRun(uchar * level, int start, int count, int tlevel)
+find_run(uchar * levels, int start, int count, int tlevel)
 {
-  int i;
-  for (i = start; i < count; i++) {
-    if (tlevel == level[i]) {
+  for (int i = start; i < count; i++) {
+    if (tlevel <= levels[i]) {
       return i;
     }
   }
@@ -126,32 +131,29 @@ findIndexOfRun(uchar * level, int start, int count, int tlevel)
 }
 
 /*
- * Flips the text buffer, according to max level, and
- * all higher levels
+ * Flips runs in text buffer, of tlevel and all higher levels
  *
  * Input:
  * from: text buffer, on which to apply flipping
- * level: resolved levels buffer
- * max: the maximum level found in this line (should be uchar)
- * count: line size in bidi_char
+ * levels: resolved levels buffer
+ * tlevel: the level from which to flip runs
+ * count: line size in bidi_char and levels
  */
 static void
-flipThisRun(bidi_char * from, uchar * level, int max, int count)
+flip_runs(bidi_char * from, uchar * levels, int tlevel, int count)
 {
-  int i, j, k, tlevel;
-  bidi_char temp;
+  int i, j;
 
   j = i = 0;
   while (i < count && j < count) {
-   /* find the start of the run of level=max */
-    tlevel = max;
-    i = j = findIndexOfRun(level, i, count, max);
+   /* find the start of the next run */
+    i = j = find_run(levels, i, count, tlevel);
    /* find the end of the run */
-    while (i < count && tlevel <= level[i]) {
+    while (i < count && tlevel <= levels[i]) {
       i++;
     }
-    for (k = i - 1; k > j; k--, j++) {
-      temp = from[k];
+    for (int k = i - 1; k > j; k--, j++) {
+      bidi_char temp = from[k];
       from[k] = from[j];
       from[j] = temp;
     }
@@ -231,7 +233,9 @@ is_rtl_class(uchar bc)
   * character in any of those classes will be displayed
   * uniformly left-to-right by the Unicode bidi algorithm.
   */
-  const int mask = (1 << R) | (1 << AL) | (1 << RLE) | (1 << RLO);
+  const int mask = (1 << R) | (1 << AL) | (1 << RLE) | (1 << RLO)
+                 | (1 << RLI) | (1 << FSI)
+                 ;
 
   return mask & (1 << (bc));
 }
@@ -248,6 +252,14 @@ bool
 is_punct_class(uchar bc)
 {
   const int mask = (1 << BN) | (1 << CS) | (1 << EN) | (1 << ES) | (1 << ET);
+
+  return mask & (1 << (bc));
+}
+
+static bool
+is_NI(uchar bc)
+{
+  const int mask = (1 << B) | (1 <<  S) | (1 <<  WS) | (1 <<  ON) | (1 <<  FSI) | (1 <<  LRI) | (1 <<  RLI) | (1 <<  PDI);
 
   return mask & (1 << (bc));
 }
@@ -334,90 +346,12 @@ do_shape(bidi_char * line, bidi_char * to, int count)
 }
 
 static ucschar
-mirror(ucschar c)
+mirror(ucschar c, bool box_mirror)
 {
   static const struct { wchar from, to; } pairs[] = {
-    {0x0028, 0x0029}, {0x0029, 0x0028}, {0x003C, 0x003E}, {0x003E, 0x003C},
-    {0x005B, 0x005D}, {0x005D, 0x005B}, {0x007B, 0x007D}, {0x007D, 0x007B},
-    {0x00AB, 0x00BB}, {0x00BB, 0x00AB}, {0x2039, 0x203A}, {0x203A, 0x2039},
-    {0x2045, 0x2046}, {0x2046, 0x2045}, {0x207D, 0x207E}, {0x207E, 0x207D},
-    {0x208D, 0x208E}, {0x208E, 0x208D}, {0x2208, 0x220B}, {0x2209, 0x220C},
-    {0x220A, 0x220D}, {0x220B, 0x2208}, {0x220C, 0x2209}, {0x220D, 0x220A},
-    {0x2215, 0x29F5}, {0x223C, 0x223D}, {0x223D, 0x223C}, {0x2243, 0x22CD},
-    {0x2252, 0x2253}, {0x2253, 0x2252}, {0x2254, 0x2255}, {0x2255, 0x2254},
-    {0x2264, 0x2265}, {0x2265, 0x2264}, {0x2266, 0x2267}, {0x2267, 0x2266},
-    {0x2268, 0x2269}, {0x2269, 0x2268}, {0x226A, 0x226B}, {0x226B, 0x226A},
-    {0x226E, 0x226F}, {0x226F, 0x226E}, {0x2270, 0x2271}, {0x2271, 0x2270},
-    {0x2272, 0x2273}, {0x2273, 0x2272}, {0x2274, 0x2275}, {0x2275, 0x2274},
-    {0x2276, 0x2277}, {0x2277, 0x2276}, {0x2278, 0x2279}, {0x2279, 0x2278},
-    {0x227A, 0x227B}, {0x227B, 0x227A}, {0x227C, 0x227D}, {0x227D, 0x227C},
-    {0x227E, 0x227F}, {0x227F, 0x227E}, {0x2280, 0x2281}, {0x2281, 0x2280},
-    {0x2282, 0x2283}, {0x2283, 0x2282}, {0x2284, 0x2285}, {0x2285, 0x2284},
-    {0x2286, 0x2287}, {0x2287, 0x2286}, {0x2288, 0x2289}, {0x2289, 0x2288},
-    {0x228A, 0x228B}, {0x228B, 0x228A}, {0x228F, 0x2290}, {0x2290, 0x228F},
-    {0x2291, 0x2292}, {0x2292, 0x2291}, {0x2298, 0x29B8}, {0x22A2, 0x22A3},
-    {0x22A3, 0x22A2}, {0x22A6, 0x2ADE}, {0x22A8, 0x2AE4}, {0x22A9, 0x2AE3},
-    {0x22AB, 0x2AE5}, {0x22B0, 0x22B1}, {0x22B1, 0x22B0}, {0x22B2, 0x22B3},
-    {0x22B3, 0x22B2}, {0x22B4, 0x22B5}, {0x22B5, 0x22B4}, {0x22B6, 0x22B7},
-    {0x22B7, 0x22B6}, {0x22C9, 0x22CA}, {0x22CA, 0x22C9}, {0x22CB, 0x22CC},
-    {0x22CC, 0x22CB}, {0x22CD, 0x2243}, {0x22D0, 0x22D1}, {0x22D1, 0x22D0},
-    {0x22D6, 0x22D7}, {0x22D7, 0x22D6}, {0x22D8, 0x22D9}, {0x22D9, 0x22D8},
-    {0x22DA, 0x22DB}, {0x22DB, 0x22DA}, {0x22DC, 0x22DD}, {0x22DD, 0x22DC},
-    {0x22DE, 0x22DF}, {0x22DF, 0x22DE}, {0x22E0, 0x22E1}, {0x22E1, 0x22E0},
-    {0x22E2, 0x22E3}, {0x22E3, 0x22E2}, {0x22E4, 0x22E5}, {0x22E5, 0x22E4},
-    {0x22E6, 0x22E7}, {0x22E7, 0x22E6}, {0x22E8, 0x22E9}, {0x22E9, 0x22E8},
-    {0x22EA, 0x22EB}, {0x22EB, 0x22EA}, {0x22EC, 0x22ED}, {0x22ED, 0x22EC},
-    {0x22F0, 0x22F1}, {0x22F1, 0x22F0}, {0x22F2, 0x22FA}, {0x22F3, 0x22FB},
-    {0x22F4, 0x22FC}, {0x22F6, 0x22FD}, {0x22F7, 0x22FE}, {0x22FA, 0x22F2},
-    {0x22FB, 0x22F3}, {0x22FC, 0x22F4}, {0x22FD, 0x22F6}, {0x22FE, 0x22F7},
-    {0x2308, 0x2309}, {0x2309, 0x2308}, {0x230A, 0x230B}, {0x230B, 0x230A},
-    {0x2329, 0x232A}, {0x232A, 0x2329}, {0x2768, 0x2769}, {0x2769, 0x2768},
-    {0x276A, 0x276B}, {0x276B, 0x276A}, {0x276C, 0x276D}, {0x276D, 0x276C},
-    {0x276E, 0x276F}, {0x276F, 0x276E}, {0x2770, 0x2771}, {0x2771, 0x2770},
-    {0x2772, 0x2773}, {0x2773, 0x2772}, {0x2774, 0x2775}, {0x2775, 0x2774},
-    {0x27D5, 0x27D6}, {0x27D6, 0x27D5}, {0x27DD, 0x27DE}, {0x27DE, 0x27DD},
-    {0x27E2, 0x27E3}, {0x27E3, 0x27E2}, {0x27E4, 0x27E5}, {0x27E5, 0x27E4},
-    {0x27E6, 0x27E7}, {0x27E7, 0x27E6}, {0x27E8, 0x27E9}, {0x27E9, 0x27E8},
-    {0x27EA, 0x27EB}, {0x27EB, 0x27EA}, {0x2983, 0x2984}, {0x2984, 0x2983},
-    {0x2985, 0x2986}, {0x2986, 0x2985}, {0x2987, 0x2988}, {0x2988, 0x2987},
-    {0x2989, 0x298A}, {0x298A, 0x2989}, {0x298B, 0x298C}, {0x298C, 0x298B},
-    {0x298D, 0x2990}, {0x298E, 0x298F}, {0x298F, 0x298E}, {0x2990, 0x298D},
-    {0x2991, 0x2992}, {0x2992, 0x2991}, {0x2993, 0x2994}, {0x2994, 0x2993},
-    {0x2995, 0x2996}, {0x2996, 0x2995}, {0x2997, 0x2998}, {0x2998, 0x2997},
-    {0x29B8, 0x2298}, {0x29C0, 0x29C1}, {0x29C1, 0x29C0}, {0x29C4, 0x29C5},
-    {0x29C5, 0x29C4}, {0x29CF, 0x29D0}, {0x29D0, 0x29CF}, {0x29D1, 0x29D2},
-    {0x29D2, 0x29D1}, {0x29D4, 0x29D5}, {0x29D5, 0x29D4}, {0x29D8, 0x29D9},
-    {0x29D9, 0x29D8}, {0x29DA, 0x29DB}, {0x29DB, 0x29DA}, {0x29F5, 0x2215},
-    {0x29F8, 0x29F9}, {0x29F9, 0x29F8}, {0x29FC, 0x29FD}, {0x29FD, 0x29FC},
-    {0x2A2B, 0x2A2C}, {0x2A2C, 0x2A2B}, {0x2A2D, 0x2A2C}, {0x2A2E, 0x2A2D},
-    {0x2A34, 0x2A35}, {0x2A35, 0x2A34}, {0x2A3C, 0x2A3D}, {0x2A3D, 0x2A3C},
-    {0x2A64, 0x2A65}, {0x2A65, 0x2A64}, {0x2A79, 0x2A7A}, {0x2A7A, 0x2A79},
-    {0x2A7D, 0x2A7E}, {0x2A7E, 0x2A7D}, {0x2A7F, 0x2A80}, {0x2A80, 0x2A7F},
-    {0x2A81, 0x2A82}, {0x2A82, 0x2A81}, {0x2A83, 0x2A84}, {0x2A84, 0x2A83},
-    {0x2A8B, 0x2A8C}, {0x2A8C, 0x2A8B}, {0x2A91, 0x2A92}, {0x2A92, 0x2A91},
-    {0x2A93, 0x2A94}, {0x2A94, 0x2A93}, {0x2A95, 0x2A96}, {0x2A96, 0x2A95},
-    {0x2A97, 0x2A98}, {0x2A98, 0x2A97}, {0x2A99, 0x2A9A}, {0x2A9A, 0x2A99},
-    {0x2A9B, 0x2A9C}, {0x2A9C, 0x2A9B}, {0x2AA1, 0x2AA2}, {0x2AA2, 0x2AA1},
-    {0x2AA6, 0x2AA7}, {0x2AA7, 0x2AA6}, {0x2AA8, 0x2AA9}, {0x2AA9, 0x2AA8},
-    {0x2AAA, 0x2AAB}, {0x2AAB, 0x2AAA}, {0x2AAC, 0x2AAD}, {0x2AAD, 0x2AAC},
-    {0x2AAF, 0x2AB0}, {0x2AB0, 0x2AAF}, {0x2AB3, 0x2AB4}, {0x2AB4, 0x2AB3},
-    {0x2ABB, 0x2ABC}, {0x2ABC, 0x2ABB}, {0x2ABD, 0x2ABE}, {0x2ABE, 0x2ABD},
-    {0x2ABF, 0x2AC0}, {0x2AC0, 0x2ABF}, {0x2AC1, 0x2AC2}, {0x2AC2, 0x2AC1},
-    {0x2AC3, 0x2AC4}, {0x2AC4, 0x2AC3}, {0x2AC5, 0x2AC6}, {0x2AC6, 0x2AC5},
-    {0x2ACD, 0x2ACE}, {0x2ACE, 0x2ACD}, {0x2ACF, 0x2AD0}, {0x2AD0, 0x2ACF},
-    {0x2AD1, 0x2AD2}, {0x2AD2, 0x2AD1}, {0x2AD3, 0x2AD4}, {0x2AD4, 0x2AD3},
-    {0x2AD5, 0x2AD6}, {0x2AD6, 0x2AD5}, {0x2ADE, 0x22A6}, {0x2AE3, 0x22A9},
-    {0x2AE4, 0x22A8}, {0x2AE5, 0x22AB}, {0x2AEC, 0x2AED}, {0x2AED, 0x2AEC},
-    {0x2AF7, 0x2AF8}, {0x2AF8, 0x2AF7}, {0x2AF9, 0x2AFA}, {0x2AFA, 0x2AF9},
-    {0x3008, 0x3009}, {0x3009, 0x3008}, {0x300A, 0x300B}, {0x300B, 0x300A},
-    {0x300C, 0x300D}, {0x300D, 0x300C}, {0x300E, 0x300F}, {0x300F, 0x300E},
-    {0x3010, 0x3011}, {0x3011, 0x3010}, {0x3014, 0x3015}, {0x3015, 0x3014},
-    {0x3016, 0x3017}, {0x3017, 0x3016}, {0x3018, 0x3019}, {0x3019, 0x3018},
-    {0x301A, 0x301B}, {0x301B, 0x301A}, {0xFF08, 0xFF09}, {0xFF09, 0xFF08},
-    {0xFF1C, 0xFF1E}, {0xFF1E, 0xFF1C}, {0xFF3B, 0xFF3D}, {0xFF3D, 0xFF3B},
-    {0xFF5B, 0xFF5D}, {0xFF5D, 0xFF5B}, {0xFF5F, 0xFF60}, {0xFF60, 0xFF5F},
-    {0xFF62, 0xFF63}, {0xFF63, 0xFF62}
+#include "mirroring.t"
   };
+
   int i = -1;
   int j = lengthof(pairs);
   while (j - i > 1) {
@@ -429,49 +363,67 @@ mirror(ucschar c)
     else
       i = k;
   }
+
+  /* check Box Drawing (U+2500-U+257F) and Block Elements (U+2580-U+259F)
+  ┌ ┍ ┎ ┏ └ ┕ ┖ ┗ ├ ┝ ┞ ┟ ┠ ┡ ┢ ┣ ┭ ┱ ┵ ┹ ┽ ╃ ╅ ╉
+  ┐ ┑ ┒ ┓ ┘ ┙ ┚ ┛ ┤ ┥ ┦ ┧ ┨ ┩ ┪ ┫ ┮ ┲ ┶ ┺ ┾ ╄ ╆ ╊
+  ╒ ╓ ╔ ╘ ╙ ╚ ╞ ╟ ╠ ╭ ╯ ╱ ╴ ╸ ╼
+  ╕ ╖ ╗ ╛ ╜ ╝ ╡ ╢ ╣ ╮ ╰ ╲ ╶ ╺ ╾
+
+  cannot handle quarter/eighth blocks (would need to be reversed too) ▉▊▋▍▎
+  could handle one eighth blocks ▏▕ but would be inconsistent
+
+  ▌ ▖ ▘ ▙ ▚ ▛
+  ▐ ▗ ▝ ▟ ▞ ▜
+  */
+  static const struct { wchar from, to; } boxpairs[] = {
+    {0x250C, 0x2510}, {0x250D, 0x2511}, {0x250E, 0x2512}, {0x250F, 0x2513},
+    {0x2510, 0x250C}, {0x2511, 0x250D}, {0x2512, 0x250E}, {0x2513, 0x250F},
+    {0x2514, 0x2518}, {0x2515, 0x2519}, {0x2516, 0x251A}, {0x2517, 0x251B},
+    {0x2518, 0x2514}, {0x2519, 0x2515}, {0x251A, 0x2516}, {0x251B, 0x2517},
+    {0x251C, 0x2524}, {0x251D, 0x2525}, {0x251E, 0x2526}, {0x251F, 0x2527},
+    {0x2520, 0x2528}, {0x2521, 0x2529}, {0x2522, 0x252A}, {0x2523, 0x252B},
+    {0x2524, 0x251C}, {0x2525, 0x251D}, {0x2526, 0x251E}, {0x2527, 0x251F},
+    {0x2528, 0x2520}, {0x2529, 0x2521}, {0x252A, 0x2522}, {0x252B, 0x2523},
+    {0x252D, 0x252E}, {0x252E, 0x252D}, {0x2531, 0x2532}, {0x2532, 0x2531},
+    {0x2535, 0x2536}, {0x2536, 0x2535}, {0x2539, 0x253A}, {0x253A, 0x2539},
+    {0x253D, 0x253E}, {0x253E, 0x253D}, {0x2543, 0x2544}, {0x2544, 0x2543},
+    {0x2545, 0x2546}, {0x2546, 0x2545}, {0x2549, 0x254A}, {0x254A, 0x2549},
+    {0x2552, 0x2555}, {0x2553, 0x2556}, {0x2554, 0x2557}, {0x2555, 0x2552},
+    {0x2556, 0x2553}, {0x2557, 0x2554}, {0x2558, 0x255B}, {0x2559, 0x255C},
+    {0x255A, 0x255D}, {0x255B, 0x2558}, {0x255C, 0x2559}, {0x255D, 0x255A},
+    {0x255E, 0x2561}, {0x255F, 0x2562}, {0x2560, 0x2563}, {0x2561, 0x255E},
+    {0x2562, 0x255F}, {0x2563, 0x2560}, {0x256D, 0x256E}, {0x256E, 0x256D},
+    {0x256F, 0x2570}, {0x2570, 0x256F}, {0x2571, 0x2572}, {0x2572, 0x2571},
+    {0x2574, 0x2576}, {0x2576, 0x2574}, {0x2578, 0x257A}, {0x257A, 0x2578},
+    {0x257C, 0x257E}, {0x257E, 0x257C}, {0x258C, 0x2590}, {0x2590, 0x258C},
+    {0x2596, 0x2597}, {0x2597, 0x2596}, {0x2598, 0x259D}, {0x2599, 0x259F},
+    {0x259A, 0x259E}, {0x259B, 0x259C}, {0x259C, 0x259B}, {0x259D, 0x2598},
+    {0x259E, 0x259A}, {0x259F, 0x2599},
+  };
+
+  if (!box_mirror)
+    return c;
+
+  i = -1;
+  j = lengthof(boxpairs);
+  while (j - i > 1) {
+    int k = (i + j) / 2;
+    if (c == boxpairs[k].from)
+      return boxpairs[k].to;
+    if (c < boxpairs[k].from)
+      j = k;
+    else
+      i = k;
+  }
+
   return c;
 }
 
-/*
- * The most significant 2 bits of each level are used to store
- * Override status of each character
- * This function sets the override bits of level according
- * to the value in override, and reurns the new byte.
- */
-static uchar
-setOverrideBits(uchar level, uchar override)
-{
-  if (override == ON)
-    return level;
-  else if (override == R)
-    return level | OISR;
-  else if (override == L)
-    return level | OISL;
-  return level;
-}
 
-/*
- * Find the most recent run of the same value in `level', and
- * return the value _before_ it.
- * Used to be used to process U+202C POP DIRECTIONAL FORMATTING.
- */
-static int
-getPreviousLevel(uchar * level, int from)
-{
-  if (from > 0) {
-    uchar current = level[--from];
-
-    while (from >= 0 && level[from] == current)
-      from--;
-
-    if (from >= 0)
-      return level[from];
-
-    return -1;
-  }
-  else
-    return -1;
-}
+#ifdef TEST_BIDI
+uchar bidi_levels[999];
+#endif
 
 /*
  * The Main Bidi Function, and the only function that should
@@ -480,40 +432,33 @@ getPreviousLevel(uchar * level, int from)
  * line: a buffer of size count containing text to apply
  * the Bidirectional algorithm to.
  */
-
 int
-do_bidi(bidi_char * line, int count)
+do_bidi(bool autodir, int paragraphLevel, bool explicitRTL, bool box_mirror, 
+        bidi_char * line, int count)
 {
-  uchar paragraphLevel;
   uchar currentEmbedding;
   uchar currentOverride;
   uchar tempType;
-  int i, j, yes, bover;
+  int i, j;
 
   uchar bidi_class_of(int i) {
-    if (i && line[i].wc == UCSWIDE)
-      i--;
+#ifdef try_to_handle_CJK_here
+#warning does not always work in RTL mode, now filtered before calling do_bidi
+    if (i && line[i].wc == UCSWIDE) {
+      // try to fix double-width within right-to-left
+      if (currentEmbedding & 1)
+        i--;
+      else
+        return BN;
+      // OK for LTR: return BN
+      // OK for RTL U+5555: EN, NSM
+      // not displayed in RTL: U+FF1C (class default -> ON)
+    }
+#endif
+    if (explicitRTL)
+      return R;
     return bidi_class(line[i].wc);
   }
-
- /* Check the presence of R or AL types as optimization */
-  yes = 0;
-  for (i = 0; i < count; i++) {
-    int type = bidi_class_of(i);
-    if (type == R || type == AL
-        || type == RLE || type == LRE || type == RLO || type == LRO || type == PDF
-        || type == LRI || type == RLI || type == FSI || type == PDI
-       ) {
-      yes = 1;
-      break;
-    }
-  }
-  if (yes == 0)
-    return L;
-
- /* Initialize types, levels */
-  uchar types[count];
-  uchar levels[count];
 
  /* Rule (P1)  NOT IMPLEMENTED
   * P1. Split the text into separate paragraphs. A paragraph separator is
@@ -522,36 +467,118 @@ do_bidi(bidi_char * line, int count)
   */
 
  /* Rule (P2), (P3)
-  * P2. In each paragraph, find the first character of type L, AL, or R.
+  * P2. In each paragraph, find the first character of type L, AL, or R 
+    while skipping over any characters between an isolate initiator and 
+    its matching PDI or, if it has no matching PDI, the end of the paragraph.
   * P3. If a character is found in P2 and it is of type AL or R, then set
   * the paragraph embedding level to one; otherwise, set it to zero.
   */
-  paragraphLevel = 0;
   int isolateLevel = 0;
+  int resLevel = -1;
+  bool hasRTL = false;
   for (i = 0; i < count; i++) {
     int type = bidi_class_of(i);
-    if (type == LRI || type == RLI || type == FSI)
+    if (type == LRI || type == RLI || type == FSI) {
+      hasRTL = true;
       isolateLevel++;
-    else if (type == PDI)
+    }
+    else if (type == PDI) {
+      hasRTL = true;
       isolateLevel--;
+    }
     else if (isolateLevel == 0) {
       if (type == R || type == AL) {
-        paragraphLevel = 1;
+        hasRTL = true;
+        if (resLevel < 0)
+          resLevel = 1;
         break;
       }
-      else if (type == L)
-        break;
+      else if (type == RLE || type == LRE || type == RLO || type == LRO || type == PDF) {
+        hasRTL = true;
+        if (resLevel >= 0)
+          break;
+      }
+      else if (type == L) {
+        if (resLevel < 0)
+          resLevel = 0;
+      }
     }
   }
+  if (autodir) {
+    if (resLevel >= 0)
+      paragraphLevel = resLevel;
+  }
+  else
+    resLevel = paragraphLevel;
+ /* Optimization: skip full algorithm if there is nothing to reorder */
+  if (!hasRTL && !paragraphLevel)
+    return 0;
+
+ /* Initialize types, levels */
+  uchar types[count];
+  uchar levels[count];
+
+#define dont_debug_bidi
+
+#ifdef debug_bidi
+  void trace_bidi(char * tag)
+  {
+    static int do_trace_bidi = 2;
+    if (do_trace_bidi) {
+      if (!tag) {
+        do_trace_bidi--;
+        return;
+      }
+      printf("%s\n", tag);
+      uint last = count - 1;
+      while (last && line[last].wc == ' ')
+        last--;
+      for (uint i = 0; i <= last; i++)
+        printf(" %04X", line[i].wc);
+      printf("\n");
+      static char * _type[] = {
+        "  L", "LRE", "LRO", "  R", " AL", "RLE", "RLO", "PDF", " EN", " ES", " ET", " AN", " CS", "NSM", " BN", "  B", "  S", " WS", " ON", "LRI", "RLI", "FSI", "PDI"
+      };
+      for (uint i = 0; i <= last; i++)
+        if (types[i] < lengthof(_type))
+          printf("  %s", _type[types[i]]);
+        else
+          printf("    ?");
+      printf("\n");
+      for (uint i = 0; i <= last; i++)
+          printf(" %4d", levels[i]);
+      printf("\n");
+    }
+  }
+  void trace_mark(char * tag) {
+    (void)tag;
+  }
+  trace_bidi(0);
+#else
+#define trace_bidi(tag)	
+#define trace_mark(tag)	
+#endif
+
+  trace_bidi("[P2, P3]");
 
  /* Rule (X1)
-  * X1. Begin by setting the current embedding level to the paragraph
-  * embedding level. Set the directional override status to neutral.
+    X1. At the beginning of a paragraph, perform the following steps:
+  • Set the stack to empty.
+  • Push onto the stack an entry consisting of the paragraph embedding level,
+    a neutral directional override status, and a false directional isolate status.
+  • Set the overflow isolate count to zero.
+  • Set the overflow embedding count to zero.
+  • Set the valid isolate count to zero.
+  • Process each character iteratively, applying rules X2 through X8. 
+    Only embedding levels from 0 through max_depth are valid in this phase. 
+    (Note that in the resolution of levels in rules I1 and I2, 
+    the maximum embedding level of max_depth+1 can be reached.)
   */
   currentEmbedding = paragraphLevel;
   currentOverride = ON;
   bool currentIsolate = false;
 
+  // By making the dss as large as the whole line, we avoid overflow handling.
   uchar dss_emb[count + 1];
   uchar dss_ovr[count + 1];
   bool dss_isol[count + 1];
@@ -568,42 +595,20 @@ do_bidi(bidi_char * line, int count)
 
   void popdss() {
     // remove top
-    dss_top--;
+    if (dss_top >= 0)
+      dss_top--;
     // then set current values to new top
-    currentEmbedding = dss_emb[dss_top];
-    currentOverride = dss_ovr[dss_top];
-    currentIsolate = dss_isol[dss_top];
+    if (dss_top >= 0) {
+      currentEmbedding = dss_emb[dss_top];
+      currentOverride = dss_ovr[dss_top];
+      currentIsolate = dss_isol[dss_top];
+    }
   }
 
   pushdss();
   //int ovfIsolate = 0;
   //int ovfEmbedding = 0;
   isolateLevel = 0;
-
-#define dont_debug_bidi
-
-#ifdef debug_bidi
-  void trace_bidi(char * tag) {
-    if ((*line).wc == 'x') {
-      printf("%s ", tag);
-      for (int i = 0; i < count; i++) {
-        if (line[i].wc == ' ')
-          printf(" ");
-        else if (line[i].wc < 0x80)
-          printf("%d:%c/%d ", levels[i], line[i].wc, types[i]);
-        else
-          printf("%d:%X/%d ", levels[i], line[i].wc, types[i]);
-      }
-      printf("\n");
-    }
-  }
-  void trace_mark(char * tag) {
-    (void)tag;
-  }
-#else
-#define trace_bidi(tag)	
-#define trace_mark(tag)	
-#endif
 
  /* Rule (X2), (X3), (X4), (X5), (X6), (X7), (X8)
   * X2. With each RLE, compute the least greater odd embedding level.
@@ -623,9 +628,10 @@ do_bidi(bidi_char * line, int count)
   * terminated at the end of each paragraph. Paragraph separators are not
   * included in the embedding. (Useless here) NOT IMPLEMENTED
   */
-  bover = 0;
   for (i = 0; i < count; i++) {
     tempType = bidi_class_of(i);
+    levels[i] = currentEmbedding;
+
     if (tempType == FSI) {
       int lvl = 0;
       tempType = LRI;
@@ -649,47 +655,33 @@ do_bidi(bidi_char * line, int count)
     }
     switch (tempType) {
       when RLE:
-        levels[i] = currentEmbedding;
         currentEmbedding = leastGreaterOdd(currentEmbedding);
-        //levels[i] = currentEmbedding;
-        levels[i] = setOverrideBits(levels[i], currentOverride);
         currentOverride = ON;
         currentIsolate = false;
         pushdss();
         trace_mark("RLE");
       when LRE:
-        levels[i] = currentEmbedding;
         currentEmbedding = leastGreaterEven(currentEmbedding);
-        //levels[i] = currentEmbedding;
-        levels[i] = setOverrideBits(levels[i], currentOverride);
         currentOverride = ON;
         currentIsolate = false;
         pushdss();
         trace_mark("LRE");
       when RLO:
-        levels[i] = currentEmbedding;
         currentEmbedding = leastGreaterOdd(currentEmbedding);
-        //levels[i] = currentEmbedding;
-        tempType = currentOverride = R;
+        currentOverride = R;
         currentIsolate = false;
         pushdss();
-        bover = 1;
         trace_mark("RLO");
       when LRO:
-        levels[i] = currentEmbedding;
         currentEmbedding = leastGreaterEven(currentEmbedding);
-        //levels[i] = currentEmbedding;
-        tempType = currentOverride = L;
+        currentOverride = L;
         currentIsolate = false;
         pushdss();
-        bover = 1;
         trace_mark("LRO");
       when RLI:
         if (currentOverride != ON)
           tempType = currentOverride;
-        levels[i] = currentEmbedding;
         currentEmbedding = leastGreaterOdd(currentEmbedding);
-        //levels[i] = currentEmbedding;
         isolateLevel++;
         currentOverride = ON;
         currentIsolate = true;
@@ -698,36 +690,20 @@ do_bidi(bidi_char * line, int count)
       when LRI:
         if (currentOverride != ON)
           tempType = currentOverride;
-        levels[i] = currentEmbedding;
         currentEmbedding = leastGreaterEven(currentEmbedding);
-        //levels[i] = currentEmbedding;
         isolateLevel++;
         currentOverride = ON;
         currentIsolate = true;
         pushdss();
         trace_mark("LRI");
       when PDF:
-#ifdef old_PDF_handling
-#warning old PDF handling does not work correctly for override
-        if (getPreviousLevel(levels, i) == -1) {
-          currentEmbedding = paragraphLevel;
-          currentOverride = ON;
-        }
-        else {
-          currentOverride = currentEmbedding & OMASK;
-          currentEmbedding = currentEmbedding & ~OMASK;
-        }
-        levels[i] = currentEmbedding;
-#else
-        (void)getPreviousLevel;
-        if (countdss() > 1 && !currentIsolate)
+        if (!currentIsolate && countdss() >= 2)
           popdss();
         levels[i] = currentEmbedding;
-#endif
         trace_mark("PDF");
       when PDI:
         if (isolateLevel) {
-          while (!currentIsolate)
+          while (!currentIsolate && countdss() > 0)
             popdss();
           popdss();
           isolateLevel--;
@@ -737,23 +713,15 @@ do_bidi(bidi_char * line, int count)
         levels[i] = currentEmbedding;
         trace_mark("PDI");
       when WS or S: /* Whitespace is treated as neutral for now */
-        levels[i] = currentEmbedding;
-        tempType = ON;
         if (currentOverride != ON)
           tempType = currentOverride;
       otherwise:
-        levels[i] = currentEmbedding;
         if (currentOverride != ON)
           tempType = currentOverride;
     }
     types[i] = tempType;
   }
- /* this clears out all overrides, so we can use levels safely... */
- /* checks bover first */
-  if (bover)
-    for (i = 0; i < count; i++)
-      levels[i] = levels[i] & LMASK;
-  trace_bidi("<X9");
+  trace_bidi("[X1-X8]");
 
  /* Rule (X9)
   * X9. Remove all RLE, LRE, RLO, LRO, PDF, and BN codes.
@@ -765,26 +733,42 @@ do_bidi(bidi_char * line, int count)
         types[i] = BN;
     }
   }
+  trace_bidi("[X9]");
+
+ /* Rule (X10) NOT IMPLEMENTED
+  * X10. Handle isolating run sequences...
+  */
 
  /* Rule (W1)
   * W1. Examine each non-spacing mark (NSM) in the level run, and change
   * the type of the NSM to the type of the previous character. If the NSM
   * is at the start of the level run, it will get the type of sor.
+  // TODO: check
+    W1. Examine each nonspacing mark (NSM) in the isolating run sequence, 
+    and change the type of the NSM 
+    to Other Neutral if the previous character is an isolate initiator or PDI, 
+    and to the type of the previous character otherwise. 
+    If the NSM is at the start of the isolating run sequence, 
+    it will get the type of sos. 
+    (Note that in an isolating run sequence, an isolate initiator followed by 
+    an NSM or any type other than PDI must be an overflow isolate initiator.)
   */
   if (types[0] == NSM)
     types[0] = paragraphLevel;
 
   for (i = 1; i < count; i++) {
     if (types[i] == NSM)
-      types[i] = types[i - 1];
-   /* Is this a safe assumption?
-    * I assumed the previous, IS a character.
-    */
+      switch (types[i - 1]) {
+        when LRI or RLI or FSI or PDI:
+          types[i] = ON;
+        otherwise:
+          types[i] = types[i - 1];
+      }
   }
 
  /* Rule (W2)
   * W2. Search backwards from each instance of a European number until the
-  * first strong type (R, L, AL, or sor) is found.  If an AL is found,
+  * first strong type (R, L, AL, or sos) is found.  If an AL is found,
   * change the type of the European number to Arabic number.
   */
   for (i = 0; i < count; i++) {
@@ -813,6 +797,7 @@ do_bidi(bidi_char * line, int count)
     if (types[i] == AL)
       types[i] = R;
   }
+  trace_bidi("[W1] [W2] [W3]");
 
  /* Rule (W4)
   * W4. A single European separator between two European numbers changes
@@ -890,22 +875,32 @@ do_bidi(bidi_char * line, int count)
     }
   }
 
- /* Rule (N1)
-  * N1. A sequence of neutrals takes the direction of the surrounding
-  * strong text if the text on both sides has the same direction. European
-  * and Arabic numbers are treated as though they were R.
+ /* Rule (N0) NOT IMPLEMENTED
+  * N0. Handle bracket pairs in isolating run sequences...
   */
-  if (count >= 2 && types[0] == ON) {
-    if ((types[1] == R) || (types[1] == EN) || (types[1] == AN))
+
+ /* Rule (N1)
+  * N1. A sequence of NIs takes the direction of the surrounding
+  * strong text if the text on both sides has the same direction.
+  * European and Arabic numbers are treated as though they were R.
+  // TODO: check
+    European and Arabic numbers act as if they were R in terms of their 
+    influence on NIs. The start-of-sequence (sos) and end-of-sequence (eos) 
+    types are used at isolating run sequence boundaries.
+  */
+  if (count >= 2 && is_NI(types[0])) {
+    if ((paragraphLevel & 1) &&
+        ((types[1] == R) || (types[1] == EN) || (types[1] == AN))
+       )
       types[0] = R;
-    else if (types[1] == L)
+    else if (!(paragraphLevel & 1) && types[1] == L)
       types[0] = L;
   }
   for (i = 1; i < (count - 1); i++) {
-    if (types[i] == ON) {
+    if (is_NI(types[i])) {
       if (types[i - 1] == L) {
         j = i;
-        while (j < (count - 1) && types[j] == ON) {
+        while (j < (count - 1) && is_NI(types[j])) {
           j++;
         }
         if (types[j] == L) {
@@ -919,7 +914,7 @@ do_bidi(bidi_char * line, int count)
       else if ((types[i - 1] == R) || (types[i - 1] == EN) ||
                (types[i - 1] == AN)) {
         j = i;
-        while (j < (count - 1) && types[j] == ON) {
+        while (j < (count - 1) && is_NI(types[j])) {
           j++;
         }
         if ((types[j] == R) || (types[j] == EN) || (types[j] == AN)) {
@@ -931,27 +926,29 @@ do_bidi(bidi_char * line, int count)
       }
     }
   }
-  if (count >= 2 && types[count - 1] == ON) {
-    if (types[count - 2] == R || types[count - 2] == EN ||
-        types[count - 2] == AN)
+  if (count >= 2 && is_NI(types[count - 1])) {
+    if ((paragraphLevel & 1) &&
+        (types[count - 2] == R || types[count - 2] == EN || types[count - 2] == AN)
+       )
       types[count - 1] = R;
-    else if (types[count - 2] == L)
+    else if (!(paragraphLevel & 1) && types[count - 2] == L)
       types[count - 1] = L;
   }
+  trace_bidi("[W4] [W5] [W6] [W7] [N0] [N1]");
 
  /* Rule (N2)
-  * N2. Any remaining neutrals take the embedding direction.
+  * N2. Any remaining NIs take the embedding direction.
   */
   for (i = 0; i < count; i++) {
-    if (types[i] == ON) {
+    if (is_NI(types[i])) {
       if ((levels[i] % 2) == 0)
         types[i] = L;
       else
         types[i] = R;
     }
   }
+  trace_bidi("[N2]");
 
-  trace_bidi("<I1");
  /* Rule (I1)
   * I1. For all characters with an even (left-to-right) embedding
   * direction, those of type R go up one level and those of type AN or
@@ -976,18 +973,21 @@ do_bidi(bidi_char * line, int count)
         levels[i] += 1;
     }
   }
-  trace_bidi(">I2");
+  trace_bidi("[I1, I2]");
 
  /* Rule (L1)
   * L1. On each line, reset the embedding level of the following characters
   * to the paragraph embedding level:
   *   (1) segment separators,
   *   (2) paragraph separators,
-  *   (3) any sequence of whitespace characters preceding a 
-  *       segment separator or paragraph separator,
-  *   (4) and any sequence of white space characters at the end of the line.
+  *   (3) any sequence of whitespace characters or isolate markers
+  *       preceding a segment separator or paragraph separator,
+  *   (4) and any sequence of whitespace characters or isolate markers
+  *       at the end of the line.
   * The types of characters used here are the original types, not those
   * modified by the previous phase.
+    N/A: Because a paragraph separator breaks lines, there will be at most 
+    one per line, at the end of that line.
   */
   j = count - 1;
   while (j > 0 && (bidi_class_of(j) == WS)) {
@@ -1015,6 +1015,10 @@ do_bidi(bidi_char * line, int count)
     }
   }
 
+#ifdef TEST_BIDI
+  memcpy(bidi_levels, levels, count);
+#endif
+
  /* Rule (L4)
   * L4. A character that possesses the mirrored property as specified by
   * Section 4.7, Mirrored, must be depicted by a mirrored glyph if the
@@ -1023,7 +1027,7 @@ do_bidi(bidi_char * line, int count)
  /* Note: this is implemented before L2 for efficiency */
   for (i = 0; i < count; i++)
     if ((levels[i] % 2) == 1)
-      line[i].wc = mirror(line[i].wc);
+      line[i].wc = mirror(line[i].wc, box_mirror);
 
  /* Rule (L2)
   * L2. From the highest level found in the text to the lowest odd level on
@@ -1040,11 +1044,11 @@ do_bidi(bidi_char * line, int count)
     i++;
   }
  /* maximum level in tempType. */
-  while (tempType > 0) {        /* loop from highest level to the least odd, */
-   /* which i assume is 1 */
-    flipThisRun(line, levels, tempType, count);
+  while (tempType > 0) { /* loop from highest level to the least odd */
+    flip_runs(line, levels, tempType, count);
     tempType--;
   }
+  trace_bidi("[L1] [L4] [L2]");
 
  /* Rule (L3) NOT IMPLEMENTED
   * L3. Combining marks applied to a right-to-left base character will at
@@ -1056,5 +1060,5 @@ do_bidi(bidi_char * line, int count)
   // This is not relevant for mintty as the combining characters are kept 
   // hidden from this algorithm and are maintained transparently to it.
 
-  return R;
+  return resLevel;
 }

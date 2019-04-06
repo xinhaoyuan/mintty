@@ -1,90 +1,90 @@
-# Japanese translations for mintty package
+# Traditional Chinese translations for mintty package
 # Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
 # This file is distributed under the same license as the mintty package.
-# Ken Takata <kentkt@csc.jp>, 2017.
+# lcy0321 <u900011@gmail.com>, 2018.
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: mintty\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2019-03-14 23:34+0100\n"
-"PO-Revision-Date: 2017-02-27 18:11+0900\n"
-"Last-Translator: Ken Takata <kentkt@csc.jp>\n"
+"PO-Revision-Date: 2018-11-12 19:40+0800\n"
+"Last-Translator: lcy0321 <u900011@gmail.com>\n"
 "Language-Team: \n"
-"Language: ja\n"
+"Language: zh_TW\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
 #: charset.c:231 charset.c:242 winmain.c:3754 winmain.c:3865 winmain.c:3872
 msgid "(Default)"
-msgstr "(既定)"
+msgstr "（預設）"
 
 #: charset.c:253
 msgid "(OEM codepage)"
-msgstr "(OEMコードページ)"
+msgstr "（OEM codepage）"
 
 #: charset.c:257
 msgid "(ANSI codepage)"
-msgstr "(ANSIコードページ)"
+msgstr "（ANSI codepage）"
 
 #: child.c:82
 msgid "There are no available terminals"
-msgstr "使用可能な端末がありません"
+msgstr "沒有可用的終端機"
 
 #: child.c:157
 msgid "Error: Could not open log file"
-msgstr "エラー: ログファイルを開けません"
+msgstr "錯誤：無法開啟紀錄檔案"
 
 #: child.c:229
 msgid "Error: Could not fork child process"
-msgstr "エラー: 子プロセスをforkできません"
+msgstr "錯誤：無法建立子程序"
 
 #: child.c:231
 msgid "DLL rebasing may be required; see 'rebaseall / rebase --help'"
-msgstr "DLLのリベースが必要です; 'rebaseall / rebase --help' を参照"
+msgstr "可能需要進行 DLL 重定位；見「rebaseall / rebase --help」"
 
 #. __ %1$s: client command (e.g. shell) to be run; %2$s: error message
 #: child.c:309
 msgid "Failed to run '%s': %s"
-msgstr "実行に失敗 '%s': %s"
+msgstr "無法執行「%s」：%s"
 
 #. __ %1$s: client command (e.g. shell) terminated, %2$i: exit code
 #: child.c:426
 msgid "%s: Exit %i"
-msgstr "%s: 終了コード %i"
+msgstr "%s：Exit %i"
 
 #. __ default inline notification if ExitWrite=yes
 #: child.c:433
 msgid "TERMINATED"
-msgstr "終了しました"
+msgstr "已終止"
 
 #: child.c:984
 msgid "Error: Could not fork child daemon"
-msgstr "エラー: 子デーモンをforkできません"
+msgstr "錯誤：無法建立子背景程序"
 
 #. __ %s: unknown option name
 #: config.c:601
 msgid "Ignoring unknown option '%s'"
-msgstr "不明なオプション '%s' を無視します"
+msgstr "忽略未知選項「%s」"
 
 #: config.c:646 config.c:675
 msgid "Internal error: too many options"
-msgstr "内部エラー: オプションが多すぎます"
+msgstr "內部錯誤：選項過多"
 
 #: config.c:662
 msgid "Internal error: too many options/comments"
-msgstr "内部エラー: オプション/コメントが多すぎます"
+msgstr "內部錯誤：選項／註解過多"
 
 #. __ %2$s: option name, %1$s: invalid value
 #: config.c:808
 msgid "Ignoring invalid value '%s' for option '%s'"
-msgstr "オプション '%2$s' 用の不正な値 '%1$s' を無視します"
+msgstr "忽略無效值「%s」（「%s」選項）"
 
 #. __ %s: option name
 #: config.c:820
 msgid "Ignoring option '%s' with missing value"
-msgstr "値のないオプション '%s' を無視します"
+msgstr "忽略「%s」選項（遺漏值）"
 
 #. __ %1$s: config file name, %2$s: error message
 #: config.c:1441
@@ -92,107 +92,107 @@ msgid ""
 "Could not save options to '%s':\n"
 "%s."
 msgstr ""
-"オプションを '%s' に保存できません:\n"
+"無法儲存選項至「%s」：\n"
 "%s。"
 
 #: config.c:1760
 msgid "◇ None (printing disabled) ◇"
-msgstr "◇ なし (印刷できません) ◇"
+msgstr "◇ 無（停用列印） ◇"
 
 #: config.c:1762
 msgid "◆ Default printer ◆"
-msgstr "◆ 既定のプリンター ◆"
+msgstr "◆ 預設印表機 ◆"
 
 #. __ UI language
 #: config.c:1871
 msgid "– None –"
-msgstr "– なし –"
+msgstr "– 無 –"
 
 #: config.c:1872
 msgid "@ Windows language @"
-msgstr "@ Windowsの言語 @"
+msgstr "@ Windows 語言 @"
 
 #: config.c:1873
 msgid "* Locale environm. *"
-msgstr "* ロケール環境変数 *"
+msgstr "* Locale 環境變數 *"
 
 #: config.c:1874
 msgid "= cfg. Text Locale ="
-msgstr "= テキストロケール設定 ="
+msgstr "= 已設定的語言 ="
 
 #: config.c:1937
 msgid "simple beep"
-msgstr "単純なビープ"
+msgstr "簡單的嗶聲"
 
 #: config.c:1938
 msgid "no beep"
-msgstr "ビープなし"
+msgstr "無嗶聲"
 
 #: config.c:1939
 msgid "Default Beep"
-msgstr "既定のビープ"
+msgstr "預設嗶聲"
 
 #: config.c:1940
 msgid "Critical Stop"
-msgstr "致命的停止"
+msgstr "緊急停止"
 
 #: config.c:1941
 msgid "Question"
-msgstr "クエスチョン"
+msgstr "問題"
 
 #: config.c:1942
 msgid "Exclamation"
-msgstr "エクスクラメーション"
+msgstr "驚嘆聲"
 
 #: config.c:1943
 msgid "Asterisk"
-msgstr "アスタリスク"
+msgstr "星號"
 
 #: config.c:1986
 msgid "◇ None (system sound) ◇"
-msgstr "◇ なし (システムのサウンド) ◇"
+msgstr "◇ 無（系統音效） ◇"
 
 #. __ terminal theme / colour scheme
 #: config.c:2117
 msgid "◇ None ◇"
-msgstr "◇ なし ◇"
+msgstr "◇ 無 ◇"
 
 #. __ indicator of unsaved downloaded colour scheme
 #: config.c:2120
 msgid "downloaded / give me a name!"
-msgstr "ダウンロード完了 / 名前を指定してください!"
+msgstr "已下載／給我個名字！"
 
 #: config.c:2209
 msgid "Could not load web theme"
-msgstr "webテーマをロードできません"
+msgstr "無法載入網路主題"
 
 #: config.c:2258
 msgid "Cannot write theme file"
-msgstr "テーマファイルを書き込めません"
+msgstr "無法寫入主題檔案"
 
 #: config.c:2263
 msgid "Cannot store theme file"
-msgstr "テーマファイルを保存できません"
+msgstr "無法儲存主題檔案"
 
 #. __ Dialog button - show About text
 #: config.c:2639
 msgid "About..."
-msgstr "About..."
+msgstr "關於..."
 
 #. __ Dialog button - save changes
 #: config.c:2642
 msgid "Save"
-msgstr "保存"
+msgstr "儲存"
 
 #. __ Dialog button - cancel
 #: config.c:2646 winctrls.c:1143 windialog.c:782
 msgid "Cancel"
-msgstr "キャンセル"
+msgstr "取消"
 
 #. __ Dialog button - apply changes
 #: config.c:2650
 msgid "Apply"
-msgstr "適用"
+msgstr "套用"
 
 #. __ Dialog button - take notice
 #: config.c:2654 windialog.c:779
@@ -202,47 +202,47 @@ msgstr "了解"
 #. __ Dialog button - confirm action
 #: config.c:2656 winctrls.c:1142 windialog.c:781
 msgid "OK"
-msgstr "OK"
+msgstr "確認"
 
 #. __ Options - Looks: treeview label
 #: config.c:2663 config.c:2694 config.c:2735
 msgid "Looks"
-msgstr "外観"
+msgstr "外觀"
 
 #. __ Options - Looks: panel title
 #: config.c:2665
 msgid "Looks in Terminal"
-msgstr "端末の外観"
+msgstr "終端機外觀"
 
 #. __ Options - Looks: section title
 #: config.c:2667
 msgid "Colours"
-msgstr "色"
+msgstr "色彩"
 
 #. __ Options - Looks:
 #: config.c:2671
 msgid "&Foreground..."
-msgstr "前景色(&F)..."
+msgstr "前景(&F)"
 
 #. __ Options - Looks:
 #: config.c:2675
 msgid "&Background..."
-msgstr "背景色(&B)..."
+msgstr "背景(&B)"
 
 #. __ Options - Looks:
 #: config.c:2679
 msgid "&Cursor..."
-msgstr "カーソル(&C)..."
+msgstr "色彩(&C)"
 
 #. __ Options - Looks:
 #: config.c:2683
 msgid "&Theme"
-msgstr "テーマ(&T)"
+msgstr "主題(&T)"
 
 #. __ Options - Looks: name of web service
 #: config.c:2688
 msgid "Color Scheme Designer"
-msgstr "カラースキームデザイナー"
+msgstr "色彩樣式設計工具"
 
 #. __ Options - Looks: store colour scheme
 #: config.c:2691 winctrls.c:381
@@ -260,7 +260,7 @@ msgstr "透明度"
 #. __ Options - Window:
 #: config.c:2702 config.c:2912 config.c:3052 config.c:3111
 msgid "&Off"
-msgstr "オフ(&O)"
+msgstr "關(&O)"
 
 #. __ Options - Looks: transparency
 #: config.c:2704
@@ -275,7 +275,7 @@ msgstr "中(&M)"
 #. __ Options - Looks: transparency
 #: config.c:2708
 msgid "&Medium"
-msgstr "中間(&M)"
+msgstr "中(&M)"
 
 #. __ Options - Looks: transparency
 #: config.c:2710
@@ -285,343 +285,343 @@ msgstr "高(&H)"
 #. __ Options - Looks: transparency
 #: config.c:2712
 msgid "Gla&ss"
-msgstr "Glass(&S)"
+msgstr "玻璃(&S)"
 
 #. __ Options - Looks: transparency
 #: config.c:2719 config.c:2730
 msgid "Opa&que when focused"
-msgstr "フォーカス時は不透明(&Q)"
+msgstr "使用中不透明(&Q)"
 
 #. __ Options - Looks: transparency
 #: config.c:2724
 msgid "Blu&r"
-msgstr "ぼかし(&R)"
+msgstr "模糊(&R)"
 
 #. __ Options - Looks: section title
 #: config.c:2737
 msgid "Cursor"
-msgstr "カーソル"
+msgstr "游標"
 
 #. __ Options - Looks: cursor type
 #: config.c:2742
 msgid "Li&ne"
-msgstr "線(&N)"
+msgstr "豎線(&N)"
 
 #. __ Options - Looks: cursor type
 #: config.c:2744
 msgid "Bloc&k"
-msgstr "四角(&K)"
+msgstr "方塊(K)"
 
 #. __ Options - Looks: cursor type
 #: config.c:2746
 msgid "&Underscore"
-msgstr "下線(&U)"
+msgstr "下劃線(&U)"
 
 #. __ Options - Looks: cursor feature
 #: config.c:2751
 msgid "Blinkin&g"
-msgstr "点滅(&G)"
+msgstr "閃爍(&G)"
 
 #. __ Options - Text: treeview label
 #: config.c:2758 config.c:2780 config.c:2798 config.c:2832
 msgid "Text"
-msgstr "テキスト"
+msgstr "文字"
 
 #. __ Options - Text: panel title
 #: config.c:2760
 msgid "Text and Font properties"
-msgstr "テキストとフォントの設定"
+msgstr "文字與字型屬性"
 
 #. __ Options - Text: section title
 #: config.c:2762
 msgid "Font"
-msgstr "フォント"
+msgstr "字型"
 
 #. __ Options - Text:
 #. __ Font chooser:
 #: config.c:2770 winctrls.c:1153
 msgid "Font st&yle:"
-msgstr "フォントスタイル(&Y):"
+msgstr "字型樣式(&Y)"
 
 #. __ Font chooser:
 #: config.c:2775 winctrls.c:1155
 msgid "&Size:"
-msgstr "サイズ(&S):"
+msgstr "大小(&S)："
 
 #. __ Options - Text:
 #: config.c:2784 config.c:2817
 msgid "Sho&w bold as font"
-msgstr "ボールドフォントを使用(&W)"
+msgstr "以字型顯示粗體字(&W)"
 
 #. __ Options - Text:
 #: config.c:2789 config.c:2822
 msgid "Show &bold as colour"
-msgstr "ボールドをカラー表示(&B)"
+msgstr "以顏色顯示粗體字(&B)"
 
 #. __ Options - Text:
 #: config.c:2802
 msgid "Font smoothing"
-msgstr "フォントスムージング"
+msgstr "字體平滑"
 
 #. __ Options - Text:
 #: config.c:2805 config.c:2949 config.c:2982
 msgid "&Default"
-msgstr "既定(&D)"
+msgstr "預設(&D)"
 
 #. __ Options - Text:
 #. __ Options - Window: scrollbar
 #: config.c:2807 config.c:2947 config.c:2980 config.c:3093
 msgid "&None"
-msgstr "なし(&N)"
+msgstr "無(&N)"
 
 #. __ Options - Text:
 #: config.c:2809 config.c:2948 config.c:2981
 msgid "&Partial"
-msgstr "部分的(&P)"
+msgstr "部分(&P)"
 
 #. __ Options - Text:
 #: config.c:2811 config.c:2950 config.c:2983
 msgid "&Full"
-msgstr "完全(&F)"
+msgstr "完整(&F)"
 
 #. __ Options - Text:
 #: config.c:2827
 msgid "&Allow blinking"
-msgstr "点滅を許可(&A)"
+msgstr "允許閃爍(&A)"
 
 #: config.c:2835
 msgid "&Locale"
-msgstr "ロケール(&L)"
+msgstr "語言(&L)"
 
 #: config.c:2838
 msgid "&Character set"
-msgstr "文字セット(&C)"
+msgstr "字元集(C)"
 
 #. __ Options - Keys: treeview label
 #: config.c:2845 config.c:2865 config.c:2899
 msgid "Keys"
-msgstr "キー"
+msgstr "按鍵"
 
 #. __ Options - Keys: panel title
 #: config.c:2847
 msgid "Keyboard features"
-msgstr "キーボード設定"
+msgstr "鍵盤功能"
 
 #. __ Options - Keys:
 #: config.c:2851
 msgid "&Backarrow sends ^H"
-msgstr "BSは^Hを送信(&B)"
+msgstr "後退鍵傳送^H(&B)"
 
 #. __ Options - Keys:
 #: config.c:2856
 msgid "&Delete sends DEL"
-msgstr "DeleteはDELを送信(&D)"
+msgstr "刪除鍵傳送DEL(&D)"
 
 #. __ Options - Keys:
 #: config.c:2861
 msgid "Ctrl+LeftAlt is Alt&Gr"
-msgstr "Ctrl+左AltはAltGr(&G)"
+msgstr "Ctrl+左Alt為AltGr(&G)"
 
 #. __ Options - Keys: section title
 #: config.c:2867
 msgid "Shortcuts"
-msgstr "ショートカット"
+msgstr "快捷鍵"
 
 #. __ Options - Keys:
 #: config.c:2870
 msgid "Cop&y and Paste (Ctrl/Shift+Ins)"
-msgstr "コピー&&ペースト(&Y) (Ctrl/Shift+Ins)"
+msgstr "複製與貼上（Ctrl/Shift+Ins）(&Y)"
 
 #. __ Options - Keys:
 #: config.c:2875
 msgid "&Menu and Full Screen (Alt+Space/Enter)"
-msgstr "メニューと全画面(&M) (Alt+Space/Enter)"
+msgstr "選單與全螢幕（Alt+Space/Enter）(&M)"
 
 #. __ Options - Keys:
 #: config.c:2880
 msgid "&Switch window (Ctrl+[Shift+]Tab)"
-msgstr "ウィンドウの切り替え(&S) (Ctrl+[Shift+]Tab)"
+msgstr "切換視窗（Ctrl+[Shift+]Tab）(&S)"
 
 #. __ Options - Keys:
 #: config.c:2885
 msgid "&Zoom (Ctrl+plus/minus/zero)"
-msgstr "ズーム(&Z) (Ctrl+plus/minus/zero)"
+msgstr "縮放（Ctrl+plus/minus/zero）(&Z)"
 
 #. __ Options - Keys:
 #: config.c:2890
 msgid "&Alt+Fn shortcuts"
-msgstr "Alt+Fnショートカット(&A)"
+msgstr "Alt+Fn 快捷鍵(&A)"
 
 #. __ Options - Keys:
 #: config.c:2895
 msgid "&Ctrl+Shift+letter shortcuts"
-msgstr "Ctrl+Shift+文字 ショートカット(&C)"
+msgstr "Ctrl+Shift+字母 快捷鍵(&C)"
 
 #. __ Options - Keys: section title
 #: config.c:2901
 msgid "Compose key"
-msgstr "組み合わせキー"
+msgstr "組合鍵"
 
 #. __ Options - Keys:
 #. __ Options - Mouse:
 #. __ Options - Window:
 #: config.c:2906 config.c:3044 config.c:3103
 msgid "&Shift"
-msgstr "Shift(&S)"
+msgstr "&Shift"
 
 #. __ Options - Keys:
 #. __ Options - Mouse:
 #. __ Options - Window:
 #: config.c:2908 config.c:3046 config.c:3105
 msgid "&Ctrl"
-msgstr "Ctrl(&C)"
+msgstr "&Ctrl"
 
 #. __ Options - Keys:
 #. __ Options - Mouse:
 #. __ Options - Window:
 #: config.c:2910 config.c:3048 config.c:3107
 msgid "&Alt"
-msgstr "Alt(&A)"
+msgstr "&Alt"
 
 #. __ Options - Mouse: treeview label
 #: config.c:2920 config.c:2994 config.c:3026
 msgid "Mouse"
-msgstr "マウス"
+msgstr "滑鼠"
 
 #. __ Options - Mouse: panel title
 #: config.c:2922
 msgid "Mouse functions"
-msgstr "マウス設定"
+msgstr "滑鼠功能"
 
 #. __ Options - Mouse:
 #: config.c:2927 config.c:2955 config.c:2966
 msgid "Cop&y on select"
-msgstr "選択時にコピー(&Y)"
+msgstr "選擇時複製(&Y)"
 
 #. __ Options - Mouse:
 #: config.c:2932 config.c:2960 config.c:2971
 msgid "Copy as &rich text"
-msgstr "リッチテキストとしてコピー(&R)"
+msgstr "以格式化文字複製(&R)"
 
 #. __ Options - Mouse:
 #: config.c:2938 config.c:2945 config.c:2978
 msgid "Copy as &HTML"
-msgstr "HTMLとしてコピー(&H)"
+msgstr "複製&HTML"
 
 #. __ Options - Mouse:
 #: config.c:2990
 msgid "Clic&ks place command line cursor"
-msgstr "クリックでコマンドラインカーソルを移動(&K)"
+msgstr "點擊定位游標(&K)"
 
 #. __ Options - Mouse: section title
 #: config.c:2996
 msgid "Click actions"
-msgstr "クリック動作"
+msgstr "點擊動作"
 
 #. __ Options - Mouse:
 #: config.c:2999
 msgid "Right mouse button"
-msgstr "右マウスボタン"
+msgstr "滑鼠右鍵"
 
 #. __ Options - Mouse:
 #: config.c:3002 config.c:3016
 msgid "&Paste"
-msgstr "ペースト(&P)"
+msgstr "貼上(&P)"
 
 #. __ Options - Mouse:
 #: config.c:3004 config.c:3018
 msgid "E&xtend"
-msgstr "拡張(&X)"
+msgstr "擴展(&X)"
 
 #. __ Options - Mouse:
 #: config.c:3006
 msgid "&Menu"
-msgstr "メニュー(&M)"
+msgstr "選單(&M)"
 
 #. __ Options - Mouse:
 #: config.c:3008 config.c:3022
 msgid "Ente&r"
-msgstr "Enter(&R)"
+msgstr "Ente&r"
 
 #. __ Options - Mouse:
 #: config.c:3013
 msgid "Middle mouse button"
-msgstr "中マウスボタン"
+msgstr "滑鼠中鍵"
 
 #. __ Options - Mouse:
 #: config.c:3020
 msgid "&Nothing"
-msgstr "なし(&N)"
+msgstr "無(&N)"
 
 #. __ Options - Mouse: section title
 #: config.c:3028
 msgid "Application mouse mode"
-msgstr "アプリケーションマウスモード"
+msgstr "應用程式滑鼠模式"
 
 #. __ Options - Mouse:
 #: config.c:3031
 msgid "Default click target"
-msgstr "既定のクリック先"
+msgstr "預設點擊目標"
 
 #. __ Options - Mouse: application mouse mode click target
 #: config.c:3034
 msgid "&Window"
-msgstr "ウィンドウ(&W)"
+msgstr "視窗(&W)"
 
 #. __ Options - Mouse: application mouse mode click target
 #: config.c:3036
 msgid "&Application"
-msgstr "アプリケーション(&A)"
+msgstr "應用程式(&A)"
 
 #. __ Options - Mouse:
 #: config.c:3041
 msgid "Modifier for overriding default"
-msgstr "既定を上書きするための修飾子"
+msgstr "覆蓋預設設定的修飾鍵"
 
 #. __ Options - Window:
 #: config.c:3050 config.c:3109
 msgid "&Win"
-msgstr "Win(&W)"
+msgstr ""
 
 #. __ Options - Window: treeview label
 #: config.c:3060 config.c:3079 config.c:3120
 msgid "Window"
-msgstr "ウィンドウ"
+msgstr "視窗"
 
 #. __ Options - Window: panel title
 #: config.c:3062
 msgid "Window properties"
-msgstr "ウィンドウ設定"
+msgstr "視窗屬性"
 
 #. __ Options - Window: section title
 #: config.c:3064
 msgid "Default size"
-msgstr "既定のサイズ"
+msgstr "預設大小"
 
 #. __ Options - Window:
 #: config.c:3068
 msgid "Colu&mns"
-msgstr "桁(&M)"
+msgstr "欄(&M)"
 
 #. __ Options - Window:
 #: config.c:3072
 msgid "Ro&ws"
-msgstr "行(&W)"
+msgstr "列(&W)"
 
 #. __ Options - Window:
 #: config.c:3076
 msgid "C&urrent size"
-msgstr "現在のサイズ(&U)"
+msgstr "目前大小(&U)"
 
 #. __ Options - Window:
 #: config.c:3083
 msgid "Scroll&back lines"
-msgstr "スクロール行数(&B)"
+msgstr "螢幕緩衝區行數(&B)"
 
 #. __ Options - Window:
 #: config.c:3088
 msgid "Scrollbar"
-msgstr "スクロールバー"
+msgstr "捲軸"
 
 #. __ Options - Window: scrollbar
 #: config.c:3091
@@ -636,215 +636,215 @@ msgstr "右(&R)"
 #. __ Options - Window:
 #: config.c:3100
 msgid "Modifier for scrolling"
-msgstr "スクロール用修飾子"
+msgstr "滾動的修飾鍵"
 
 #. __ Options - Window:
 #: config.c:3116
 msgid "&PgUp and PgDn scroll without modifier"
-msgstr "修飾子なしでPgUpとPgDnでスクロール(&P)"
+msgstr "PgUp 與 PgDn 滾動不需修飾鍵(&P)"
 
 #. __ Options - Window: section title
 #: config.c:3122
 msgid "UI language"
-msgstr "UI言語"
+msgstr "介面語言"
 
 #. __ Options - Terminal: treeview label
 #: config.c:3132 config.c:3145 config.c:3206 config.c:3220
 msgid "Terminal"
-msgstr "端末"
+msgstr "終端機"
 
 #. __ Options - Terminal: panel title
 #: config.c:3134
 msgid "Terminal features"
-msgstr "端末設定"
+msgstr "終端機功能"
 
 #. __ Options - Terminal:
 #: config.c:3138
 msgid "&Type"
-msgstr "タイプ(&T)"
+msgstr "類型(&T)"
 
 #. __ Options - Terminal:
 #: config.c:3142
 msgid "&Answerback"
-msgstr "応答(&A)"
+msgstr "&Answerback"
 
 #. __ Options - Terminal: section title
 #: config.c:3147
 msgid "Bell"
-msgstr "ベル"
+msgstr "提示音"
 
 #. __ Options - Terminal: bell
 #: config.c:3154
 msgid "► &Play"
-msgstr "► 再生(&P)"
+msgstr "► 播放(&P)"
 
 #. __ Options - Terminal: bell
 #: config.c:3160
 msgid "&Wave"
-msgstr "音声(&S)"
+msgstr "聲音(&W)"
 
 #. __ Options - Terminal: bell
 #: config.c:3182 config.c:3195
 msgid "&Flash"
-msgstr "点滅(&F)"
+msgstr "閃爍(&F)"
 
 #. __ Options - Terminal: bell
 #: config.c:3184 config.c:3199
 msgid "&Highlight in taskbar"
-msgstr "タスクバーで強調表示(&H)"
+msgstr "於工作列醒目提示(&H)"
 
 #. __ Options - Terminal: bell
 #: config.c:3186 config.c:3203
 msgid "&Popup"
-msgstr "ポップアップ(&P)"
+msgstr "彈出視窗(&P)"
 
 #. __ Options - Terminal: section title
 #: config.c:3208
 msgid "Printer"
-msgstr "プリンター"
+msgstr "印表機"
 
 #. __ Options - Terminal:
 #: config.c:3223
 msgid "Prompt about running processes on &close"
-msgstr "クローズ時に動作中のプロセスがあると尋ねる(&C)"
+msgstr "離開時提示執行中的程式(&C)"
 
 #: textprint.c:37 textprint.c:115
 msgid "[Printing...] "
-msgstr "[印刷中...] "
+msgstr "［列印中...］"
 
 #. __ Options - Text: font chooser activation button
 #: winctrls.c:812
 msgid "&Select..."
-msgstr "選択(&S)..."
+msgstr "選擇(&S)..."
 
 #. __ Font chooser: title bar label
 #: winctrls.c:1147
 msgid "Font "
-msgstr "フォント "
+msgstr "字型"
 
 #. __ Font chooser: button
 #: winctrls.c:1149
 msgid "&Apply"
-msgstr "適用(&A)"
+msgstr "套用(&A)"
 
 #. __ Font chooser:
 #: winctrls.c:1151
 msgid "&Font:"
-msgstr "フォント(&F):"
+msgstr "字型(&F)："
 
 #. __ Font chooser:
 #: winctrls.c:1157
 msgid "Sample"
-msgstr "サンプル"
+msgstr "範例"
 
 #. __ Font chooser: text sample ("AaBbYyZz" by default)
 #: winctrls.c:1161 winctrls.c:1399 winctrls.c:1564
 msgid "Ferqœm’4€"
-msgstr "Aaあぁアァ亜宇"
+msgstr "ABC abc 文字"
 
 #. __ Font chooser: this field is only shown with FontMenu=1
 #: winctrls.c:1178
 msgid "Sc&ript:"
-msgstr "文字セット(&R):"
+msgstr "字符集(&R)"
 
 #. __ Font chooser: this field is only shown with FontMenu=1
 #: winctrls.c:1180
 msgid "<A>Show more fonts</A>"
-msgstr "<A>他のフォントを表示</A>"
+msgstr "<A>顯示更多字型</A>"
 
 #. __ Colour chooser: title bar label
 #: winctrls.c:1185
 msgid "Colour "
-msgstr "色"
+msgstr "色彩"
 
 #. __ Colour chooser:
 #: winctrls.c:1198 winctrls.c:1210
 msgid "B&asic colours:"
-msgstr "基本色:"
+msgstr "基本色彩(&A)"
 
 #. __ Colour chooser:
 #: winctrls.c:1217
 msgid "&Custom colours:"
-msgstr "作成した色:"
+msgstr "自訂色彩(&C)"
 
 #. __ Colour chooser:
 #: winctrls.c:1224
 msgid "De&fine Custom Colours >>"
-msgstr "色の作成 >>"
+msgstr "定義自訂色彩(&F) >>"
 
 #. __ Colour chooser:
 #: winctrls.c:1227
 msgid "Colour"
-msgstr "色"
+msgstr "色彩"
 
 #. __ Colour chooser:
 #: winctrls.c:1229
 msgid "|S&olid"
-msgstr "| 純色"
+msgstr "|原色(&O)"
 
 #. __ Colour chooser:
 #: winctrls.c:1231
 msgid "&Hue:"
-msgstr "色合い:"
+msgstr "色調(&H):"
 
 #. __ Colour chooser:
 #: winctrls.c:1234
 msgid "&Sat:"
-msgstr "鮮やかさ:"
+msgstr "濃度(&S):"
 
 #. __ Colour chooser:
 #: winctrls.c:1236
 msgid "&Lum:"
-msgstr "明るさ:"
+msgstr "亮度(&L):"
 
 #. __ Colour chooser:
 #: winctrls.c:1238
 msgid "&Red:"
-msgstr "赤:"
+msgstr "紅(&R):"
 
 #. __ Colour chooser:
 #: winctrls.c:1240
 msgid "&Green:"
-msgstr "緑:"
+msgstr "綠(&G):"
 
 #. __ Colour chooser:
 #: winctrls.c:1242
 msgid "&Blue:"
-msgstr "青:"
+msgstr "藍(&B):"
 
 #. __ Colour chooser:
 #: winctrls.c:1245
 msgid "A&dd to Custom Colours"
-msgstr "色の追加"
+msgstr "新增自訂色彩(&D)"
 
 #. __ Options: dialog title
 #: windialog.c:243 windialog.c:729
 msgid "Options"
-msgstr "オプション"
+msgstr "選項"
 
 #. __ Options: dialog title: "mintty <release> available (for download)"
 #: windialog.c:245
 msgid "available"
-msgstr "が利用可能"
+msgstr "可用"
 
 #. __ Options: dialog width scale factor (80...200)
 #: windialog.c:676
 msgid "100"
-msgstr "121"
+msgstr "115"
 
 #: windialog.c:811 windialog.c:836
 msgid "Error"
-msgstr "エラー"
+msgstr "錯誤"
 
 #. __ Context menu, session switcher ("virtual tabs") menu label
 #: wininput.c:273
 msgid "Session switcher"
-msgstr "セッション切り替え"
+msgstr "Session 切換器"
 
 #. __ Context menu, session launcher ("virtual tabs") menu label
 #: wininput.c:292
 msgid "Session launcher"
-msgstr "セッション立ち上げ"
+msgstr "Session 啟動器"
 
 #: wininput.c:401 wininput.c:407
 msgid "Ctrl+"
@@ -861,7 +861,7 @@ msgstr "Shift+"
 #. __ System menu:
 #: wininput.c:434
 msgid "&Restore"
-msgstr "元のサイズに戻す(&R)"
+msgstr "還原(&R)"
 
 #. __ System menu:
 #: wininput.c:436
@@ -871,7 +871,7 @@ msgstr "移動(&M)"
 #. __ System menu:
 #: wininput.c:438
 msgid "&Size"
-msgstr "サイズ変更(&S)"
+msgstr "大小(&S)"
 
 #. __ System menu:
 #: wininput.c:440
@@ -886,163 +886,163 @@ msgstr "最大化(&X)"
 #. __ System menu:
 #: wininput.c:444
 msgid "&Close"
-msgstr "閉じる(&C)"
+msgstr "關閉(&C)"
 
 #. __ System menu:
 #: wininput.c:449
 msgid "Ne&w"
-msgstr "新規(&W)"
+msgstr "新增(&W)"
 
 #. __ Context menu:
 #: wininput.c:456
 msgid "&Copy"
-msgstr "コピー(&C)"
+msgstr "複製(&C)"
 
 #. __ Context menu:
 #: wininput.c:473
 msgid "&Paste "
-msgstr "ペースト(&P)"
+msgstr "貼上(&P)"
 
 #. __ Context menu:
 #: wininput.c:478
 msgid "Copy → Paste"
-msgstr "コピー → ペースト"
+msgstr "複製 → 貼上"
 
 #. __ Context menu:
 #: wininput.c:483
 msgid "S&earch"
-msgstr "検索(&E)"
+msgstr "搜尋(&E)"
 
 #. __ Context menu:
 #: wininput.c:490
 msgid "&Log to File"
-msgstr "ログをファイルに出力(&L)"
+msgstr "記錄至檔案(&L)"
 
 #. __ Context menu:
 #: wininput.c:496
 msgid "Character &Info"
-msgstr "文字情報(&I)"
+msgstr "字元資訊(&I)"
 
 #. __ Context menu:
 #: wininput.c:502
 msgid "VT220 Keyboard"
-msgstr "VT220キーボード"
+msgstr "VT220 鍵盤"
 
 #. __ Context menu:
 #: wininput.c:507
 msgid "&Reset"
-msgstr "リセット(&R)"
+msgstr "重設(&R)"
 
 #. __ Context menu:
 #: wininput.c:515
 msgid "&Default Size"
-msgstr "既定のサイズ(&D)"
+msgstr "預設大小(&D)"
 
 #. __ Context menu:
 #: wininput.c:525
 msgid "Scroll&bar"
-msgstr "スクロールバー(&B)"
+msgstr "捲軸(&B)"
 
 #. __ Context menu:
 #: wininput.c:531
 msgid "&Full Screen"
-msgstr "全画面(&F)"
+msgstr "全螢幕(&F)"
 
 #. __ Context menu:
 #: wininput.c:537
 msgid "Flip &Screen"
-msgstr "スクリーン切り替え(&S)"
+msgstr "切換螢幕(&S)"
 
 #. __ System menu:
 #: wininput.c:547 wininput.c:697
 msgid "Copy &Title"
-msgstr "タイトルをコピー(&T)"
+msgstr "複製標題(&T)"
 
 #. __ System menu:
 #. __ Context menu:
 #. __ System menu:
 #: wininput.c:549 wininput.c:681 wininput.c:699
 msgid "&Options..."
-msgstr "オプション(&O)..."
+msgstr "選項(&O)..."
 
 #. __ Context menu:
 #: wininput.c:624
 msgid "Ope&n"
-msgstr "開く(&N)"
+msgstr "開啟(&N)"
 
 #. __ Context menu:
 #: wininput.c:629
 msgid "Copy as text"
-msgstr "テキストとしてコピー"
+msgstr "複製text"
 
 #. __ Context menu:
 #: wininput.c:631
 msgid "Copy as RTF"
-msgstr "RTFとしてコピー"
+msgstr "複製RTF"
 
 #. __ Context menu:
 #: wininput.c:633
 msgid "Copy as HTML text"
-msgstr "HTMLテキストとしてコピー"
+msgstr "複製HTML text"
 
 #. __ Context menu:
 #: wininput.c:635
 msgid "Copy as HTML"
-msgstr "HTMLとしてコピー"
+msgstr "複製HTML"
 
 #. __ Context menu:
 #: wininput.c:637
 msgid "Copy as HTML full"
-msgstr "完全なHTMLとしてコピー"
+msgstr "複製HTML完整"
 
 #. __ Context menu:
 #: wininput.c:644
 msgid "Select &All"
-msgstr "すべてを選択(&A)"
+msgstr "全選(&A)"
 
 #. __ Context menu: write terminal window contents as HTML file
 #: wininput.c:649
 msgid "HTML Screen Dump"
-msgstr "HTML画面ダンプ"
+msgstr "將螢幕內容存為 HTML"
 
 #. __ Context menu: clear scrollback buffer (lines scrolled off the window)
 #: wininput.c:657
 msgid "Clear Scrollback"
-msgstr "スクロールバックをクリア"
+msgstr "清除螢幕緩衝區"
 
 #. __ Context menu: generate a TTY BRK condition (tty line interrupt)
 #: wininput.c:667
 msgid "Send Break"
-msgstr "Breakを送信"
+msgstr "傳送 Break"
 
 #. __ Context menu, user commands
 #: wininput.c:758
 msgid "User commands"
-msgstr "ユーザーコマンド"
+msgstr "使用者指令"
 
 #: winmain.c:2061
 msgid "Processes are running in session:"
-msgstr "セッションでプロセスが動作中です:"
+msgstr "有程式正在執行於 Session："
 
 #: winmain.c:2062
 msgid "Close anyway?"
-msgstr "構わず閉じますか？"
+msgstr "仍要關閉？"
 
 #: winmain.c:2180
 msgid "Try '--help' for more information"
-msgstr "さらなる情報には '--help' を試してください"
+msgstr "嘗試「--help」以獲得更多資訊"
 
 #: winmain.c:2188
 msgid "Could not load icon"
-msgstr "アイコンをロードできません"
+msgstr "無法載入圖示"
 
 #: winmain.c:3594
 msgid "Usage:"
-msgstr "使用法:"
+msgstr "使用方式："
 
 #: winmain.c:3595
 msgid "[OPTION]... [ PROGRAM [ARG]... | - ]"
-msgstr "[オプション]... [ プログラム [引数]... | - ]"
+msgstr "[OPTION]... [ PROGRAM [ARG]... | - ]"
 
 #. __ help text (output of -H / --help), after initial line ("synopsis")
 #: winmain.c:3598
@@ -1077,78 +1077,67 @@ msgid ""
 "  -V, --version         Print version information and exit\n"
 "See manual page for further command line options and configuration.\n"
 msgstr ""
-"指定されたプログラムまたはユーザーのシェルを実行する新しい端末セッションを開"
-"始します。\n"
-"プログラムの代わりに - が指定された場合は、シェルをログインシェルとして起動し"
-"ます。\n"
+"開啟一個用於執行指定程式或使用者 shell 的新終端機 session。\n"
+"如果指定的程式為 dash，將該 shell 呼叫為一個 login shell。\n"
 "\n"
-"オプション:\n"
-"  -c, --config FILE     指定された設定ファイルをロードする\n"
-"                        (参考: -C および -o ThemeFile)\n"
-"  -e, --exec ...        残りの引数を実行するコマンドとして扱う\n"
-"  -h, --hold never|start|error|always\n"
-"                        コマンドの終了後もウィンドウを開いたまま保持する\n"
-"  -p, --position X,Y    指定された座標でウィンドウを開く\n"
-"  -p, --position center|left|right|top|bottom  ウィンドウを特別な位置で開く\n"
-"  -p, --position @N     ウィンドウをモニター N 上で開く\n"
-"  -s, --size COLS,ROWS  画面サイズを文字数で設定する (COLSxROWS も可)\n"
-"  -s, --size maxwidth|maxheight  最大画面サイズを指定された大きさに設定する\n"
-"  -t, --title TITLE     ウィンドウタイトルを設定する (既定: 実行されたコマン"
-"ド)\n"
-"                        (参考: -T)\n"
-"  -w, --window normal|min|max|full|hide  初期ウィンドウ状態を設定する\n"
-"  -i, --icon FILE[,IX]  ウィンドウアイコンをファイルからロードする\n"
-"                        (インデックスはオプション)\n"
-"  -l, --log FILE|-      ログをファイルまたは標準出力に出力する\n"
-"      --nobidi|--nortl  bidi(右から左の対応)を無効化する\n"
-"  -o, --option OPT=VAL  設定ファイルのオプションを指定された値に設定/上書きす"
-"る\n"
-"  -B, --Border frame|void  ウィンドウの枠を細く/無しにする\n"
-"  -R, --Report s|o      終了後にウィンドウ位置 (短/長) を報告する\n"
-"      --nopin           このインスタンスをタスクバーにピン止めできないように"
-"する\n"
-"  -D, --daemon          Windowsショートカットキーで新しいインスタンスを開始す"
-"る\n"
-"  -H, --help            ヘルプを表示して終了する\n"
-"  -V, --version         バージョン情報を表示して終了する\n"
-"さらなるコマンドラインオプションと設定についてはマニュアルページを参照してく"
-"ださい。\n"
+"選項：\n"
+"    -c, --config FILE     載入指定的設定檔（參見 -C 或 -o ThemeFile）\n"
+"    -e, --exec ...        將剩餘參數作為命令執行\n"
+"    -h, --hold never|start|error|always  命令執行完後不關閉視窗\n"
+"    -p, --position X,Y    在指定座標開啟視窗\n"
+"    -p, --position center|left|right|top|bottom  在指定位置開啟視窗\n"
+"    -p, --position @N     於螢幕 N 開啟視窗\n"
+"    -s, --size COLS,ROWS  設定螢幕大小（也可用 COLSxROWS）\n"
+"    -s, --size maxwidth|maxheight  指定螢幕最大尺寸\n"
+"    -t, --title TITLE     設定視窗標題（預設：執行的命令）（參見 -T）\n"
+"    -w, --window normal|min|max|full|hide  設定初始的視窗狀態\n"
+"    -i, --icon FILE[,IX]  自檔案載入視窗圖示，可指定 index\n"
+"    -l, --log FILE|-      將記錄輸出至檔案或 stdout\n"
+"        --nobidi|--nortl  停用 bidi（由右至左的支援）\n"
+"    -o, --option OPT=VAL  以指定的選項設定／覆蓋設定檔中的選項\n"
+"    -B, --Border frame|void  使用窄／無邊框\n"
+"    -R, --Report s|o      離開前回報視窗位置（短｜長）\n"
+"        --nopin           令這個執行個體不能被釘選到工作列\n"
+"    -D, --daemon          以 Windows 快捷鍵啟動新的執行個體\n"
+"    -H, --help            顯示說明並離開\n"
+"    -V, --version         輸出版本資訊並離開\n"
+"參閱說明頁面以取得進一步的命令列選項與設定。\n"
 
 #: winmain.c:3754 winmain.c:3865 winmain.c:3872
 msgid "WSL distribution '%s' not found"
-msgstr "WSL ディストリビューション '%s' が見つかりません"
+msgstr "找不到 WSL 發行版 %s"
 
 #: winmain.c:3900
 msgid "Duplicate option '%s'"
-msgstr "オプションが重複しています '%s'"
+msgstr "重複的選項「%s」"
 
 #: winmain.c:3908
 msgid "Unknown option '%s'"
-msgstr "未知のオプションです '%s'"
+msgstr "未知的選項「%s」"
 
 #: winmain.c:3910
 msgid "Option '%s' requires an argument"
-msgstr "オプション '%s' は引数が必要です"
+msgstr "選項「%s」需要一個參數"
 
 #: winmain.c:3937
 msgid "Syntax error in position argument '%s'"
-msgstr "position引数に文法エラーがあります '%s'"
+msgstr "Position 參數「%s」有語法錯誤"
 
 #: winmain.c:3948
 msgid "Syntax error in size argument '%s'"
-msgstr "size引数に文法エラーがあります '%s'"
+msgstr "Size 參數「%s」有語法錯誤"
 
 #: winmain.c:4079
 msgid "Syntax error in geometry argument '%s'"
-msgstr "geometry引数に文法エラーがあります '%s'"
+msgstr "Geometry 參數「%s」有語法錯誤"
 
 #: winmain.c:4154
 msgid "Mintty could not detach from caller, starting anyway"
-msgstr "minttyは呼び出し元からデタッチできません、とにかく起動します"
+msgstr "Mintty 無法自 caller 分離，仍開始啟動"
 
 #: winmain.c:4392
 msgid "Using default title due to invalid characters in program name"
-msgstr "プログラム名に不正な文字があるため既定のタイトルを使用します"
+msgstr "由於程式名稱中有不合法的字元，使用預設標題"
 
 #. __ label of search bar close button; not actually "localization"
 #: winsearch.c:241
@@ -1168,12 +1157,12 @@ msgstr "▶"
 #. __ Options - Text: font properties information: "Leading": total line padding (see option RowSpacing), Bold/Underline modes (font or manual, see options BoldAsFont/UnderlineManual/UnderlineColour)
 #: wintext.c:141
 msgid "Leading: %d, Bold: %s, Underline: %s"
-msgstr "レディング: %d、ボールド: %s、下線: %s"
+msgstr "行距：%d，粗體：%s，底線：%s"
 
 #. __ Options - Text: font properties: value taken from font
 #: wintext.c:143
 msgid "font"
-msgstr "フォント"
+msgstr "字型"
 
 #. __ Options - Text: font properties: value affected by option
 #: wintext.c:145
@@ -1182,23 +1171,23 @@ msgstr "手動"
 
 #: wintext.c:400
 msgid "Font not found, using system substitute"
-msgstr "フォントが見つかりません、システムの代替を利用します"
+msgstr "找不到字型，改用系統字型"
 
 #: wintext.c:407
 msgid "Font has limited support for character ranges"
-msgstr "フォントは文字の範囲について限定的な対応しかありません"
+msgstr "字型僅支援部分字元範圍"
 
 #: wintext.c:512
 msgid "Font installation corrupt, using system substitute"
-msgstr "フォントのインストールが壊れています、システムの代替を利用します"
+msgstr "字型安裝錯誤，改用系統字型"
 
 #: wintext.c:525
 msgid "Font does not support system locale"
-msgstr "フォントはシステムロケールに対応していません"
+msgstr "字型不支援系統語言"
 
 #: appinfo.h:61
 msgid "There is no warranty, to the extent permitted by law."
-msgstr "法で許可されている範囲において、いかなる保証もありません。"
+msgstr "除法律規定外，不承擔任何責任"
 
 #. __ %s: WEBSITE (URL)
 #: appinfo.h:66
@@ -1208,7 +1197,6 @@ msgid ""
 "%s.\n"
 "See also the Wiki there for further hints, thanks and credits."
 msgstr ""
-"バグの報告や改良の要求は、以下のminttyプロジェクトページのissueトラッカーから"
-"お願いします。\n"
+"請回報問題或功能改進至 mintty 專案頁面的問題追蹤系統：\n"
 "%s\n"
-"さらなるヒント、謝辞やクレジットについては、サイトのWikiも参照してください。"
+"可參閱 Wiki 以取得更多提示、致謝與許可。"
