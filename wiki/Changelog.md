@@ -1,8 +1,34 @@
+Terminal features
+  * Support ECMA-48 SPD control sequence, values 0 and 3 (RTL fun feature).
+
+Keyboard handling
+  * Fixed encoding of Win key as Meta modifier.
+  * Support optional Super and Hyper modifiers.
+  * Lock keys do not change the state if they have user-defined assignments.
+
+Window handling
+  * Revised/fixed fullscreen/font zooming behaviour and effect of ZoomFontWithWindow.
+  * Fixed Default Size function in some cases after previous fullscreen zooming.
+
+Configuration
+  * New user-definable key name CapsLock.
+  * New user-definable key name prefix ‘*’ to define for all modifiers.
+  * New user-definable modifier key assignments super and hyper.
+  * New prefixes U/Y (for super/hyper) for user-defined keys.
+  * New option BellInterval to squash BEL sequences.
+
+### 3.0.0 (28 March 2019) ###
+
 Character processing
   * Fixed wide character width and cursor position handling.
 
 Keyboard handling
   * Switchable auto-repeat; DECSET 8 (DECARM), option AutoRepeat, toggle function.
+
+Bidirectional rendering (Unicode Bidi Algorithm)
+  * Bidi bracket pairs: implemented UBA rule N0.
+  * Minor fixes to UBA rules X9, W7, L1.
+  * Fixed shortcut optimization wrongly not triggering UBA on Arabic numbers.
 
 Terminal features
   * Cursor style control (DECSCUSR) can set the blinking interval with an optional second parameter.
