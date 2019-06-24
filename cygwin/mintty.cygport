@@ -42,7 +42,7 @@ src_install() {
   cd ${B}
   dobin bin/mintty.exe
   doman docs/mintty.1
-  dodoc COPYING LICENSE.Oxygen LICENSE.PuTTY
+  dodoc LICENSE*
   dodoc cygwin/README cygwin/setup.hint
   dobin tools/mintheme
 
@@ -50,6 +50,8 @@ src_install() {
   doins lang/*.pot lang/*.po
   insinto /usr/share/mintty/themes
   doins themes/*
+  insinto /usr/share/mintty/sounds
+  doins sounds/*.wav sounds/*.WAV sounds/*.md
   insinto /usr/share/mintty/icon
   doins icon/wsl.ico
 

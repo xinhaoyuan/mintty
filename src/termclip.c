@@ -636,7 +636,7 @@ term_create_html(FILE * hf, int level)
   hprintf(hf, "  <div class=background id='vt100'>\n");
   hprintf(hf, "   <pre>");
 
-  clip_workbuf * buf = get_selection(start, end, rect, true);
+  clip_workbuf * buf = get_selection(start, end, rect, level >= 3);
   int i0 = 0;
   bool odd = true;
   for (uint i = 0; i < buf->len; i++) {
@@ -735,6 +735,8 @@ term_create_html(FILE * hf, int level)
           hprintf(hf, " ul");
       }
       int findex = (ca->attr & FONTFAM_MASK) >> ATTR_FONTFAM_SHIFT;
+      if (findex > 10)
+        findex = 0;
       if (findex) {
         if (enhtml) {
           if (*cfg.fontfams[findex].name || findex == 10) {

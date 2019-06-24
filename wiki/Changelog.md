@@ -1,21 +1,105 @@
 Terminal features
+  * Report DECRQSS DECSCL conformance level as VT500 (7-bit controls).
+  * Rectangular checksum DECRQCRA.
+  * Fixed BS and CR "border" cases.
+  * Fixed DCH/ICH/IRM outside left/right margins.
+  * Inhibiting double width/height lines in left/right margin mode.
+
+  * Auto-wrap modes are no more affected by cursor save/restore.
+  * Fixed left/right margin mode to inhibit double width lines.
+  * Fixed TAB to stop at right margin.
+  * Ensure restored cursor to be within margins in origin mode.
+  * Set/Reset origin mode moves cursor home.
+  * Confining DL, IL, DECDC, DECIC within margins.
+  * Confining LF, IND, VT, NEL, FF within margins.
+  * Fixed DECSED 3 not to clear current position; guard CSI [?] n J/K.
+  * Proper default values for rectangular operations.
+  * Full reset (RIS) moves cursor home.
+  * Soft reset (DECSTR) does not disable left/right margin mode.
+  * Cursor backward (CUB) applies reverse-wraparound.
+
+  * Application scrollbar (experimental).
+  * Control sequence to switch IME status (#888, Tera Term).
+
+Font rendering
+  * Check functions (width, glyph) consult proper attributes and font.
+  * Tweaked check for automatic narrowing to fit in cell width.
+
+Window handling
+  * Reenable left scrollbar.
+  * Application scrollbar (experimental).
+  * Always flash taskbar on bell if iconic, if configured (#887, #607).
+
+Configuration
+  * Option Baud to simulate serial connection speed for a legacy feeling.
+
+### 3.0.1 (28 May 2019) ###
+
+Highlights
+  * New character attributes superscript, subscript, shadowed, overstrike.
+  * DEC VT420 screen control features.
+  * Fully VT100-compatible, including VT52 mode (with graphics).
+  * Up to 6 key modifiers, including Meta (Win key) and configurable Super and Hyper keys.
+  * Bell sounds in package.
+  * Various window and clipboard handling optimisations and extensions.
+  * User-definable function extensions.
+
+Terminal features
+  * New character attributes overstrike and (as inspired by existing terminfo capabilities) shadow, subscript, superscript:
+    * SGR 8:7 overstrikes characters over preserved screen contents (28 clears).
+    * SGR 1:2 for shadowed display (22 clears).
+    * SGR 73 and SGR 74 for superscript and subscript display (75 clears).
+  * VT420 rectangular area copy and fill: DECCRA, DECFRA, DECERA, DECSERA.
+  * VT420 area attributes: DECSACE, DECCARA, DECRARA.
+  * VT420 left and right margins: DECSLRM and private mode 69.
+  * VT420 horizontal scrolling: DECBI, DECFI, DECIC, DECDC.
+  * VT510 DECNCSM.
+  * Primary Device Attributes report VT420 by default; VT525 supported.
+  * Blinking cursor mode (DECSET 12) overlays blinking cursor style (DECSCUSR) so that DECRST 12 does not spoil blinking style (#818, mintty/wsltty#133).
   * Support ECMA-48 SPD control sequence, values 0 and 3 (RTL fun feature).
+  * Support DECSET 1007 (mouse wheel reporting, xterm).
+  * New CSI # p/q XTPUSHSGR and XTPOPSGR aliases (xterm 345).
+  * Fixed DECSET 80 (sixel scrolling mode) which was reverted.
+  * Clear All Tabs sequence (TBC 3) extends after resizing, compatible with xterm.
+  * VT52 mode, thereby becoming fully VT100-compatible, with Atari ST extensions.
+  * HP Memory Lock/Unlock (xterm).
+  * Added DECSNLS to DECRQSS.
+  * Fixed VT and FF in LNM mode.
+  * Fixed format of OSC 5;0;? response.
 
 Keyboard handling
   * Fixed encoding of Win key as Meta modifier.
   * Support optional Super and Hyper modifiers.
   * Lock keys do not change the state if they have user-defined assignments.
+  * User-definable additional function keys.
 
 Window handling
   * Revised/fixed fullscreen/font zooming behaviour and effect of ZoomFontWithWindow.
   * Fixed Default Size function in some cases after previous fullscreen zooming.
+  * Search (Alt+F3) can keep search context distance from top/bottom (#797).
+  * Optional squashing of bell sound series (#865).
+  * No limited font warning if the selected locale is likewise limited (~#871).
+  * Suppress output rendering while window is iconic (~#875).
+
+Clipboard handling
+  * Trim trailing spaces for HTML and HTML text copies (#878).
+  * Select HTML detail level by setting of "Copy as HTML" alone (#878).
+  * Specify "fixed pitch" for RTF format (~#878).
+  * New options CopyAsRTFFont, CopyAsRTFFontHeight (~#878).
 
 Configuration
+  * Mintty packages include a selection of bell sounds (#711).
   * New user-definable key name CapsLock.
   * New user-definable key name prefix ‘*’ to define for all modifiers.
   * New user-definable modifier key assignments super and hyper.
+  * New user-definable function paste-path (mintty/wsltty#161).
+  * New user-definable control char syntax (#873).
   * New prefixes U/Y (for super/hyper) for user-defined keys.
-  * New option BellInterval to squash BEL sequences.
+  * New user-definable numeric action, entering a function key sequence.
+  * New option BellInterval to squash BEL sequences (#865).
+  * New option SearchContext (#797).
+  * Offer terminal types vt420, vt525; also xterm-direct, mintty, mintty-direct if installed (~#866, ~#867).
+  * With --WSL, initialise title to WSL name rather than command line (~mintty/wsltty#167).
 
 ### 3.0.0 (28 March 2019) ###
 

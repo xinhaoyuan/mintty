@@ -1378,6 +1378,7 @@ static struct function_def cmd_defs[] = {
   {"copy-html-format", {IDM_COPY_HFMT}, mflags_copy},
   {"copy-html-full", {IDM_COPY_HTML}, mflags_copy},
   {"paste", {IDM_PASTE}, mflags_paste},
+  {"paste-path", {.fct = win_paste_path}, mflags_paste},
   {"copy-paste", {IDM_COPASTE}, mflags_copy},
   {"select-all", {IDM_SELALL}, 0},
   {"clear-scrollback", {IDM_CLRSCRLBCK}, 0},
@@ -1620,19 +1621,49 @@ pick_key_function(wstring key_commands, char * tag, int n, uint key, mod_keys mo
           win_key_nullify(key);
       }
 
+      uint code;
       if (ret) {
       }
       else if ((*fct == '"' && fct[wcslen(fct) - 1] == '"') ||
           (*fct == '\'' && fct[wcslen(fct) - 1] == '\''))
       {
-        child_sendw(&fct[1], wcslen(fct) - 2);
-        ret = true;
+        int len = wcslen(fct) - 2;
+        if (len > 0) {
+          child_sendw(&fct[1], wcslen(fct) - 2);
+          ret = true;
+        }
+      }
+      else if (*fct == '^' && wcslen(fct) == 2) {
+        char cc[2];
+        cc[1] = ' ';
+        if (fct[1] == '?')
+          cc[1] = '\177';
+        else if (fct[1] == ' ' || (fct[1] >= '@' && fct[1] <= '_')) {
+          cc[1] = fct[1] & 0x1F;
+        }
+        if (cc[1] != ' ') {
+          if (mods & MDK_ALT) {
+            cc[0] = '\e';
+            child_send(cc, 2);
+          }
+          else
+            child_send(&cc[1], 1);
+          ret = true;
+        }
       }
       else if (*fct == '`' && fct[wcslen(fct) - 1] == '`') {
         fct[wcslen(fct) - 1] = 0;
         char * cmd = cs__wcstombs(&fct[1]);
-        term_cmd(cmd);
+        if (*cmd) {
+          term_cmd(cmd);
+          ret = true;
+        }
         free(cmd);
+      }
+      else if (sscanf (paramp, "%u%c", & code, &(char){0}) == 1) {
+        char buf[33];
+        int len = sprintf(buf, mods ? "\e[%i;%u~" : "\e[%i~", code, mods + 1);
+        child_send(buf, len);
         ret = true;
       }
       else if (!*paramp) {
@@ -1942,7 +1973,8 @@ win_key_down(WPARAM wp, LPARAM lp)
         win_bell(&cfg);
     }
     //if (scroll) {
-    //  SendMessage(wnd, WM_VSCROLL, scroll, 0);
+    //  if (!term.app_scrollbar)
+    //    SendMessage(wnd, WM_VSCROLL, scroll, 0);
     //  sel_adjust = true;
     //}
     if (sel_adjust) {
@@ -2197,7 +2229,8 @@ win_key_down(WPARAM wp, LPARAM lp)
             return true;
           otherwise: goto not_scroll;
         }
-        SendMessage(wnd, WM_VSCROLL, scroll, 0);
+        if (!term.app_scrollbar) // prevent recursion
+          SendMessage(wnd, WM_VSCROLL, scroll, 0);
         return true;
         not_scroll:;
       }
@@ -2360,7 +2393,9 @@ win_key_down(WPARAM wp, LPARAM lp)
   }
 
   void cursor_key(char code, char symbol) {
-    if (!app_pad_key(symbol))
+    if (term.vt52_mode)
+      len = sprintf(buf, "\e%c", code);
+    else if (!app_pad_key(symbol))
       mods ? mod_csi(code) : term.app_cursor_keys ? ss3(code) : csi(code);
   }
 
@@ -2652,6 +2687,8 @@ static struct {
         send_syscommand((shift && !ctrl) ? IDM_FULLSCREEN_ZOOM : IDM_FULLSCREEN);
         return true;
       }
+      else if (extended && term.vt52_mode && term.app_keypad)
+        len = sprintf(buf, "\e?M");
       else if (extended && !numlock && term.app_keypad)
         //mod_ss3('M');
         app_pad_code('M' - '@');
@@ -2715,6 +2752,10 @@ static struct {
       if (!vk_special(cfg.key_scrlock))
         return false;
     when VK_F1 ... VK_F24:
+      if (key <= VK_F4 && term.vt52_mode) {
+        len = sprintf(buf, "\e%c", key - VK_F1 + 'P');
+        break;
+      }
       if (term.vt220_keys && ctrl && VK_F3 <= key && key <= VK_F10)
         key += 10, mods &= ~MDK_CTRL;
       if (key <= VK_F4)
@@ -2739,12 +2780,16 @@ static struct {
     when VK_RIGHT:  cursor_key('C', '6');
     when VK_CLEAR:  cursor_key('E', '5');
     when VK_MULTIPLY ... VK_DIVIDE:
-      if (key == VK_ADD && old_alt_state == ALT_ALONE)
+      if (term.vt52_mode && term.app_keypad)
+        len = sprintf(buf, "\e?%c", key - VK_MULTIPLY + 'j');
+      else if (key == VK_ADD && old_alt_state == ALT_ALONE)
         alt_state = ALT_HEX, alt_code = 0;
       else if (mods || (term.app_keypad && !numlock) || !layout())
         app_pad_code(key - VK_MULTIPLY + '*');
     when VK_NUMPAD0 ... VK_NUMPAD9:
-      if ((term.app_cursor_keys || !term.app_keypad) &&
+      if (term.vt52_mode && term.app_keypad)
+        len = sprintf(buf, "\e?%c", key - VK_NUMPAD0 + 'p');
+      else if ((term.app_cursor_keys || !term.app_keypad) &&
           alt_code_numpad_key(key - VK_NUMPAD0));
       else if (layout())
         ;
@@ -2821,6 +2866,21 @@ static struct {
     comp_state = COMP_ACTIVE;
 
   return true;
+}
+
+void
+win_csi_seq(char * pre, char * suf)
+{
+  mod_keys mods = get_mods();
+  inline bool is_key_down(uchar vk) { return GetKeyState(vk) & 0x80; }
+  bool super = super_key && is_key_down(super_key);
+  bool hyper = hyper_key && is_key_down(hyper_key);
+  mods |= super * MDK_SUPER | hyper * MDK_HYPER;
+
+  if (mods)
+    child_printf("\e[%s;%u%s", pre, mods + 1, suf);
+  else
+    child_printf("\e[%s%s", pre, suf);
 }
 
 bool

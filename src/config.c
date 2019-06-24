@@ -105,6 +105,8 @@ const config default_cfg = {
   .copy_on_select = true,
   .copy_as_rtf = true,
   .copy_as_html = 0,
+  .copy_as_rtf_font = W(""),
+  .copy_as_rtf_font_size = 0,
   .clicks_place_cursor = false,
   .middle_click_action = MC_PASTE,
   .right_click_action = RC_MENU,
@@ -123,6 +125,7 @@ const config default_cfg = {
   .pgupdn_scroll = false,
   .lang = W(""),
   .search_bar = "",
+  .search_context = 0,
   // Terminal
   .term = "xterm",
   .answerback = W(""),
@@ -219,7 +222,8 @@ const config default_cfg = {
     [BOLD_CYAN_I]    = RGB(0x40, 0xFF, 0xFF),
     [BOLD_WHITE_I]   = RGB(0xFF, 0xFF, 0xFF)
   },
-  .sixel_clip_char = W(" ")
+  .sixel_clip_char = W(" "),
+  .baud = 0
 };
 
 config cfg, new_cfg, file_cfg;
@@ -340,6 +344,8 @@ options[] = {
   {"CopyOnSelect", OPT_BOOL, offcfg(copy_on_select)},
   {"CopyAsRTF", OPT_BOOL, offcfg(copy_as_rtf)},
   {"CopyAsHTML", OPT_INT, offcfg(copy_as_html)},
+  {"CopyAsRTFFont", OPT_WSTRING, offcfg(copy_as_rtf_font)},
+  {"CopyAsRTFFontHeight", OPT_INT, offcfg(copy_as_rtf_font_size)},
   {"ClicksPlaceCursor", OPT_BOOL, offcfg(clicks_place_cursor)},
   {"MiddleClickAction", OPT_MIDDLECLICK, offcfg(middle_click_action)},
   {"RightClickAction", OPT_RIGHTCLICK, offcfg(right_click_action)},
@@ -359,6 +365,7 @@ options[] = {
   {"PgUpDnScroll", OPT_BOOL, offcfg(pgupdn_scroll)},
   {"Language", OPT_WSTRING, offcfg(lang)},
   {"SearchBar", OPT_STRING, offcfg(search_bar)},
+  {"SearchContext", OPT_INT, offcfg(search_context)},
 
   // Terminal
   {"Term", OPT_STRING, offcfg(term)},
@@ -443,6 +450,7 @@ options[] = {
   {"BoldAsRainbowSparkles", OPT_BOOL, offcfg(bold_as_special)},
   {"SelectionShowSize", OPT_INT, offcfg(selection_show_size)},
   {"HoverTitle", OPT_BOOL, offcfg(hover_title)},
+  {"Baud", OPT_INT, offcfg(baud)},
 
   // ANSI colours
   {"Black", OPT_COLOUR, offcfg(ansi_colours[BLACK_I])},
@@ -1915,15 +1923,34 @@ lang_handler(control *ctrl, int event)
 static void
 term_handler(control *ctrl, int event)
 {
+  bool terminfo_exists(char * ti) {
+    bool terminfo_exists_in(char * dir, char * sub, char * ti) {
+      char * terminfo = asform("%s%s/%x/%s", dir, sub ?: "", *ti, ti);
+      bool exists = !access(terminfo, R_OK);
+      free(terminfo);
+      return exists;
+    }
+    return terminfo_exists_in("/usr/share/terminfo", 0, ti)
+        || terminfo_exists_in(home, "/.terminfo", ti)
+         ;
+  }
   switch (event) {
     when EVENT_REFRESH:
       dlg_listbox_clear(ctrl);
       dlg_listbox_add(ctrl, "xterm");
       dlg_listbox_add(ctrl, "xterm-256color");
+      if (terminfo_exists("xterm-direct"))
+        dlg_listbox_add(ctrl, "xterm-direct");
       dlg_listbox_add(ctrl, "xterm-vt220");
       dlg_listbox_add(ctrl, "vt100");
       dlg_listbox_add(ctrl, "vt220");
       dlg_listbox_add(ctrl, "vt340");
+      dlg_listbox_add(ctrl, "vt420");
+      dlg_listbox_add(ctrl, "vt525");
+      if (terminfo_exists("mintty"))
+        dlg_listbox_add(ctrl, "mintty");
+      if (terminfo_exists("mintty-direct"))
+        dlg_listbox_add(ctrl, "mintty-direct");
       dlg_editbox_set(ctrl, new_cfg.term);
     when EVENT_VALCHANGE or EVENT_SELCHANGE:
       dlg_editbox_get(ctrl, &new_cfg.term);

@@ -263,6 +263,22 @@ caused by, or fixable by, mintty); it is a generic problem of cygwin/msys
 and occurs likewise in all other pty-based terminals (e.g. xterm).
 
 
+## Terminal type detection – check if running inside mintty ##
+
+Some applications, often text editors, want to know which terminal they 
+are running in, in order to make use of terminal-specific features that 
+are not indicated by the terminfo/termcap mechanism.
+
+The most reliable way to determine the terminal type is to use the 
+Secondary Device Attributes report queried from the terminal.
+The script `terminal` in the mintty [utils repository](https://github.com/mintty/utils) 
+provides an implementation.
+
+Using environment variables for this purpose is not reliable and therefore 
+not supported. See [issue #776](https://github.com/mintty/mintty/issues/776) 
+for a discussion.
+
+
 ## Terminal line settings ##
 
 Terminal line settings can be viewed or changed with the **[stty](http://www.opengroup.org/onlinepubs/9699919799/utilities/stty.html)** utility, which is installed as part of Cygwin’s core utilities package. Among other things, it can set the control characters used for generating signals or editing an input line.
@@ -388,7 +404,7 @@ Some applications may reset cursor style, especially cursor blinking,
 after terminating, caused by the 
 [terminfo database](http://invisible-island.net/ncurses/man/terminfo.5.html) 
 including the corresponding reset sequence in the “normal cursor” setting.
-This is avoided with mintty option `SuppressDEC=12`.
+This is avoided with mintty option `SuppressDEC=12`, not needed from mintty 3.0.1.
 
 ### Avoiding escape timeout issues in vim ###
 
@@ -746,6 +762,7 @@ ISO/IEC 8613-6 sub-parameters are supported.
 |:-----------------------|:------------------|:------------------------------|
 | 1                      | 22                | bold                          |
 | 2                      | 22                | dim                           |
+| 1:2                    | 22                | shadowed                      |
 | 3                      | 23                | italic                        |
 | 4 _or_ 4:1             | 24 _or_ 4:0       | solid underline               |
 | 4:2 _or_ 21            | 24 _or_ 4:0       | double underline              |
@@ -756,6 +773,7 @@ ISO/IEC 8613-6 sub-parameters are supported.
 | 6                      | 25                | rapidly blinking              |
 | 7                      | 27                | inverse                       |
 | 8                      | 28                | invisible                     |
+| 8:7                    | 28                | overstrike                    |
 | 9                      | 29                | strikeout                     |
 | 11 (*)                 | 10                | alternative font 1 (*)        |
 | 12                     | 10                | alternative font 2            |
@@ -783,6 +801,8 @@ ISO/IEC 8613-6 sub-parameters are supported.
 | 58:2::R:G:B            | 59                | underline RGB colour          |
 | 58:3:F:C:M:Y           | 59                | underline CMY colour (*)      |
 | 58:4:F:C:M:Y:K         | 59                | underline CMYK colour (*)     |
+| 73                     | 75                | superscript (tentative)       |
+| 74                     | 75                | subscript   (tentative)       |
 | _any_                  | 0 _or empty_      |                               |
 
 Note: Alternative fonts are configured with options Font1 ... Font10.
@@ -806,6 +826,8 @@ CMY(K) colour values are scaled to a maximum of the given parameter F (=100%).
 Note: The emoji style attribute sets the display preference for a number 
 of characters that have emojis but would be displayed with text style 
 by default (e.g. decimal digits).
+
+Note: SGR codes for superscript and subscript display are subject to change.
 
 Note: Text attributes can be disabled with option SuppressSGR (see manual).
 
@@ -857,10 +879,6 @@ Emoji data can be found at the following sources:
   * Use the [extraction script `getemojis`](getemojis) to extract emoji data (call it without parameters for instructions)
   * Deploy the desired subdirectories (e.g. `apple`)
   * Includes apple, emojione, facebook, google, twitter, samsung, windows emojis (and some limited low-resolution sets that we shall ignore)
-* [Emoji data and images](https://github.com/iamcal/emoji-data)
-  * “Clone or download” the repository or download a release archive
-  * Deploy subdirectories `img-*` as appropriate (e.g. img-apple-64 as `apple`)
-  * Includes apple, emojione-2D, facebook, facebook messenger (discontinued), google, twitter emojis
 
 To “Clone” with limited download volume, use the command `git clone --depth 1`.
 To download only the desired subdirectory from `github.com`, use `subversion`, 

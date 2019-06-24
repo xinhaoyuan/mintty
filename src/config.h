@@ -103,7 +103,9 @@ typedef struct {
   // Mouse
   bool copy_on_select;
   bool copy_as_rtf;
-  char copy_as_html;
+  int copy_as_html;
+  wstring copy_as_rtf_font;
+  int copy_as_rtf_font_size;
   bool clicks_place_cursor;
   char middle_click_action;
   char right_click_action;
@@ -121,6 +123,7 @@ typedef struct {
   bool pgupdn_scroll;
   wstring lang;
   string search_bar;
+  int search_context;
   // Terminal
   string term;
   wstring answerback;
@@ -200,6 +203,7 @@ typedef struct {
   bool bold_as_special;
   int selection_show_size;
   bool hover_title;
+  int baud;
   // Legacy
   bool use_system_colours;
   bool old_bold;

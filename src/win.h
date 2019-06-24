@@ -65,12 +65,15 @@ extern void win_zoom_font(int, bool sync_size_with_font);
 extern void win_set_font_size(int, bool sync_size_with_font);
 extern uint win_get_font_size(void);
 
-extern void win_check_glyphs(wchar *wcs, uint num);
+extern void win_check_glyphs(wchar *wcs, uint num, cattrflags attr);
+extern int win_char_width(xchar, cattrflags attr);
+extern wchar win_combine_chars(wchar bc, wchar cc, cattrflags attr);
 
 extern void win_open(wstring path, bool adjust_dir);
 extern void win_copy(const wchar *data, cattr *cattrs, int len);
 extern void win_copy_as(const wchar *data, cattr *cattrs, int len, char what);
 extern void win_paste(void);
+extern void win_paste_path(void);
 
 extern void win_set_timer(void_fn cb, uint ticks);
 
@@ -87,9 +90,6 @@ extern void win_clear_images(void);
 
 extern int get_tick_count(void);
 extern int cursor_blink_ticks(void);
-
-extern int win_char_width(xchar);
-extern wchar win_combine_chars(wchar bc, wchar cc);
 
 extern wchar win_linedraw_char(int i);
 

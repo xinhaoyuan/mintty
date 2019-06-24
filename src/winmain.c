@@ -155,6 +155,15 @@ mtime(void)
 }
 
 
+#define dont_debug_dir
+
+#ifdef debug_dir
+#define trace_dir(d)	show_info(d)
+#else
+#define trace_dir(d)	
+#endif
+
+
 #ifdef debug_resize
 #define SetWindowPos(wnd, after, x, y, cx, cy, flags)	{printf("SWP[%s] %ld %ld\n", __FUNCTION__, (long int)cx, (long int)cy); Set##WindowPos(wnd, after, x, y, cx, cy, flags);}
 static void
@@ -560,6 +569,46 @@ win_sys_style(bool focus)
 #else
 (void)focus;
 #endif
+}
+
+
+/*
+   Application scrollbar.
+ */
+static int scroll_len = 0;
+static int scroll_dif = 0;
+
+void
+win_set_scrollview(int pos, int len, int height)
+{
+  bool prev = term.app_scrollbar;
+  term.app_scrollbar = pos;
+
+  if (term.app_scrollbar != prev)
+    win_update_scrollbar(false);
+
+  if (pos) {
+    if (len)
+      scroll_len = len;
+    else
+      len = scroll_len;
+    if (height >= 0)
+      scroll_dif = term.rows - height;
+    else if (!prev)
+      scroll_dif = 0;
+    SetScrollInfo(
+      wnd, SB_VERT,
+      &(SCROLLINFO){
+        .cbSize = sizeof(SCROLLINFO),
+        .fMask = SIF_ALL | SIF_DISABLENOSCROLL,
+        .nMin = 1,
+        .nMax = len,
+        .nPage = term.rows - scroll_dif,
+        .nPos = pos,
+      },
+      true  // redraw
+    );
+  }
 }
 
 
@@ -1610,7 +1659,7 @@ win_bell(config * conf)
 
   if (cfg.bell_flash_style & FLASH_FRAME)
     flash_border();
-  if (term.bell_taskbar && !term.has_focus)
+  if (term.bell_taskbar && (!term.has_focus || win_is_iconic()))
     flash_taskbar(true);
   if (term.bell_popup)
     win_set_zorder(true);
@@ -1897,10 +1946,14 @@ void
 win_update_scrollbar(bool inner)
 {
   // enforce outer scrollbar if switched on
-  int scrollbar = term.show_scrollbar ? (cfg.scrollbar || !inner) : 0;
+  int scrollbar = term.show_scrollbar ? (cfg.scrollbar ?: !inner) : 0;
   // keep config consistent with enforced scrollbar
   if (scrollbar && !cfg.scrollbar)
     cfg.scrollbar = 1;
+  if (term.app_scrollbar && !scrollbar) {
+    //printf("enforce application scrollbar %d->%d->%d\n", scrollbar, cfg.scrollbar, cfg.scrollbar ?: 1);
+    scrollbar = cfg.scrollbar ?: 1;
+  }
 
   LONG style = GetWindowLong(wnd, GWL_STYLE);
   SetWindowLong(wnd, GWL_STYLE,
@@ -2467,27 +2520,60 @@ static struct {
       update_available_version(wp);
 
     when WM_VSCROLL:
-      switch (LOWORD(wp)) {
-        when SB_BOTTOM:   term_scroll(-1, 0);
-        when SB_TOP:      term_scroll(+1, 0);
-        when SB_LINEDOWN: term_scroll(0, +1);
-        when SB_LINEUP:   term_scroll(0, -1);
-        when SB_PAGEDOWN: term_scroll(0, +max(1, term.rows - 1));
-        when SB_PAGEUP:   term_scroll(0, -max(1, term.rows - 1));
-        when SB_PRIOR:    term_scroll(SB_PRIOR, 0);
-        when SB_NEXT:     term_scroll(SB_NEXT, 0);
-        when SB_THUMBPOSITION or SB_THUMBTRACK: {
-          SCROLLINFO info;
-          info.cbSize = sizeof(SCROLLINFO);
-          info.fMask = SIF_TRACKPOS;
-          GetScrollInfo(wnd, SB_VERT, &info);
-          term_scroll(1, info.nTrackPos);
+      //printf("WM_VSCROLL %d\n", LOWORD(wp));
+      if (!term.app_scrollbar)
+        switch (LOWORD(wp)) {
+          when SB_LINEUP:   term_scroll(0, -1);
+          when SB_LINEDOWN: term_scroll(0, +1);
+          when SB_PAGEUP:   term_scroll(0, -max(1, term.rows - 1));
+          when SB_PAGEDOWN: term_scroll(0, +max(1, term.rows - 1));
+          when SB_THUMBPOSITION or SB_THUMBTRACK: {
+            SCROLLINFO info;
+            info.cbSize = sizeof(SCROLLINFO);
+            info.fMask = SIF_TRACKPOS;
+            GetScrollInfo(wnd, SB_VERT, &info);
+            term_scroll(1, info.nTrackPos);
+          }
+          when SB_TOP:      term_scroll(+1, 0);
+          when SB_BOTTOM:   term_scroll(-1, 0);
+          //when SB_ENDSCROLL: ;
+          // these two may be used by mintty keyboard shortcuts (not by Windows)
+          when SB_PRIOR:    term_scroll(SB_PRIOR, 0);
+          when SB_NEXT:     term_scroll(SB_NEXT, 0);
         }
-      }
+      else
+        switch (LOWORD(wp)) {
+          when SB_LINEUP:
+            //win_key_down(VK_UP, 1);
+            win_csi_seq("65", "#e");
+          when SB_LINEDOWN:
+            //win_key_down(VK_DOWN, 1);
+            win_csi_seq("66", "#e");
+          when SB_PAGEUP:
+            //win_key_down(VK_PRIOR, 1);
+            win_csi_seq("5", "#e");
+          when SB_PAGEDOWN:
+            //win_key_down(VK_NEXT, 1);
+            win_csi_seq("6", "#e");
+          when SB_TOP:
+            child_printf("\e[0#d");
+          when SB_BOTTOM:
+            child_printf("\e[%u#d", scroll_len);
+          when SB_THUMBPOSITION or SB_THUMBTRACK: {
+            SCROLLINFO info;
+            info.cbSize = sizeof(SCROLLINFO);
+            info.fMask = SIF_TRACKPOS;
+            GetScrollInfo(wnd, SB_VERT, &info);
+            child_printf("\e[%u#d", info.nTrackPos);
+          }
+        }
+
+    when WM_MOUSEWHEEL:
+      // check whether in client area (terminal pane) or over scrollbar...
+      win_mouse_wheel(wp, lp);
 
     when WM_MOUSEMOVE: win_mouse_move(false, lp);
     when WM_NCMOUSEMOVE: win_mouse_move(true, lp);
-    when WM_MOUSEWHEEL: win_mouse_wheel(wp, lp);
     when WM_LBUTTONDOWN: win_mouse_click(MBT_LEFT, lp);
     when WM_RBUTTONDOWN: win_mouse_click(MBT_RIGHT, lp);
     when WM_MBUTTONDOWN: win_mouse_click(MBT_MIDDLE, lp);
@@ -2958,6 +3044,19 @@ hook_windows(int id, HOOKPROC hookproc, bool global)
 
 #endif
 
+bool
+win_get_ime(void)
+{
+  return ImmGetOpenStatus(imc);
+}
+
+void
+win_set_ime(bool open)
+{
+  ImmSetOpenStatus(imc, open);
+  win_set_ime_open(open);
+}
+
 
 void
 report_pos(void)
@@ -3371,6 +3470,9 @@ select_WSL(char * wsl)
   // set --rootfs implicitly
   int err = getlxssinfo(false, wslname, &wsl_guid, &wsl_basepath, &wsl_icon);
   if (!err) {
+    // set --title
+    if (title_settable)
+      set_arg_option("Title", strdup(wsl && *wsl ? wsl : "WSL"));
     // set --icon if WSL specific icon exists
     if (wsl_icon) {
       if (!icon_is_from_shortcut && waccess(wsl_icon, R_OK))
@@ -3891,6 +3993,7 @@ main(int argc, char *argv[])
     // (by sanitizing taskbar icon grouping, #784, mintty/wsltty#96) 
     // set proper directory
     chdir(getenv("MINTTY_PWD"));
+    trace_dir(asform("MINTTY_PWD: %s", getenv("MINTTY_PWD")));
     unsetenv("MINTTY_PWD");
   }
 
@@ -3944,8 +4047,10 @@ main(int argc, char *argv[])
       when '~':
         start_home = true;
         chdir(home);
+        trace_dir(asform("~: %s", home));
       when '': {
         int res = chdir(optarg);
+        trace_dir(asform("^D: %s", optarg));
         if (res == 0)
           setenv("PWD", optarg, true);  // avoid softlink resolution
         else {
@@ -3956,6 +4061,7 @@ main(int argc, char *argv[])
               char * dir = strdup(&optarg[1]);
               dir[strlen(dir) - 1] = '\0';
               res = chdir(dir);
+              trace_dir(asform("^D 2: %s", dir));
               if (res == 0)
                 setenv("PWD", optarg, true);  // avoid softlink resolution
               free(dir);

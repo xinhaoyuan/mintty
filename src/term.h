@@ -120,6 +120,11 @@ enum {
   ATTR_BROKENUND  = 0x0000000800000000u,
   ATTR_ULCOLOUR   = 0x0020000000000000u,
 
+  ATTR_SHADOW     = 0x0000100000000000u,
+  ATTR_OVERSTRIKE = 0x0000200000000000u,
+  ATTR_SUBSCR     = 0x0000400000000000u,
+  ATTR_SUPERSCR   = 0x0000800000000000u,
+
   ATTR_PROTECTED  = 0x20000000u,
   ATTR_WIDE       = 0x40000000u,
   ATTR_NARROW     = 0x80000000u,
@@ -128,7 +133,7 @@ enum {
 
   TATTR_EMOJI     = 0x1000000000000000u,
 
-  GRAPH_MASK      = 0x0000FF0000000000u,
+  GRAPH_MASK      = 0x00000F0000000000u,
   ATTR_GRAPH_SHIFT = 40,
 
   FONTFAM_MASK    = 0x000F000000000000u,
@@ -269,6 +274,7 @@ typedef enum {
   CSET_ASCII = 'B',   /* Normal ASCII charset */
   CSET_GBCHR = 'A',   /* UK variant */
   CSET_LINEDRW = '0', /* Line drawing charset */
+  CSET_VT52DRW = '2', /* VT52 "graphics" mode */
   CSET_TECH = '>',    /* DEC Technical */
   CSET_OEM = 'U',     /* OEM Codepage 437 */
   // definitions for DEC Supplemental support:
@@ -373,21 +379,23 @@ enum {
 
 typedef struct {
   short x, y;
+  bool wrapnext;
   cattr attr;
   bool origin;
-  bool autowrap;  // switchable (xterm Wraparound Mode (DECAWM Auto Wrap))
-  bool wrapnext;
-  bool rev_wrap;  // switchable (xterm Reverse-wraparound Mode)
-  ushort bidimode;
   short gl, gr;
   term_cset csets[4];
   term_cset cset_single;
   uchar oem_acs;
   bool utf;
-  bool decnrc_enabled;    /* DECNRCM sequence to enable NRC? */
+  ushort bidimode;
 } term_cursor;
 
 struct term {
+  // these used to be in term_cursor, thus affected by cursor restore
+  bool decnrc_enabled;  /* DECNRCM: enable NRC */
+  bool autowrap;        /* DECAWM: Autowrap mode */
+  bool rev_wrap;        /* xterm: Reverse wraparound mode */
+
   bool on_alt_screen;     /* On alternate screen? */
   bool show_other_screen;
 
@@ -415,6 +423,7 @@ struct term {
   bool rvideo;            /* global reverse video flag */
   bool cursor_on;         /* cursor enabled flag */
   bool deccolm_allowed;   /* DECCOLM sequence for 80/132 cols allowed? */
+  bool deccolm_noclear;   /* DECCOLM does not clear screen */
   bool reset_132;         /* Flag ESC c resets to 80 cols */
   bool cblinker;          /* When blinking is the cursor on ? */
   bool tblinker;          /* When the blinking text is on */
@@ -422,7 +431,10 @@ struct term {
   bool blink_is_real;     /* Actually blink blinking text */
   bool echoing;           /* Does terminal want local echo? */
   bool insert;            /* Insert mode */
-  int marg_top, marg_bot; /* scroll margins */
+  int marg_top, marg_bot; /* scrolling region margins */
+  int marg_left, marg_right; /* horizontal margins */
+  bool lrmargmode;           /* enable horizontal margins */
+  bool attr_rect;            /* rectangular attribute change extent */
   bool printing, only_printing;  /* Are we doing ANSI printing? */
   int  print_state;       /* state of print-end-sequence scan */
   char *printbuf;         /* buffered data for printer */
@@ -443,11 +455,12 @@ struct term {
   unsigned int app_control;
   bool app_cursor_keys;
   bool app_keypad;
-  bool app_wheel;
   bool auto_repeat;
   bool bell_taskbar; // xterm: bellIsUrgent; switchable with CSI ? 1042 h/l
   bool bell_popup;   // xterm: popOnBell;    switchable with CSI ? 1043 h/l
-  bool wheel_reporting;
+  bool wheel_reporting_xterm; // xterm: alternateScroll
+  bool wheel_reporting;       // similar, but default true
+  bool app_wheel;             // format for wheel_reporting
   int  modify_other_keys;
   bool newline_mode;
   bool report_focus;
@@ -455,6 +468,7 @@ struct term {
   bool report_ambig_width;
   bool bracketed_paste;
   bool show_scrollbar;
+  bool app_scrollbar;
   bool wide_indic;
   bool wide_extra;
   bool disable_bidi;
@@ -467,12 +481,15 @@ struct term {
                              // off(default): sixel scrolling moves cursor to left of graphics
   bool private_color_registers;
   int  cursor_type;
+  bool cursor_blinkmode;
   int  cursor_blinks;
   int  cursor_blink_interval;
   bool cursor_invalid;
   bool hide_mouse;
 
   uchar esc_mod;  // Modifier character in escape sequences
+
+  uchar vt52_mode;
 
   uint csi_argc;
   uint csi_argv[32];
@@ -485,6 +502,7 @@ struct term {
   int dcs_cmd;
 
   uchar *tabs;
+  bool newtab;
 
   enum {
     NORMAL, ESCAPE, CSI_ARGS,
@@ -497,7 +515,9 @@ struct term {
     DCS_INTERMEDIATE,
     DCS_PASSTHROUGH,
     DCS_IGNORE,
-    DCS_ESCAPE
+    DCS_ESCAPE,
+    VT52_Y, VT52_X,
+    VT52_FG, VT52_BG
   } state;
 
   // Mouse mode
@@ -570,6 +590,8 @@ struct term {
 
 extern struct term term;
 
+extern void scroll_rect(int topline, int botline, int lines);
+
 extern void term_resize(int, int);
 extern void term_scroll(int, int);
 extern void term_reset(bool full);
@@ -595,7 +617,6 @@ extern void term_write(const char *, uint len);
 extern void term_flush(void);
 extern void term_set_focus(bool has_focus, bool may_report);
 extern int  term_cursor_type(void);
-extern bool term_cursor_blinks(void);
 extern void term_hide_cursor(void);
 
 extern void term_set_search(wchar * needle);

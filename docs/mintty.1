@@ -376,7 +376,7 @@ switchable bidi behaviour per line and partially per paragraph (i.e. within
 an auto-wrapped line), as listed in 
 \fIhttps://github.com/mintty/mintty/wiki/CtrlSeqs#bidirectional-rendering\fP.
 They follow the current status of the bidi mode model of the 
-«BiDi in Terminal Emulators» recommendation 
+\fBBiDi in Terminal Emulators\fP recommendation 
 (\fIhttps://terminal-wg.pages.freedesktop.org/bidi/\fP).
 
 .SS Menus
@@ -1385,6 +1385,10 @@ support it, e.g. word processors.
 \fINote:\fP Copy as rich text is also available as an explicit item in 
 the extended context menu.
 
+The font used in RTF may be changed by the settings \fBCopyAsRTFFont\fP and 
+\fBCopyAsRTFFontHeight\fP, to accommodate the case that the configured mintty 
+font is not available when reading the contents (e.g. after sending it by mail).
+
 .TP
 \fBCopy as HTML\fP (CopyAsHTML=0)
 With this option, mintty also copies text in HTML format, using flexible 
@@ -1515,6 +1519,10 @@ is output, so ligatures are also supported while being input.
 With LigaturesSupport=2, mintty also redisplays the previous cursor line 
 after the cursor is moved.
 
+This option is not capable of disabling ligatures, however, as they are 
+applied by Windows font handling. Setting \fIFontRender=textout\fP 
+disables Uniscribe, including ligatures support.
+
 .TP
 \fB\fP(ColSpacing=0)
 Additional column padding; ColSpacing=1 can avoid boldened glyphs being clipped.
@@ -1602,22 +1610,32 @@ Terminal emulation settings.
 The terminal type.  This determines the setting of the TERM environment variable
 at mintty startup.
 Choices available from the dropdown list are \fBxterm\fP, \fBxterm-256color\fP,
-\fBxterm-vt220\fP, \fBvt100\fP, \fBvt220\fP, \fBvt340\fP.
-The option \fBvt340\fP facilitates a terminal ID indication corresponding 
-to the Sixel graphics feature (but there is no mutual dependence between 
-this setting and that feature).
+\fBxterm-vt220\fP, \fBvt100\fP, \fBvt220\fP, \fBvt340\fP, \fBvt420\fP, \fBvt525\fP,
+\fBxterm-direct\fP, \fBmintty\fP, \fBmintty-direct\fP.
+
+The last three options are only offered if the respective terminfo entries 
+are installed in the system. The *\fB-direct\fP entries provide 
+terminfo capabilities to set true-colour (24 bit colour) attributes.
+Note, however, that this only affects usage of the \fIterminfo\fP API 
+to drive the terminal; the respective control sequences are always available.
 
 If the setting contains "vt220" or higher, xterm VT220-style function 
 key mode is enabled instead of the default PC-style function key mode.
 (This can otherwise be set with the DECSET 1061 control sequence.)
 
 Apart from that, this setting has no effect on mintty's terminal emulation,
-i.e. all the features are always available. However, the TERM setting does tell
-applications what features they can use.
+i.e. all the features are always available. However, the TERM setting 
+may be used by applications to choose what features they can use, 
+alternatively to the preferrable device attributes queries
+(see \fIhttps://github.com/mintty/mintty/wiki/Tips\fP for hints).
 
 The \fBxterm-256color\fP setting enables 256-color mode in some applications,
 but may not be recognised at all by others, which is why plain \fBxterm\fP
 is the default.
+
+The \fBvt340\fP setting facilitates a terminal ID indication corresponding 
+to the Sixel graphics feature. However, particularly the \fIgnuplot\fP 
+tool uses a dedicated variable (\fBGNUTERM\fP) to trigger its usage.
 
 (Corresponds roughly to the combined xterm resources 
 \fBdecTerminalID\fP, \fBtermName\fP, \fBkeyboardType\fP.)
@@ -1911,6 +1929,12 @@ is visually scrolled off right away, so effectively increasing output speed.
 The maximum value is 9.
 
 .TP
+\fBDecelerate display speed to virtual serial transmission rate\fP (Baud=0)
+This setting can demonstrate a legacy feeling of a serial terminal connection.
+Typical baud rates (as supported by DEC VT420) were 
+300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 56700, 76800, 115200.
+
+.TP
 \fBClear selection highlighting on input\fP (ClearSelectionOnInput=true)
 When this is disabled, keyboard input or pasting does not clear selection highlighting.
 
@@ -2146,7 +2170,7 @@ of character tags:
 (Corresponds to the xterm resource \fBdisallowedPasteControls\fP.)
 
 .TP
-\fBSpecial key remapping\fP
+\fBSpecial key remapping\fP [DEPRECATED, see \fBKeyFunctions\fP]
 These options can attach a specific string to some special keys.
 If the string is a number, a corresponding Escape sequence will be generated, 
 applying Shift/Ctrl/Alt modifiers, following the pattern of function keys.
@@ -2253,13 +2277,17 @@ in order to prevent that input of Ctrl+_ would be inhibited.
 
 Supported actions are described as follows:
 .br
-\(en \fB"string"\fP or \fB\(aqstring\(aq\fP: enters the literal string
+\(en \fB"\fP\fIstring\fP\fB"\fP or \fB\(aq\fP\fIstring\fP\fB\(aq\fP: enters the literal string
 .br
-\(en \fB\`command\` (**)\fP: enters the output of the command
+\(en \fB^\fP\fIchar\fP: enters a control char ('@'...'_' or '?' for DEL)
 .br
-\(en \fBfullscreen (*)\fP: switches to fullscreen mode
+\(en \fB\`\fP\fIcommand\fP\fB\`\fP (**): enters the output of the command
 .br
-\(en \fBtoggle-fullscreen (*)\fP: toggles fullscreen mode
+\(en \fInumber\fP (***): enters the escape sequence CSI\fInumber\fP[;\fImod\fP]~
+.br
+\(en \fBfullscreen\fP (*): switches to fullscreen mode
+.br
+\(en \fBtoggle-fullscreen\fP (*): toggles fullscreen mode
 .br
 \(en \fBwin-max\fP: resizes to window size
 .br
@@ -2277,13 +2305,13 @@ Supported actions are described as follows:
 .br
 \(en \fBoptions\fP: opens the Options dialog
 .br
-\(en \fBmenu-text (*)\fP: opens the context menu at the cursor position
+\(en \fBmenu-text\fP (*): opens the context menu at the cursor position
 .br
-\(en \fBmenu-pointer (*)\fP: opens the context menu at the mouse position
+\(en \fBmenu-pointer\fP (*): opens the context menu at the mouse position
 .br
 \(en \fBsearch\fP: opens the search bar
 .br
-\(en \fBdefault-size (*)\fP: switches to default terminal size
+\(en \fBdefault-size\fP (*): switches to default terminal size
 .br
 \(en \fBscrollbar-outer\fP: toggles the scrollbar (xterm compatible)
 .br
@@ -2306,6 +2334,8 @@ Supported actions are described as follows:
 \(en \fBcopy-html-full\fP: copies HTML (close to screen layout)
 .br
 \(en \fBpaste\fP: pastes from the clipboard
+.br
+\(en \fBpaste-path\fP: pastes and tries to convert path syntax
 .br
 \(en \fBcopy-paste\fP: copies and pastes
 .br
@@ -2333,7 +2363,7 @@ Supported actions are described as follows:
 .br
 \(en \fBtoggle-char-info\fP: toggles character info display
 .br
-\(en \fBexport-html (*)\fP: exports the screen as an HTML file
+\(en \fBexport-html\fP (*): exports the screen as an HTML file
 .br
 \(en \fBprint-screen\fP: print screen contents
 .br
@@ -2353,6 +2383,9 @@ additional functionality is provided as for context menu user commands
 (option \fBUserCommands\fP): environment variables and PATH substitution;
 the PATH environment for the external command can be set up 
 with option \fBUserCommandsPath\fP.
+
+\fINote (***):\fP An unquoted \fInumber\fP causes mintty to form a 
+function key sequence, applying all modifiers.
 
 \fINote:\fP To just disable the built-in shortcut (and not override it 
 with a user-defined one), but further process the key as normal input, 
@@ -2384,6 +2417,9 @@ in the latter case
 .br
 \(en \fBKeyFunctions=*CapsLock:super\fP assigns the Super modifier to 
 the CapsLock key
+.br
+\(en \fBKeyFunctions=*Menu:29\fP turns the Menu key into an F16 function key 
+(xterm default) and applies all modifiers to it
 
 .TP
 \fBUse system colours\fP (UseSystemColours=no)
@@ -2503,6 +2539,13 @@ This string option can customize the order of items in the search bar.
 Use x (close button), </> (previous/next buttons), s (search string) to 
 select the order of these fields in the search bar; missing fields will 
 be appended in a default order.
+
+.TP
+\fBScrollback search context\fP (SearchContext=0)
+This option will place the search result at the given distance from 
+the terminal top/bottom border when scrolling to the result location.
+If the value is negative, it will also keep the result at the (positive) 
+distance if the result is already visible.
 
 .TP
 \fBWrite if exited\fP (ExitWrite=no)
@@ -2856,20 +2899,34 @@ for further hints, especially on the \fIwinpty\fP wrapper.
 .SS Termcap/terminfo
 
 Mintty does not have its own \fItermcap\fP or \fIterminfo\fP entries;
-instead, it simply pretends to be an xterm.
+like a number of other terminal emulators, it reuses the xterm entry.
 
-.SS Missing xterm features
+.SS Screen control features, DEC and xterm compatibility
 
-Mintty is nowhere near as configurable as xterm.  Of xterm's keyboard modes, 
-only the default PC-style and VT220-style are available.
+Mintty is compatible with xterm screen control.
+It supports DEC terminal screen features up to the VT500 series 
+except DECRLM (right-to-left cursor motion), 
+also supporting VT52 mode, thus being fully VT100-compatible.
+It also includes most other xterm-specific control sequences and modes.
+
+In addition, mintty supports a maximum of ANSI and ECMA-48 character attribute controls 
+(including RGB and CMYK true-colour support, italic, overline, 
+strikeout, rapid blinking, alternative fonts) and additional 
+rendering attributes (underline styles and colours, superscript and subscript, 
+shadowed and overstrike).
+Mintty provides Sixel graphics support, Emoji support, and 
+Bidi reordering according to the Unicode Bidi Algorithm UBA, amended 
+with flexible bidi controls according to the draft bidi mode model of 
+the \fBBiDi in Terminal Emulators\fP recommendation 
+(\fIhttps://terminal-wg.pages.freedesktop.org/bidi/\fP).
+
+Mintty is not as configurable as xterm; it offers essential configuration 
+features, many of which are "hidden settings", i.e. they do not appear in 
+the interactive "Options" configuration dialog.
+Of xterm's keyboard modes, only the default PC-style and VT220-style are available.
 8-bit control characters are not supported.
 There is no Tektronix 4014 emulation.
 Mouse highlighting mode is not implemented.
-
-The majority of xterm's many control sequences is implemented, 
-up to the VT300 series level; 
-VT400 rectangular area operations are not implemented.
-Significant omissions should be reported to the issue tracker.
 
 .SH SEE ALSO
 
@@ -2878,7 +2935,7 @@ Additional information can be found on the wiki on the mintty project page
 
 .SH LICENSE
 
-Copyright (C) 2013 Andy Koppe (C) 2018 Thomas Wolff
+Copyright (C) 2013 Andy Koppe (C) 2019 Thomas Wolff
 
 Mintty is released under the terms of the the \fIGNU General Public License\fP
 version 3.

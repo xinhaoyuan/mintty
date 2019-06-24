@@ -25,8 +25,9 @@ enum {
   FONT_STRIKEOUT = 0x08,
   FONT_HIGH      = 0x10,
   FONT_ZOOMFULL  = 0x20,
-  FONT_WIDE      = 0x40,
-  FONT_NARROW    = 0x80,
+  FONT_ZOOMSMALL = 0x40,
+  FONT_WIDE      = 0x80,
+  FONT_NARROW    = 0x100,
   FONT_MAXNO     = FONT_WIDE + FONT_NARROW
 };
 
@@ -129,6 +130,8 @@ wchar
 win_linedraw_char(int i)
 {
   int findex = (term.curs.attr.attr & FONTFAM_MASK) >> ATTR_FONTFAM_SHIFT;
+  if (findex > 10)
+    findex = 0;
   struct fontfam * ff = &fontfamilies[findex];
   return ff->win_linedraw_chars[i];
 }
@@ -239,6 +242,8 @@ get_font_quality(void)
 #define dont_debug_create_font
 
 #define dont_debug_fonts 1
+
+#define dont_debug_win_char_width
 
 #if defined(debug_fonts) && debug_fonts > 0
 #define trace_font(params)	printf params
@@ -404,7 +409,12 @@ adjust_font_weights(struct fontfam * ff)
     return;
   }
   if (!data.ansi_found && !data.cs_found) {
-    show_font_warning(ff, _("Font has limited support for character ranges"));
+    string l;
+    if (!strcmp(cfg.charset, "CP437") || ((l = getlocenvcat("LC_CTYPE")) && strstr(l, "CP437"))) {
+      // accept limited range
+    }
+    else
+      show_font_warning(ff, _("Font has limited support for character ranges"));
   }
 
   // find available widths closest to selected widths
@@ -577,9 +587,9 @@ win_init_fontfamily(HDC dc, int findex)
       line_char_width  >= latin_char_width * 1.5;
 
 #ifdef debug_win_char_width
-  int w_latin = win_char_width(0x0041);
-  int w_greek = win_char_width(0x03B1);
-  int w_lines = win_char_width(0x2500);
+  int w_latin = win_char_width(0x0041, 0);
+  int w_greek = win_char_width(0x03B1, 0);
+  int w_lines = win_char_width(0x2500, 0);
   printf("%04X %5.2f %d\n", 0x0041, latin_char_width, w_latin);
   printf("%04X %5.2f %d\n", 0x03B1, greek_char_width, w_greek);
   printf("%04X %5.2f %d\n", 0x2500, line_char_width, w_lines);
@@ -1120,8 +1130,9 @@ do_update(void)
   update_skipped++;
   int output_speed = lines_scrolled / (term.rows ?: cfg.rows);
   lines_scrolled = 0;
-  if (update_skipped < cfg.display_speedup && cfg.display_speedup < 10
-      && output_speed > update_skipped
+  if ((update_skipped < cfg.display_speedup && cfg.display_speedup < 10
+       && output_speed > update_skipped
+      ) || win_is_iconic()
      )
   {
     win_set_timer(do_update, update_timer);
@@ -1144,7 +1155,7 @@ do_update(void)
   ReleaseDC(wnd, dc);
 
   // Update scrollbar
-  if (cfg.scrollbar && term.show_scrollbar) {
+  if (cfg.scrollbar && term.show_scrollbar && !term.app_scrollbar) {
     int lines = sblines();
     SCROLLINFO si = {
       .cbSize = sizeof si,
@@ -1322,6 +1333,10 @@ another_font(struct fontfam * ff, int fontno)
   if (fontno & FONT_ZOOMFULL) {
     y = cell_height * (1 + !!(fontno & FONT_HIGH));
     x = cell_width * (1 + !!(fontno & FONT_WIDE));
+  }
+  if (fontno & FONT_ZOOMSMALL) {
+    y = y * 12 / 20;
+    x = x * 12 / 20;
   }
 
 #ifdef debug_create_font
@@ -2102,7 +2117,7 @@ _trace_line(char * tag, cattr attr, ushort lattr, wchar * text, int len)
 #endif
 
 static wchar
-combsubst(wchar comb)
+combsubst(wchar comb, cattrflags attr)
 {
   static const struct {
     wchar comb;
@@ -2155,7 +2170,7 @@ combsubst(wchar comb)
         return comb;
 
       wchar chk = comb;
-      win_check_glyphs(&chk, 1);
+      win_check_glyphs(&chk, 1, attr);
       if (chk)
         return lookup[k].subst;
       else
@@ -2532,8 +2547,41 @@ win_text(int tx, int ty, wchar *text, int len, cattr attr, cattr *textattr, usho
 {
   //if (kb_trace) {printf("[%ld] <win_text\n", mtime()); kb_trace = 0;}
   bool even_line = ty % 2;
-  int graph = (attr.attr >> ATTR_GRAPH_SHIFT) & 0xFF;
+  int graph = (attr.attr & GRAPH_MASK) >> ATTR_GRAPH_SHIFT;
+  bool graph_vt52 = false;
   int findex = (attr.attr & FONTFAM_MASK) >> ATTR_FONTFAM_SHIFT;
+  // in order to save attributes bits, special graphic handling is encoded 
+  // in a compact form, combined with unused values of the font number;
+  // here we do some decoding and also recoding back to the previous format, 
+  // in order to avoid micro-refactoring in the code below, 
+  // where graphic encoding is interpreted bitwise in some cases;
+  // the font ranges used are:
+  //  <none> (graph part only): special for DEC Technical, VT52 fraction
+  //  11     VT100 Line Drawing, bit-wise encoded segments
+  //  12     VT100 scanlines 1...5
+  //  13     VT52 scanlines 1...8
+  //  14     Unicode Block Elements, part 1
+  //  15     Unicode Block Elements, part 2
+  if (findex > 10) {
+    if (findex == 12) // VT100 scanlines
+      graph <<= 4;
+    else if (findex == 13) { // VT52 scanlines
+      graph <<= 4;
+      graph_vt52 = true;
+    }
+    else if (findex >= 14)
+      graph |= 0x80 | ((findex & 1) << 4);
+
+    findex = 0;
+  }
+  else if (graph) {
+    if (graph == 0xF)
+      graph = 0xF7;
+    else if (graph == 0xE)
+      graph = 0xE0;
+    else
+      graph |= 0xE0;
+  }
   struct fontfam * ff = &fontfamilies[findex];
 
   trace_line("win_text:");
@@ -2664,6 +2712,8 @@ win_text(int tx, int ty, wchar *text, int len, cattr attr, cattr *textattr, usho
     nfont |= FONT_STRIKEOUT;
   if (attr.attr & TATTR_ZOOMFULL)
     nfont |= FONT_ZOOMFULL;
+  if (attr.attr & (ATTR_SUBSCR | ATTR_SUPERSCR))
+    nfont |= FONT_ZOOMSMALL;
   another_font(ff, nfont);
 
   bool force_manual_underline = false;
@@ -2740,7 +2790,7 @@ win_text(int tx, int ty, wchar *text, int len, cattr attr, cattr *textattr, usho
   if (combining) {
    /* Substitute combining characters by overprinting lookalike glyphs */
     for (int i = 0; i < len; i++)
-      text[i] = combsubst(text[i]);
+      text[i] = combsubst(text[i], attr.attr);
    /* Determine characters that should be combined by Windows */
     if (len == 2) {
       if (text[0] == 'i' && (text[1] == 0x030F || text[1] == 0x0311))
@@ -2752,6 +2802,7 @@ win_text(int tx, int ty, wchar *text, int len, cattr attr, cattr *textattr, usho
   }
 
   if (graph && graph < 0xE0) {
+    // clear codes for Block Elements, VT100 Line Drawing and "scanlines"
     for (int i = 0; i < len; i++)
       text[i] = ' ';
   }
@@ -2955,6 +3006,26 @@ win_text(int tx, int ty, wchar *text, int len, cattr attr, cattr *textattr, usho
     underlaid = true;
   }
 
+  if (attr.attr & (ATTR_SUBSCR | ATTR_SUPERSCR)) {
+    xt += cell_width * 3 / 10;
+    if (attr.attr & ATTR_SUBSCR)
+      yt += cell_height * 3 / 8;
+    else
+      yt += cell_height * 1 / 8;
+  }
+
+  int layer = 0;
+  colour fg0 = fg;
+  if (attr.attr & ATTR_SHADOW) {
+    layer = 1;
+    xt += line_width;
+    yt -= layer * line_width;
+    fg = ((fg & 0xFEFEFEFE) >> 1) + ((win_get_colour(BG_COLOUR_I) & 0xFEFEFEFE) >> 1);
+    SetTextColor(dc, fg);
+  }
+
+draw:
+
  /* Wavy underline */
   if (!ldisp2 && lattr != LATTR_TOP &&
       (attr.attr & UNDER_MASK) == ATTR_CURLYUND
@@ -3060,7 +3131,7 @@ win_text(int tx, int ty, wchar *text, int len, cattr attr, cattr *textattr, usho
   }
 
  /* DEC Tech adjustments */
-  if (graph >= 0xE0) {  // DEC Technical rendering to be fixed
+  if (graph >= 0xE0) {  // adjust rendering of DEC Technical and VT52 fraction
     if ((graph & ~1) == 0xE8)  // left square bracket corners
       xt += line_width + 1;
     else if ((graph & ~1) == 0xEA)  // right square bracket corners
@@ -3071,6 +3142,8 @@ win_text(int tx, int ty, wchar *text, int len, cattr attr, cattr *textattr, usho
     else if (graph == 0xE0)  // square root base: rather draw (partially)
       for (int i = 0; i < len; i++)
         text[i] = 0x2502;
+    else if (graph == 0xF7)  // VT52 fraction numerator
+      yt -= line_width;
   }
 
  /* Finally, draw the text */
@@ -3167,7 +3240,7 @@ win_text(int tx, int ty, wchar *text, int len, cattr attr, cattr *textattr, usho
 #define DRAW_DOWN  0x4
 #endif
 
-  if (graph >= 0xE0) {  // DEC Technical characters to be fixed
+  if (graph >= 0xE0) {  // fix DEC Technical characters, draw VT52 fraction
     if (graph & 0x08) {
       // square bracket corners already repositioned above
     }
@@ -3206,6 +3279,12 @@ win_text(int tx, int ty, wchar *text, int len, cattr attr, cattr *textattr, usho
           xl = xr;
           xr = xb;
         }
+      }
+      if (graph == 0xF7) {  // VT52 fraction numerator
+        yt = y + (cell_height - line_width) * 10 / 16;
+        yb = y + (cell_height - line_width) * 8 / 16;
+        xl = x + line_width - 1;
+        xr = xl + char_width - 1;
       }
       // adjustments with scaling pen:
       xl ++; xr ++;
@@ -3252,7 +3331,7 @@ win_text(int tx, int ty, wchar *text, int len, cattr attr, cattr *textattr, usho
       DeleteObject(oldpen);
     }
   }
-  else if (graph >= 0x80) {  // Unicode Block Elements
+  else if (graph >= 0x80 && !graph_vt52) {  // Unicode Block Elements
     // Block Elements (U+2580-U+259F)
     // ▀▁▂▃▄▅▆▇█▉▊▋▌▍▎▏▐░▒▓▔▕▖▗▘▙▚▛▜▝▞▟
     int char_height = cell_height;
@@ -3388,9 +3467,10 @@ win_text(int tx, int ty, wchar *text, int len, cattr attr, cattr *textattr, usho
       xi += char_width;
     }
   }
-  else if (graph >> 4) {  // VT100 horizontal lines ⎺⎻(─)⎼⎽
+  else if (graph >> 4) {  // VT100/VT52 horizontal "scanlines"
+    int parts = graph_vt52 ? 8 : 5;
     HPEN oldpen = SelectObject(dc, CreatePen(PS_SOLID, 0, fg));
-    int yoff = (cell_height - line_width) * (graph >> 4) / 5;
+    int yoff = (cell_height - line_width) * (graph >> 4) / parts;
     if (lattr >= LATTR_TOP)
       yoff *= 2;
     if (lattr == LATTR_BOT)
@@ -3515,25 +3595,58 @@ win_text(int tx, int ty, wchar *text, int len, cattr attr, cattr *textattr, usho
   }
 
   _return:
+
+  if (layer) {
+    layer--;
+    if (!layer) {
+      xt -= line_width;
+      fg = fg0;
+      SetTextColor(dc, fg);
+    }
+    yt += line_width;
+    underlaid = true;
+    goto draw;
+  }
+
   if (coord_transformed)
     SetWorldTransform(dc, &old_xform);
 }
 
 
+static HFONT
+font4(struct fontfam * ff, cattrflags attr)
+{
+  bool bold = (ff->bold_mode == BOLD_FONT) && (attr & ATTR_BOLD);
+  bool italic = attr & ATTR_ITALIC;
+  int font4index = (bold ? FONT_BOLD : 0) | (italic ? FONT_ITALIC : 0);
+  HFONT f = ff->fonts[font4index];
+  if (!f && italic) {
+    if (!ff->fonts[FONT_BOLD]) {
+      font4index &= ~FONT_BOLD;
+      f = ff->fonts[font4index];
+    }
+    if (!f) {
+      another_font(ff, font4index);
+      f = ff->fonts[font4index];
+    }
+  }
+  if (!f)
+    f = ff->fonts[FONT_NORMAL];
+  return f;
+}
+
 /* Check availability of characters in the current font.
  * Zeroes each of the characters in the input array that isn't available.
  */
 void
-win_check_glyphs(wchar *wcs, uint num)
+win_check_glyphs(wchar *wcs, uint num, cattrflags attr)
 {
-  int findex = (term.curs.attr.attr & FONTFAM_MASK) >> ATTR_FONTFAM_SHIFT;
+  int findex = (attr & FONTFAM_MASK) >> ATTR_FONTFAM_SHIFT;
+  if (findex > 10)
+    findex = 0;
   struct fontfam * ff = &fontfamilies[findex];
 
-  bool bold = (ff->bold_mode == BOLD_FONT) && (term.curs.attr.attr & ATTR_BOLD);
-  bool italic = term.curs.attr.attr & ATTR_ITALIC;
-  HFONT f = ff->fonts[(bold ? FONT_BOLD : FONT_NORMAL) | italic ? FONT_ITALIC : 0];
-  if (!f)  // may not have been initialized
-    f = ff->fonts[FONT_NORMAL];
+  HFONT f = font4(ff, attr);
 
   HDC dc = GetDC(wnd);
   SelectObject(dc, f);
@@ -3546,15 +3659,13 @@ win_check_glyphs(wchar *wcs, uint num)
   ReleaseDC(wnd, dc);
 }
 
-#define dont_debug_win_char_width
-
 #ifdef debug_win_char_width
 int
-win_char_width(xchar c)
+win_char_width(xchar c, cattrflags attr)
 {
 #define win_char_width xwin_char_width
-int win_char_width(xchar);
-  int w = win_char_width(c);
+int win_char_width(xchar, cattrflags);
+  int w = win_char_width(c, attr);
   if (c >= 0x80)
     printf("win_char_width(%04X) -> %d\n", c, w);
   return w;
@@ -3569,9 +3680,11 @@ int win_char_width(xchar);
    * also whether to expand a normal width character if expected wide
  */
 int
-win_char_width(xchar c)
+win_char_width(xchar c, cattrflags attr)
 {
-  int findex = (term.curs.attr.attr & FONTFAM_MASK) >> ATTR_FONTFAM_SHIFT;
+  int findex = (attr & FONTFAM_MASK) >> ATTR_FONTFAM_SHIFT;
+  if (findex > 10)
+    findex = 0;
   struct fontfam * ff = &fontfamilies[findex];
 
 #define measure_width
@@ -3593,14 +3706,7 @@ win_char_width(xchar c)
   if (c >= ' ' && c <= '~')  // don't width-check ASCII
     return 1;
 
-  bool bold = (ff->bold_mode == BOLD_FONT) && (term.curs.attr.attr & ATTR_BOLD);
-  bool italic = term.curs.attr.attr & ATTR_ITALIC;
-  int font4index = (bold ? FONT_BOLD : FONT_NORMAL) | italic ? FONT_ITALIC : 0;
-  HFONT f = ff->fonts[font4index];
-  if (!f) {  // may not have been initialized
-    f = ff->fonts[FONT_NORMAL];
-    font4index = FONT_NORMAL;
-  }
+  HFONT f = font4(ff, attr);
 
   HDC dc = GetDC(wnd);
 #ifdef debug_win_char_width
@@ -3609,7 +3715,7 @@ win_char_width(xchar c)
   SelectObject(dc, f);
 #ifdef debug_win_char_width
   if (c == 0x2001)
-    win_char_width(0x5555);
+    win_char_width(0x5555, attr);
   if (!ok0)
     printf("width %04X failed (dc %p)\n", c, dc);
   else if (c > '~' || c == 'A') {
@@ -3621,8 +3727,9 @@ win_char_width(xchar c)
     BOOL ok3 = GetCharABCWidthsW(dc, c, c, &abc);  // only on TrueType
     ABCFLOAT abcf; memset(&abcf, 0, sizeof abcf);
     BOOL ok4 = GetCharABCWidthsFloatW(dc, c, c, &abcf);
-    printf("w %04X [cell %d] - 32 %d %d - flt %d %.3f - abc %d %d %d %d - abc flt %d %4.1f %4.1f %4.1f\n", 
-           c, cell_width, ok1, cw, ok2, cwf, 
+    printf("w %04X [cell %d] - 32 %d %d - flt %d %.3f - abc %d %d %d %d - abcflt %d %4.1f %4.1f %4.1f\n", 
+           c, cell_width, 
+           ok1, cw, ok2, cwf, 
            ok3, abc.abcA, abc.abcB, abc.abcC, 
            ok4, abcf.abcfA, abcf.abcfB, abcf.abcfC);
   }
@@ -3706,37 +3813,34 @@ win_char_width(xchar c)
   }
 
   if ((c >= 0x3000 && c <= 0x303F)
-     || (ambigwide(c) &&
-#ifdef check_ambig_non_letters
-#warning instead we now check all non-letters with some exclusions
-      (c == 0x20AC  // €
-      || (c >= 0x2100 && c <= 0x23FF)   // Letterlike, Number Forms, Arrows, Math Operators, Misc Technical
-      || (c >= 0x2460 && c <= 0x24FF)   // Enclosed Alphanumerics
-      || (c >= 0x25A0 && c <= 0x25FF)   // Geometric Shapes
-      || (c >= 0x2600 && c <= 0x27BF)   // Miscellaneous Symbols, Dingbats
-      || (c >= 0x2B00 && c <= 0x2BFF)   // Miscellaneous Symbols and Arrows
-      || (c >= 0x1F100 && c <= 0x1F1FF) // Enclosed Alphanumeric Supplement
-      )
-#else
-      // check all non-letters
-      (bidi_class(c) != L               // indicates not a letter
-      || (c >= 0x249C && c <= 0x24E9)   // parenthesized/circled letters
-      || (c >= 0x3248 && c <= 0x324F)   // Enclosed CJK Letters and Months
-      || (c >= 0x1F110 && c <= 0x1F12A) // Enclosed Alphanumeric Supplement
-      )
-      &&
-      // with some exceptions
-      !(  (c >= 0x2500 && c <= 0x2588)  // Box Drawing, Block Elements
-       || (c >= 0x2592 && c <= 0x2594)  // Block Elements
-       || (c >= 0x2160 && c <= 0x2179)  // Roman Numerals
-       //|| wcschr (W("‐‑‘’‚‛“”„‟‹›"), c) // #712 workaround; now caching
-       )
+   || (c >= 0x2460 && c <= 0x24FF)   // Enclosed Alphanumerics
+   || (c >= 0x2600 && c <= 0x27BF)   // Miscellaneous Symbols, Dingbats
+   //|| (c >= 0x249C && c <= 0x24E9)   // parenthesized/circled letters
+   || (c >= 0x3248 && c <= 0x324F)   // Enclosed CJK Letters and Months
+   || (c >= 0x1F100 && c <= 0x1F1FF) // Enclosed Alphanumeric Supplement
+#ifdef check_more_mostly_covered_below
+   || (c >= 0x2100 && c <= 0x23FF)   // Letterlike, Number Forms, Arrows, Math Operators, Misc Technical
+   || (c >= 0x25A0 && c <= 0x25FF)   // Geometric Shapes
+   || (c >= 0x2B00 && c <= 0x2BFF)   // Miscellaneous Symbols and Arrows
 #endif
+   || (// check all non-letters with some exceptions
+       bidi_class(c) != L               // indicates not a letter
+      &&
+       !(  (c >= 0x2500 && c <= 0x2588)  // Box Drawing, Block Elements
+        || (c >= 0x2592 && c <= 0x2594)  // Block Elements
+        || (c >= 0x2160 && c <= 0x2179)  // Roman Numerals
+        //|| wcschr (W("‐‑‘’‚‛“”„‟‹›"), c) // #712 workaround; now caching
+        )
       )
      )
   {
     // look up c in charpropcache
     struct charpropcache * cpfound = 0;
+
+    bool bold = (ff->bold_mode == BOLD_FONT) && (attr & ATTR_BOLD);
+    bool italic = attr & ATTR_ITALIC;
+    int font4index = (bold ? FONT_BOLD : 0) | (italic ? FONT_ITALIC : 0);
+
     for (uint i = 0; i < ff->cpcachelen[font4index]; i++)
       if (ff->cpcache[font4index][i].ch == c) {
         if (ff->cpcache[font4index][i].width) {
@@ -3786,13 +3890,21 @@ win_char_width(xchar c)
  * Returns 0 if unsuccessful.
  */
 wchar
-win_combine_chars(wchar c, wchar cc)
+win_combine_chars(wchar c, wchar cc, cattrflags attr)
 {
   wchar cs[2];
   int len = FoldStringW(MAP_PRECOMPOSED, (wchar[]){c, cc}, 2, cs, 2);
   if (len == 1) {  // check whether the combined glyph exists
+    int findex = (attr & FONTFAM_MASK) >> ATTR_FONTFAM_SHIFT;
+    if (findex > 10)
+      findex = 0;
+    struct fontfam * ff = &fontfamilies[findex];
+
+    HFONT f = font4(ff, attr);
+
     ushort glyph;
     HDC dc = GetDC(wnd);
+    SelectObject(dc, f);
     GetGlyphIndicesW(dc, cs, 1, &glyph, true);
     ReleaseDC(wnd, dc);
 #ifdef debug_win_combine
